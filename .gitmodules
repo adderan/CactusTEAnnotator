@@ -1,3 +1,6 @@
 [submodule "hal"]
 	path = hal
 	url = https://github.com/ComparativeGenomicsToolkit/hal
+[submodule "sonLib"]
+	path = sonLib
+	url = https://github.com/ComparativeGenomicsToolkit/sonLib

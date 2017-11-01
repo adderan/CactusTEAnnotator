@@ -1,60 +1,108 @@
 #include <stdio.h>
+#include <stack>
 #include "hal.h"
-#include "halRepeats.h"
+#include "omp.h"
+#include "insertions.h"
 
 using namespace hal;
 using namespace std;
 
-HalRepeats::HalRepeats()
-{
+
+GenomeIterator::GenomeIterator(AlignmentConstPtr _alignment) {
+  alignment = _alignment;
+  root = alignment->openGenome(alignment->getRootName());
+  visited.push(root);
 }
 
-HalRepeats::~HalRepeats()
-{
-}
+const Genome * GenomeIterator::next() {
+  if (visited.empty()) return NULL;
 
+  root = visited.top();
+  visited.pop();
 
-void HalRepeats::analyzeBranch(AlignmentConstPtr alignment,
-			       hal_size_t gapThreshold,
-			       double nThreshold)
-{
-  
-  const Genome *reference = alignment->openGenome("Human");
-  assert(reference != NULL);
-  if (reference->getParent() == NULL)
-  {
-    throw hal_exception("Reference genome must have parent");
+  for (hal_size_t childIndex = 0; childIndex < root->getNumChildren(); childIndex++) {
+    const Genome* child = root->getChild(childIndex);
+    visited.push(child);
   }
+  return root;
+  
+}
 
-  TopSegmentIteratorConstPtr top  = reference->getTopSegmentIterator();
-  top->toSite(0);
+InsertionIterator::InsertionIterator(const Genome *_genome, RepeatAnnotatorOpts _opts) {
+
+  genome = _genome;
+
+  topSeg = genome->getTopSegmentIterator();
+  endSeg = genome->getTopSegmentEndIterator();
+  opts = _opts;
+}
 
 
-  hal_index_t end = reference->getSequenceLength();
-  RearrangementPtr rearrangement = reference->getRearrangement(top->getArrayIndex(),
-                                               gapThreshold, nThreshold);
+std::string InsertionIterator::next() {
+  while (topSeg->equals(endSeg) == false) {
+    if (!topSeg->hasParent() && topSeg->getLength() > opts.minInsertionSize) {
+      string seq;
+      topSeg->getString(seq);
+      topSeg->toRight();
+      return seq;
+    }
+    topSeg->toRight();
+  }
+  return "";
+}
+      
 
-  const Sequence *sequence;
-  do {
-    sequence = reference->getSequenceBySite( rearrangement->getLeftBreakpoint()->getStartPosition());
-    if (rearrangement->getID() == Rearrangement::Insertion) {
-      cout << rearrangement->getLeftBreakpoint()->getStartPosition() << " " <<
-	rearrangement->getRightBreakpoint()->getEndPosition() + 1 << endl;
 
-      TopSegmentIteratorConstPtr segment = rearrangement->getLeftBreakpoint()->copy();
-      //segment->toSite(rearrangement->getLeftBreakpoint()->getStartPosition());
-      while (true) {
-	string seq;
-	segment->getString(seq);
-	cout << seq << endl;
-	if (segment == rearrangement->getRightBreakpoint()) {
-	  break;
-	}
-	segment->toRight();
+
+SmoothedInsertionIterator::SmoothedInsertionIterator(const Genome *_genome, RepeatAnnotatorOpts _opts) {
+
+  genome = _genome;
+
+  topSeg = genome->getTopSegmentIterator();
+  endSeg = genome->getTopSegmentEndIterator();
+  opts = _opts;
+}
+
+
+std::string SmoothedInsertionIterator::next()
+
+{
+
+  vector<string> insertion;
+  hal_size_t gapLength = 0;
+
+  while (topSeg->equals(endSeg) == false) {
+    string seq;
+    topSeg->getString(seq);
+
+    if (!topSeg->hasParent()) {
+      insertion.push_back(seq);
+      gapLength = 0;
+    }
+    else if (seq.length() + gapLength < opts.insertionJoinDistance) {
+      gapLength += seq.length();
+      insertion.push_back(seq);
+    }
+
+    topSeg->toRight();
+
+    if (insertion.size() > 0) {
+      if (insertion.size() > 1) cerr << "Joining " << insertion.size()
+				       << " segments to form an insertion." << endl;
+      string insertionSeq;
+      for (int i = 0; i < insertion.size(); i++) {
+	insertionSeq += insertion.at(i);
+      }
+      if (insertionSeq.length() > opts.minInsertionSize) {
+	return insertionSeq;
       }
     }
+    insertion.clear();
+    gapLength = 0;
+
+      
   }
-  while (rearrangement->identifyNext() == true &&
-	 rearrangement->getLeftBreakpoint()->getStartPosition() <= end);
+  return "";
+  
 }
 
