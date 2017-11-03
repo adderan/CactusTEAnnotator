@@ -5,11 +5,18 @@
 #include "hal.h"
 
 using namespace hal;
+using namespace std;
+
+
 
 typedef struct RepeatAnnotatorOpts {
   hal_size_t minInsertionSize;
   hal_size_t insertionJoinDistance;
+  CLParserPtr optionsParser;
+  bool joinNeighborInsertions;
 } RepeatAnnotatorOpts;
+
+void getInsertions(AlignmentConstPtr alignment, RepeatAnnotatorOpts &opts);
 
 class GenomeIterator {
 private:
@@ -28,18 +35,19 @@ private:
   const Genome *genome;
   RepeatAnnotatorOpts opts;
 public:
-  InsertionIterator(const Genome *_genome, RepeatAnnotatorOpts _opts);
-  std::string next();
+  InsertionIterator() {};
+  InsertionIterator(const Genome *_genome, RepeatAnnotatorOpts &_opts);
+  virtual string next();
 };
 
-class SmoothedInsertionIterator {
+class InsertionIteratorJoinNeighbors: public InsertionIterator {
 private:
   TopSegmentIteratorConstPtr topSeg;
   TopSegmentIteratorConstPtr endSeg;
   const Genome *genome;
   RepeatAnnotatorOpts opts;
 public:
-  SmoothedInsertionIterator(const Genome *_genome, RepeatAnnotatorOpts _opts);
-  std::string next();
+  InsertionIteratorJoinNeighbors(const Genome *_genome, RepeatAnnotatorOpts &_opts);
+  string next();
 };
 #endif

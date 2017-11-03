@@ -20,7 +20,7 @@ static CLParserPtr initParser()
   optionsParser->addOption("reference",
 			   "Genome to get insertions for",
 			   "");
-  optionsParser->addOption("insertionJoinDistance", "Maximum length of gaps in insertions.", 10);
+  optionsParser->addOption("insertionJoinDistance", "Maximum length of gaps in insertions.", 0);
   return optionsParser;
 }
 
@@ -50,21 +50,13 @@ int main(int argc, char** argv)
   try
   {
     AlignmentConstPtr alignment = openHalAlignmentReadOnly(halPath,
-                                                           optionsParser);
-    RepeatAnnotatorOpts opts{minInsertionSize = minInsertionSize,
-	insertionJoinDistance = insertionJoinDistance};
+							   optionsParser);
+    RepeatAnnotatorOpts opts = {minInsertionSize,
+				insertionJoinDistance,
+				optionsParser};
     if (referenceName == "") {
-      cerr << "Traversing all genomes" << endl;
-      GenomeIterator genomeIterator(alignment);
-      const Genome *genome;
-      while((genome = genomeIterator.next()) != NULL) {
-	cerr << "Finding insertions in genome " << genome->getName() << endl;
-	InsertionIterator insertionIterator(genome, opts);
-	std::string insertionSeq;
-	while ((insertionSeq = insertionIterator.next()) != "") {
-	  cout << genome->getName() << " " << insertionSeq.length() << endl;
-	}
-      }
+      getInsertions(alignment, opts);
+
     }
     else {
       const Genome *reference = alignment->openGenome(referenceName);

@@ -7,6 +7,30 @@
 using namespace hal;
 using namespace std;
 
+void processInsertion(string insertion, RepeatAnnotatorOpts &opts) {
+}
+
+void getInsertionsOnBranch(const Genome* genome, RepeatAnnotatorOpts &opts) {
+    InsertionIterator *iterator;
+    if (opts.insertionJoinDistance > 0) {
+      iterator = new InsertionIteratorJoinNeighbors(genome, opts);
+    }
+    else {
+      iterator = new InsertionIterator(genome, opts);
+    }
+    string insertion;
+    while((insertion = iterator->next()) != "") {
+      cout << genome->getName() << " " << insertion.length() << endl;
+    }
+}
+
+void getInsertions(AlignmentConstPtr alignment, RepeatAnnotatorOpts &opts) {
+  GenomeIterator genomeIterator(alignment);
+  const Genome *genome;
+  while((genome = genomeIterator.next())) {
+    getInsertionsOnBranch(genome, opts);
+  }
+}
 
 GenomeIterator::GenomeIterator(AlignmentConstPtr _alignment) {
   alignment = _alignment;
@@ -28,7 +52,7 @@ const Genome * GenomeIterator::next() {
   
 }
 
-InsertionIterator::InsertionIterator(const Genome *_genome, RepeatAnnotatorOpts _opts) {
+InsertionIterator::InsertionIterator(const Genome *_genome, RepeatAnnotatorOpts &_opts) {
 
   genome = _genome;
 
@@ -38,7 +62,7 @@ InsertionIterator::InsertionIterator(const Genome *_genome, RepeatAnnotatorOpts 
 }
 
 
-std::string InsertionIterator::next() {
+string InsertionIterator::next() {
   while (topSeg->equals(endSeg) == false) {
     if (!topSeg->hasParent() && topSeg->getLength() > opts.minInsertionSize) {
       string seq;
@@ -50,11 +74,9 @@ std::string InsertionIterator::next() {
   }
   return "";
 }
-      
 
 
-
-SmoothedInsertionIterator::SmoothedInsertionIterator(const Genome *_genome, RepeatAnnotatorOpts _opts) {
+InsertionIteratorJoinNeighbors::InsertionIteratorJoinNeighbors(const Genome *_genome, RepeatAnnotatorOpts &_opts) {
 
   genome = _genome;
 
@@ -63,8 +85,7 @@ SmoothedInsertionIterator::SmoothedInsertionIterator(const Genome *_genome, Repe
   opts = _opts;
 }
 
-
-std::string SmoothedInsertionIterator::next()
+string InsertionIteratorJoinNeighbors::next()
 
 {
 
