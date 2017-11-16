@@ -18,4 +18,4 @@ cactusRepeatAnnotator : src/main.cpp repeats.a hal/lib/halLib.a
 	${cpp} ${cppflags} -I src -I src -I hal/lib -I sonLib/lib -I src -I tests -o cactusRepeatAnnotator src/main.cpp repeats.a sonLib/lib/sonLib.a hal/lib/halLib.a ${basicLibs} -fopenmp
 
 repeatAnnotatorTests: src/test.cpp repeats.a hal/lib/halLib.a
-	${cpp} ${cppflags} -I src -I src -I hal/lib -I sonLib/lib -I src -I tests -o repeatAnnotatorTests src/test.cpp repeats.a sonLib/lib/sonLib.a hal/lib/halLib.a ${basicLibs} -fopenmp
+	${cpp} ${cppflags} -UNDEBUG -I src -I src -I hal/lib -I sonLib/lib -I src -I tests -o repeatAnnotatorTests src/test.cpp repeats.a sonLib/lib/sonLib.a hal/lib/halLib.a ${basicLibs} -fopenmp
