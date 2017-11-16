@@ -1,19 +1,21 @@
 rootPath = .
 include hal/include.mk
 
-libSourcesAll = $(wildcard impl/*.cpp)
-libSources = $(subst impl/main.cpp,,${libSourcesAll})
-libHeaders = $(wildcard inc/*.h)
+libSourcesAll = $(wildcard src/*.cpp)
+libSources = $(subst src/main.cpp,,${libSourcesAll})
+libHeaders = $(wildcard src/*.h)
 
-all: cactusRepeatAnnotator
+all: cactusRepeatAnnotator repeatAnnotatorTests
 
 repeats.a: ${libSources} ${libHeaders} hal/lib/halLib.a sonLib/lib/sonLib.a ${basicLibsDependencies}
 	rm -f *.o
-	${cpp} ${cppflags} -I inc -I impl -I hal/lib -I sonLib/lib -c ${libSources} -fopenmp
+	${cpp} ${cppflags} -I src -I src -I hal/lib -I sonLib/lib -c ${libSources} -fopenmp
 	ar rc repeats.a *.o
 	ranlib repeats.a
 	rm *.o
 
-cactusRepeatAnnotator : impl/main.cpp repeats.a hal/lib/halLib.a
-	${cpp} ${cppflags} -I inc -I impl -I hal/lib -I sonLib/lib -I impl -I tests -o cactusRepeatAnnotator impl/main.cpp repeats.a sonLib/lib/sonLib.a hal/lib/halLib.a ${basicLibs} -fopenmp
+cactusRepeatAnnotator : src/main.cpp repeats.a hal/lib/halLib.a
+	${cpp} ${cppflags} -I src -I src -I hal/lib -I sonLib/lib -I src -I tests -o cactusRepeatAnnotator src/main.cpp repeats.a sonLib/lib/sonLib.a hal/lib/halLib.a ${basicLibs} -fopenmp
 
+repeatAnnotatorTests: src/test.cpp repeats.a hal/lib/halLib.a
+	${cpp} ${cppflags} -I src -I src -I hal/lib -I sonLib/lib -I src -I tests -o repeatAnnotatorTests src/test.cpp repeats.a sonLib/lib/sonLib.a hal/lib/halLib.a ${basicLibs} -fopenmp

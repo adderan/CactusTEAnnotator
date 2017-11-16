@@ -4,3 +4,6 @@
 [submodule "sonLib"]
 	path = sonLib
 	url = https://github.com/ComparativeGenomicsToolkit/sonLib
+[submodule "smhasher"]
+	path = smhasher
+	url = https://github.com/aappleby/smhasher

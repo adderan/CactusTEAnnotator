@@ -2,21 +2,36 @@
 #define _REPEATS_H
 
 #include <stack>
+#include <vector>
 #include "hal.h"
 
 using namespace hal;
 using namespace std;
 
 
+class Insertion {
+public:
+  hal_size_t start;
+  hal_size_t end;
+  string seqName;
+  string seq;
+  unsigned int group;
+
+  Insertion() {};
+  string toGFF();
+};
 
 typedef struct RepeatAnnotatorOpts {
   hal_size_t minInsertionSize;
   hal_size_t insertionJoinDistance;
   CLParserPtr optionsParser;
-  bool joinNeighborInsertions;
+  string referenceName;
+  double maxNFraction;
+  hal_size_t seedLength;
 } RepeatAnnotatorOpts;
 
-void getInsertions(AlignmentConstPtr alignment, RepeatAnnotatorOpts &opts);
+void getInsertions(AlignmentConstPtr alignment, RepeatAnnotatorOpts opts);
+vector<Insertion*> getInsertionsOnBranch(const Genome *genome, RepeatAnnotatorOpts opts);
 
 class GenomeIterator {
 private:
@@ -34,10 +49,11 @@ private:
   TopSegmentIteratorConstPtr endSeg;
   const Genome *genome;
   RepeatAnnotatorOpts opts;
+  bool filter(string seq);
 public:
   InsertionIterator() {};
   InsertionIterator(const Genome *_genome, RepeatAnnotatorOpts &_opts);
-  virtual string next();
+  virtual Insertion* next();
 };
 
 class InsertionIteratorJoinNeighbors: public InsertionIterator {
@@ -48,6 +64,6 @@ private:
   RepeatAnnotatorOpts opts;
 public:
   InsertionIteratorJoinNeighbors(const Genome *_genome, RepeatAnnotatorOpts &_opts);
-  string next();
+  //Insertion* next();
 };
 #endif
