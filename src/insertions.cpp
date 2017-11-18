@@ -6,39 +6,7 @@
 using namespace hal;
 using namespace std;
 
-string Insertion::toGFF() {
-  return "";
-}
 
-vector<Insertion*> getInsertionsOnBranch(const Genome *genome, RepeatAnnotatorOpts opts) {
-  vector<Insertion*> insertions;
-  InsertionIterator *iterator;
-  if (opts.insertionJoinDistance > 0) {
-    iterator = new InsertionIteratorJoinNeighbors(genome, opts);
-  }
-  else {
-    iterator = new InsertionIterator(genome, opts);
-  }
-  Insertion *insertion;
-  while((insertion = iterator->next()) != NULL) {
-    insertions.push_back(insertion);
-  }
-  return insertions;
-}
-
-void getInsertions(AlignmentConstPtr alignment, RepeatAnnotatorOpts opts) {
-  GenomeIterator genomeIterator(alignment);
-  if (opts.referenceName != "") {
-    const Genome *reference = alignment->openGenome(opts.referenceName);
-    vector<Insertion*> insertions = getInsertionsOnBranch(reference, opts);
-  }
-  else {
-    const Genome *genome;
-    while((genome = genomeIterator.next())) {
-      vector<Insertion*> insertions = getInsertionsOnBranch(genome, opts);
-    }
-  }
-}
 
 GenomeIterator::GenomeIterator(AlignmentConstPtr _alignment) {
   alignment = _alignment;
@@ -70,24 +38,29 @@ double fractionN(string seq) {
   return numN/seq.length();
 }
 
-InsertionIterator::InsertionIterator(const Genome *_genome, RepeatAnnotatorOpts &_opts) {
+string Insertion::toGFF() {
+  return "";
+}
 
+void InsertionIterator::goToGenome(const Genome * _genome) {
   genome = _genome;
-
   topSeg = genome->getTopSegmentIterator();
   endSeg = genome->getTopSegmentEndIterator();
-  opts = _opts;
 }
 
 bool InsertionIterator::filter(string seq) {
-  if (seq.length() < opts.minInsertionSize) return false;
-  if (fractionN(seq) > opts.maxNFraction) {
+  if (seq.length() < minInsertionSize) return false;
+  if (fractionN(seq) > maxNFraction) {
     return false;
   }
   return true;
 }
 
+
 Insertion* InsertionIterator::next() {
+  if (insertionJoinDistance > 0) {
+    return NULL;
+  }
   while (topSeg->equals(endSeg) == false) {
     if (!topSeg->hasParent()) {
       string seq;
@@ -106,18 +79,8 @@ Insertion* InsertionIterator::next() {
   }
   return NULL;
 }
-
-
-InsertionIteratorJoinNeighbors::InsertionIteratorJoinNeighbors(const Genome *_genome, RepeatAnnotatorOpts &_opts) {
-
-  genome = _genome;
-
-  topSeg = genome->getTopSegmentIterator();
-  endSeg = genome->getTopSegmentEndIterator();
-  opts = _opts;
-}
 /*
-Insertion *InsertionIteratorJoinNeighbors::next()
+Insertion *InsertionIterator::nextGappedInsertion()
 
 {
 
@@ -132,7 +95,7 @@ Insertion *InsertionIteratorJoinNeighbors::next()
       insertion.push_back(seq);
       gapLength = 0;
     }
-    else if ((seq.length() + gapLength < opts.insertionJoinDistance) && (insertion.size() > 0)) {
+    else if ((seq.length() + gapLength < insertionJoinDistance) && (insertion.size() > 0)) {
       gapLength += seq.length();
       insertion.push_back(seq);
       cerr << "Appending aligned sequence of length " << seq.length() << endl;
@@ -159,5 +122,5 @@ Insertion *InsertionIteratorJoinNeighbors::next()
   return NULL;
   
 }
-*/
 
+*/

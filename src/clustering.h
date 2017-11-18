@@ -10,7 +10,8 @@
 
 using namespace std;
 
-template <typename Object> map<Object*, vector<Object*> > buildTransitiveClusters(vector<Object*> objects, double distanceThreshold) {
+
+template <typename Object> map<Object*, vector<Object*> > buildTransitiveClusters(vector<Object*> objects, double (*distanceFn)(Object*, Object*), double distanceThreshold) {
 
   map<Object *,vector<Object *> > clusterToObj;
   map<Object *,Object *> objToCluster;
@@ -27,7 +28,7 @@ template <typename Object> map<Object*, vector<Object*> > buildTransitiveCluster
       for (uint j = 0; j < i; j++) {
 	Object *a = objects[i];
 	Object *b = objects[j];
-	double distance = a->distance(b);
+	double distance = distanceFn(a,b);
 	if (distance < distanceThreshold) {
 	  //Combine the clusters
 #pragma omp critical

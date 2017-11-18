@@ -18,20 +18,13 @@ public:
   unsigned int group;
 
   Insertion() {};
+
+  //Create annotation string
   string toGFF();
+
+  //Metric for similarity between insertions
+  double distance(Insertion *other);
 };
-
-typedef struct RepeatAnnotatorOpts {
-  hal_size_t minInsertionSize;
-  hal_size_t insertionJoinDistance;
-  CLParserPtr optionsParser;
-  string referenceName;
-  double maxNFraction;
-  hal_size_t seedLength;
-} RepeatAnnotatorOpts;
-
-void getInsertions(AlignmentConstPtr alignment, RepeatAnnotatorOpts opts);
-vector<Insertion*> getInsertionsOnBranch(const Genome *genome, RepeatAnnotatorOpts opts);
 
 class GenomeIterator {
 private:
@@ -45,25 +38,22 @@ public:
 
 class InsertionIterator {
 private:
+  double maxNFraction;
+  hal_size_t insertionJoinDistance;
+  hal_size_t minInsertionSize;
   TopSegmentIteratorConstPtr topSeg;
   TopSegmentIteratorConstPtr endSeg;
   const Genome *genome;
-  RepeatAnnotatorOpts opts;
   bool filter(string seq);
 public:
   InsertionIterator() {};
-  InsertionIterator(const Genome *_genome, RepeatAnnotatorOpts &_opts);
-  virtual Insertion* next();
+  string toGFF();
+  void goToGenome(const Genome *genome);
+  InsertionIterator(double _maxNFraction,
+				       hal_size_t _insertionJoinDistance,
+				       hal_size_t _minInsertionSize): maxNFraction(_maxNFraction), insertionJoinDistance(_insertionJoinDistance), minInsertionSize(_minInsertionSize) {}
+  Insertion* next();
+  Insertion* nextGappedInsertion();
 };
 
-class InsertionIteratorJoinNeighbors: public InsertionIterator {
-private:
-  TopSegmentIteratorConstPtr topSeg;
-  TopSegmentIteratorConstPtr endSeg;
-  const Genome *genome;
-  RepeatAnnotatorOpts opts;
-public:
-  InsertionIteratorJoinNeighbors(const Genome *_genome, RepeatAnnotatorOpts &_opts);
-  //Insertion* next();
-};
 #endif
