@@ -7,11 +7,70 @@
 
 
 using namespace std;
+using namespace hal;
+
+
+GenomeIterator::GenomeIterator(AlignmentConstPtr _alignment) {
+  alignment = _alignment;
+  root = alignment->openGenome(alignment->getRootName());
+  visited.push(root);
+}
+
+const Genome * GenomeIterator::next() {
+  if (visited.empty()) return NULL;
+
+  root = visited.top();
+  visited.pop();
+
+  for (hal_size_t childIndex = 0; childIndex < root->getNumChildren(); childIndex++) {
+    const Genome* child = root->getChild(childIndex);
+    visited.push(child);
+  }
+  return root;
+  
+}
+
+vector<Insertion*> annotateInsertionsOnBranch(const Genome *genome, InsertionIterator &insertionIter) {
+  insertionIter.goToGenome(genome);
+  Insertion *insertion;
+  vector<Insertion*> insertions;
+  while((insertion = insertionIter.next())) {
+    insertions.push_back(insertion);
+  }
+  cerr << "Found " << insertions.size() << " candidate insertions on branch " << genome->getName() << endl;
+
+  vector<string> seqs;
+  for (uint i = 0; i < insertions.size(); i++) {
+    seqs.push_back(insertions[i]->seq);
+  }
+  cerr << "Built distance matrix of size " << seqs.size() << endl;
+  double **distanceMatrix = buildDistanceMatrix(seqs, 5);
+  cerr << "Finished building distance matrix" << endl;
+  map<Insertion*, vector<Insertion*> > clusters = buildTransitiveClusters<Insertion>(insertions, distanceMatrix, 0.5);
+  cerr << "Built " << clusters.size() << " clusters from " << insertions.size() << " insertions " << endl;
+  
+  vector<Insertion*> toReturn;
+  map<Insertion*, vector<Insertion*> >::iterator clusterIter;
+  int familyNumber = 0;
+  for (clusterIter = clusters.begin(); clusterIter != clusters.end(); clusterIter++) {
+    vector<Insertion*> insertionsInCluster = clusterIter->second;
+    if (insertionsInCluster.size() > 1) {
+      for(uint i = 0; i < insertionsInCluster.size(); i++) {
+	Insertion* insertion = insertionsInCluster[i];
+	insertion->repeatFamily = "cactus";
+	insertion->group = familyNumber;
+	toReturn.push_back(insertion);
+      }
+      familyNumber++;
+    }
+  }
+  return toReturn;
+  
+}
 
 
 double **buildDistanceMatrix(vector<string> seqs, int kmerLength) {
   map<string, vector<int> > kmerIndex;
-
   //Build index from kmers to sequences containing that kmer
   for (uint i = 0; i < seqs.size(); i++) {
     string seq = seqs[i];
@@ -20,6 +79,7 @@ double **buildDistanceMatrix(vector<string> seqs, int kmerLength) {
       kmerIndex[seq.substr(j, j + kmerLength)].push_back(i);
     }
   }
+  cerr << "Finished building kmer index " << endl;
 
   //Allocate only above the diagonal of the distance matrix
   int N = seqs.size();
@@ -39,6 +99,8 @@ double **buildDistanceMatrix(vector<string> seqs, int kmerLength) {
       }
     }
   }
+
+  cerr << "Finished computing pairwise distances" << endl;
 
   //Divide by the number of kmers in each sequence
   for (uint i = 0; i < N; i++) {

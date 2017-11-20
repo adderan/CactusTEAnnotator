@@ -7,27 +7,6 @@ using namespace hal;
 using namespace std;
 
 
-
-GenomeIterator::GenomeIterator(AlignmentConstPtr _alignment) {
-  alignment = _alignment;
-  root = alignment->openGenome(alignment->getRootName());
-  visited.push(root);
-}
-
-const Genome * GenomeIterator::next() {
-  if (visited.empty()) return NULL;
-
-  root = visited.top();
-  visited.pop();
-
-  for (hal_size_t childIndex = 0; childIndex < root->getNumChildren(); childIndex++) {
-    const Genome* child = root->getChild(childIndex);
-    visited.push(child);
-  }
-  return root;
-  
-}
-
 double fractionN(string seq) {
   double numN = 0.0;
   for (unsigned int i = 0; i < seq.length(); i++) {
@@ -38,8 +17,8 @@ double fractionN(string seq) {
   return numN/seq.length();
 }
 
-string Insertion::toGFF() {
-  return "";
+void Insertion::toGFF(ostream* gffStream) {
+  *gffStream << seqName << " cactus_repeat_annotation repeat_copy " << start << " " << end <<  " " << score << " " << strand << " " << "." << " " << group << endl;
 }
 
 void InsertionIterator::goToGenome(const Genome * _genome) {
@@ -49,7 +28,7 @@ void InsertionIterator::goToGenome(const Genome * _genome) {
 }
 
 bool InsertionIterator::filter(string seq) {
-  if (seq.length() < minInsertionSize) return false;
+  if (seq.length() < minInsertionSize || seq.length() > maxInsertionSize) return false;
   if (fractionN(seq) > maxNFraction) {
     return false;
   }
@@ -72,6 +51,8 @@ Insertion* InsertionIterator::next() {
 	insertion->seqName = topSeg->getSequence()->getName();
 	insertion->start = topSeg->getStartPosition();
 	insertion->end = topSeg->getEndPosition();
+	insertion->strand = '+';
+	insertion->score = 0;
 	return insertion;
       }
     }

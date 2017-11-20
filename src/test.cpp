@@ -30,7 +30,14 @@ void clusterBuilderTest() {
   points.push_back(new Point(10,10));
   points.push_back(new Point(9,10));
   points.push_back(new Point(3,5));
-  map<Point*, vector<Point*> > clusters = buildTransitiveClusters<Point>(points, &point_distance, 1.1);
+  double **distanceMatrix = new double*[points.size()];
+  for (uint i = 0; i < points.size(); i++) {
+    distanceMatrix[i] = (double*) calloc(i, sizeof(double));
+    for (uint j = 0; j < i; j++) {
+      distanceMatrix[i][j] = point_distance(points[i], points[j]);
+    }
+  }
+  map<Point*, vector<Point*> > clusters = buildTransitiveClusters<Point>(points, distanceMatrix, 1.1);
   cerr << "Built " << clusters.size() << " clusters" << endl;
   assert(clusters.size() == 3);
 }

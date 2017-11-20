@@ -15,32 +15,28 @@ public:
   hal_size_t end;
   string seqName;
   string seq;
-  unsigned int group;
+  string repeatFamily;
+  int group;
+  char strand;
+  int score;
 
   Insertion() {};
-
+  
   //Create annotation string
-  string toGFF();
+  void toGFF(ostream* gffStream);
 
   //Metric for similarity between insertions
   double distance(Insertion *other);
 };
 
-class GenomeIterator {
-private:
-  AlignmentConstPtr alignment;
-  const Genome *root;
-  std::stack<const Genome *> visited;
-public:
-  GenomeIterator(AlignmentConstPtr _alignment);
-  const Genome *next();
-};
+
 
 class InsertionIterator {
 private:
   double maxNFraction;
   hal_size_t insertionJoinDistance;
   hal_size_t minInsertionSize;
+  hal_size_t maxInsertionSize;
   TopSegmentIteratorConstPtr topSeg;
   TopSegmentIteratorConstPtr endSeg;
   const Genome *genome;
@@ -51,7 +47,7 @@ public:
   void goToGenome(const Genome *genome);
   InsertionIterator(double _maxNFraction,
 				       hal_size_t _insertionJoinDistance,
-				       hal_size_t _minInsertionSize): maxNFraction(_maxNFraction), insertionJoinDistance(_insertionJoinDistance), minInsertionSize(_minInsertionSize) {}
+		    hal_size_t _minInsertionSize, hal_size_t _maxInsertionSize): maxNFraction(_maxNFraction), insertionJoinDistance(_insertionJoinDistance), minInsertionSize(_minInsertionSize), maxInsertionSize(_maxInsertionSize) {}
   Insertion* next();
   Insertion* nextGappedInsertion();
 };

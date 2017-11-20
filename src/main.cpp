@@ -11,14 +11,18 @@ using namespace hal;
 static CLParserPtr initParser()
 {
   CLParserPtr optionsParser = hdf5CLParserInstance();
-  optionsParser->addArgument("halFile", "input hal file");
+  optionsParser->addOption("alignment", "input hal file", "");
+  optionsParser->addOption("insertionsFasta", "Input fasta file containing insertions to annotate with repeat classes", "");
                            
   optionsParser->setDescription("Identify mutations on branch between given "
                                 "genome and its parent.");
 
   optionsParser->addOption("minInsertionSize", 
                            "minimum insertion length to consider.",
-                           50);
+                           100);
+  optionsParser->addOption("maxInsertionSize",
+			   "maximum insertion length to consider.",
+			   50000);
   optionsParser->addOption("reference",
 			   "Genome to get insertions for",
 			   "");
@@ -29,7 +33,8 @@ static CLParserPtr initParser()
   optionsParser->addOption("seedLength", "Length of seeds to use for insertion clustering", 20);
 
   optionsParser->addOptionFlag("getInsertionLengths", "", false);
-  optionsParser->addOptionFlag("buildClusters", "", false);
+  optionsParser->addOptionFlag("getInsertions", "", false);
+  optionsParser->addOptionFlag("annotateInsertions", "", false);
   return optionsParser;
 }
 
@@ -38,8 +43,10 @@ int main(int argc, char** argv)
   CLParserPtr optionsParser = initParser();
 
   string halPath;
+  string insertionsFasta;
   
   hal_size_t minInsertionSize;
+  hal_size_t maxInsertionSize;
   hal_size_t insertionJoinDistance;
   string referenceName;
   double maxNFraction;
@@ -48,15 +55,18 @@ int main(int argc, char** argv)
   hal_size_t seedLength;
 
   bool getInsertionLengths;
-  bool buildClusters;
+  bool annotateInsertions;
+  bool getInsertions;
   try
   {
     optionsParser->parseOptions(argc, argv);
-    halPath = optionsParser->getArgument<string>("halFile");
+    halPath = optionsParser->getOption<string>("alignment");
+    insertionsFasta = optionsParser->getOption<string>("insertionsFasta");
 
     //Insertions
     referenceName = optionsParser->getOption<string>("reference");
     minInsertionSize = optionsParser->getOption<hal_size_t>("minInsertionSize");
+    maxInsertionSize = optionsParser->getOption<hal_size_t>("maxInsertionSize");
     insertionJoinDistance = optionsParser->getOption<hal_size_t>("insertionJoinDistance");
     maxNFraction = optionsParser->getOption<double>("maxNFraction");
 
@@ -65,7 +75,8 @@ int main(int argc, char** argv)
 
     //Execution modes
     getInsertionLengths = optionsParser->getFlag("getInsertionLengths");
-    buildClusters = optionsParser->getFlag("buildClusters");
+    annotateInsertions = optionsParser->getFlag("annotateInsertions");
+    getInsertions = optionsParser->getFlag("getInsertions");
   }
   catch(exception& e)
   {
@@ -79,7 +90,7 @@ int main(int argc, char** argv)
     AlignmentConstPtr alignment = openHalAlignmentReadOnly(halPath,
 							   optionsParser);
 
-    InsertionIterator insertionIt = InsertionIterator(maxNFraction, insertionJoinDistance, minInsertionSize);
+    InsertionIterator insertionIt = InsertionIterator(maxNFraction, insertionJoinDistance, minInsertionSize, maxInsertionSize);
     if (getInsertionLengths) {
       if (referenceName != "") {
 	const Genome *reference = alignment->openGenome(referenceName);
@@ -92,20 +103,14 @@ int main(int argc, char** argv)
       }
     }
 
-    else if (buildClusters) {
-      const Genome *reference = alignment->openGenome(referenceName);
-      insertionIt.goToGenome(reference);
-      Insertion *insertion;
-      vector<Insertion*> insertions;
-      int nInsertions = 0;
-      int maxInsertions = 100;
-      while((insertion = insertionIt.next())) {
-	if (nInsertions == maxInsertions) break;
-	insertions.push_back(insertion);
-	nInsertions++;
+    else if (annotateInsertions) {
+      if (referenceName != "") {
+	const Genome *reference = alignment->openGenome(referenceName);
+	vector<Insertion*> insertions = annotateInsertionsOnBranch(reference, insertionIt);
+	for (uint i = 0; i < insertions.size(); i++) {
+	  insertions[i]->toGFF(&cout);
+	}
       }
-      map<Insertion*, vector<Insertion*> > clusters = buildTransitiveClusters<Insertion>(insertions, &insertionDistance, 0.5);
-      cerr << "Built " << clusters.size() << " clusters" << endl;
     }
 
   }
