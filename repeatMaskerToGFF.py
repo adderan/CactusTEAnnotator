@@ -11,7 +11,9 @@ def main():
         a, b, c, d, chromosome, start, end, left, strand, repeatFamily, repeatClass, e, f, g, h= line.split()
         if strand == 'C':
             strand = '-'
-        print "%s repeatMasker\t%s\t%s\t%s\t0\t%s\t.\t%s" % (chromosome, repeatClass, start, end, strand, repeatFamily)
+        if start > end:
+            continue
+        print "%s\trepeatMasker\t%s\t%s\t%s\t0\t%s\t.\t%s" % (chromosome, repeatClass, start, end, strand, repeatFamily)
         
 if __name__ == "__main__":
     main()

@@ -5,12 +5,11 @@
 #include "clustering.h"
 
 using namespace std;
-using namespace hal;
 
 
-static CLParserPtr initParser()
+static hal::CLParserPtr initParser()
 {
-  CLParserPtr optionsParser = hdf5CLParserInstance();
+  hal::CLParserPtr optionsParser = hal::hdf5CLParserInstance();
   optionsParser->addOption("alignment", "input hal file", "");
   optionsParser->addOption("insertionsFasta", "Input fasta file containing insertions to annotate with repeat classes", "");
                            
@@ -40,7 +39,7 @@ static CLParserPtr initParser()
 
 int main(int argc, char** argv)
 {
-  CLParserPtr optionsParser = initParser();
+  hal::CLParserPtr optionsParser = initParser();
 
   string halPath;
   string insertionsFasta;
@@ -87,15 +86,15 @@ int main(int argc, char** argv)
 
   try
   {
-    AlignmentConstPtr alignment = openHalAlignmentReadOnly(halPath,
+    hal::AlignmentConstPtr alignment = hal::openHalAlignmentReadOnly(halPath,
 							   optionsParser);
 
     InsertionIterator insertionIt = InsertionIterator(maxNFraction, insertionJoinDistance, minInsertionSize, maxInsertionSize);
     if (getInsertionLengths) {
       if (referenceName != "") {
-	const Genome *reference = alignment->openGenome(referenceName);
+	const hal::Genome *reference = alignment->openGenome(referenceName);
 	insertionIt.goToGenome(reference);
-	Insertion *insertion;
+	Sequence *insertion;
 	while((insertion = insertionIt.next())) {
 	  cerr << (insertion->seq).length() << endl;
 	}
@@ -105,10 +104,10 @@ int main(int argc, char** argv)
 
     else if (annotateInsertions) {
       if (referenceName != "") {
-	const Genome *reference = alignment->openGenome(referenceName);
-	vector<Insertion*> insertions = annotateInsertionsOnBranch(reference, insertionIt);
-	for (uint i = 0; i < insertions.size(); i++) {
-	  insertions[i]->toGFF(&cout);
+	const hal::Genome *reference = alignment->openGenome(referenceName);
+	vector<Sequence*> repeats = annotateRepeatsOnBranch(reference, insertionIt);
+	for (uint i = 0; i < repeats.size(); i++) {
+	  repeats[i]->toGFF(&cout);
 	}
       }
     }

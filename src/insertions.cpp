@@ -3,7 +3,6 @@
 #include "hal.h"
 #include "insertions.h"
 
-using namespace hal;
 using namespace std;
 
 
@@ -17,11 +16,11 @@ double fractionN(string seq) {
   return numN/seq.length();
 }
 
-void Insertion::toGFF(ostream* gffStream) {
-  *gffStream << seqName << " cactus_repeat_annotation repeat_copy " << start << " " << end <<  " " << score << " " << strand << " " << "." << " " << group << endl;
+void Sequence::toGFF(ostream* gffStream) {
+  *gffStream << seqName << "\tcactus_repeat_annotation\trepeat_copy " << start << "\t" << end <<  "\t" << score << "\t" << strand << "\t" << "." << "\t" << group << endl;
 }
 
-void InsertionIterator::goToGenome(const Genome * _genome) {
+void InsertionIterator::goToGenome(const hal::Genome * _genome) {
   genome = _genome;
   topSeg = genome->getTopSegmentIterator();
   endSeg = genome->getTopSegmentEndIterator();
@@ -36,7 +35,7 @@ bool InsertionIterator::filter(string seq) {
 }
 
 
-Insertion* InsertionIterator::next() {
+Sequence* InsertionIterator::next() {
   if (insertionJoinDistance > 0) {
     return NULL;
   }
@@ -46,11 +45,12 @@ Insertion* InsertionIterator::next() {
       topSeg->getString(seq);
       topSeg->toRight();
       if (filter(seq)) {
-	Insertion *insertion = new Insertion;
+	Sequence *insertion = new Sequence;
 	insertion->seq = seq;
 	insertion->seqName = topSeg->getSequence()->getName();
-	insertion->start = topSeg->getStartPosition();
-	insertion->end = topSeg->getEndPosition();
+	hal_size_t seqStart = topSeg->getSequence()->getStartPosition();
+	insertion->start = topSeg->getStartPosition() - seqStart;
+	insertion->end = topSeg->getEndPosition() - seqStart;
 	insertion->strand = '+';
 	insertion->score = 0;
 	return insertion;
@@ -61,7 +61,7 @@ Insertion* InsertionIterator::next() {
   return NULL;
 }
 /*
-Insertion *InsertionIterator::nextGappedInsertion()
+Sequence *SequenceIterator::nextGappedSequence()
 
 {
 
@@ -90,7 +90,7 @@ Insertion *InsertionIterator::nextGappedInsertion()
 	insertionSeq += insertion.at(i);
       }
       if (filter(insertionSeq)) {
-	Insertion *insertion = new Insertion;
+	Sequence *insertion = new Sequence;
 	insertion->seq = insertionSeq;
 	insertion->end = topSeg->getEndPosition();
 	return insertion;

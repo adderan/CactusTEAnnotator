@@ -7,33 +7,32 @@
 
 
 using namespace std;
-using namespace hal;
 
 
-GenomeIterator::GenomeIterator(AlignmentConstPtr _alignment) {
+GenomeIterator::GenomeIterator(hal::AlignmentConstPtr _alignment) {
   alignment = _alignment;
   root = alignment->openGenome(alignment->getRootName());
   visited.push(root);
 }
 
-const Genome * GenomeIterator::next() {
+const hal::Genome * GenomeIterator::next() {
   if (visited.empty()) return NULL;
 
   root = visited.top();
   visited.pop();
 
   for (hal_size_t childIndex = 0; childIndex < root->getNumChildren(); childIndex++) {
-    const Genome* child = root->getChild(childIndex);
+    const hal::Genome* child = root->getChild(childIndex);
     visited.push(child);
   }
   return root;
   
 }
 
-vector<Insertion*> annotateInsertionsOnBranch(const Genome *genome, InsertionIterator &insertionIter) {
+vector<Sequence*> annotateRepeatsOnBranch(const hal::Genome *genome, InsertionIterator &insertionIter) {
   insertionIter.goToGenome(genome);
-  Insertion *insertion;
-  vector<Insertion*> insertions;
+  Sequence *insertion;
+  vector<Sequence*> insertions;
   while((insertion = insertionIter.next())) {
     insertions.push_back(insertion);
   }
@@ -46,25 +45,29 @@ vector<Insertion*> annotateInsertionsOnBranch(const Genome *genome, InsertionIte
   cerr << "Built distance matrix of size " << seqs.size() << endl;
   double **distanceMatrix = buildDistanceMatrix(seqs, 5);
   cerr << "Finished building distance matrix" << endl;
-  map<Insertion*, vector<Insertion*> > clusters = buildTransitiveClusters<Insertion>(insertions, distanceMatrix, 0.5);
+  map<Sequence*, vector<Sequence*> > clusters = buildTransitiveClusters<Sequence>(insertions, distanceMatrix, 0.5);
   cerr << "Built " << clusters.size() << " clusters from " << insertions.size() << " insertions " << endl;
   
-  vector<Insertion*> toReturn;
-  map<Insertion*, vector<Insertion*> >::iterator clusterIter;
+  vector<Sequence*> repeats;
+  map<Sequence*, vector<Sequence*> >::iterator clusterIter;
   int familyNumber = 0;
   for (clusterIter = clusters.begin(); clusterIter != clusters.end(); clusterIter++) {
-    vector<Insertion*> insertionsInCluster = clusterIter->second;
+    vector<Sequence*> insertionsInCluster = clusterIter->second;
     if (insertionsInCluster.size() > 1) {
       for(uint i = 0; i < insertionsInCluster.size(); i++) {
-	Insertion* insertion = insertionsInCluster[i];
+	Sequence* insertion = insertionsInCluster[i];
 	insertion->repeatFamily = "cactus";
 	insertion->group = familyNumber;
-	toReturn.push_back(insertion);
+	repeats.push_back(insertion);
       }
       familyNumber++;
     }
   }
-  return toReturn;
+  return repeats;
+  
+}
+
+vector<Sequence*> liftoverRepeatAnnotations(vector<Sequence*> repeats, const hal::Genome *source, const hal::Genome *target) {
   
 }
 
@@ -128,11 +131,6 @@ set<string> getSeeds(string seq, int seedLength) {
   }
   return seeds;
 }
-
-double insertionDistance(Insertion *a, Insertion *b) {
-  return kmerDistance(a->seq, b->seq);
-}
-
 
 double kmerDistance(string seq1, string seq2) {
   int seedLength = 5;

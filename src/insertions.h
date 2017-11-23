@@ -5,11 +5,10 @@
 #include <vector>
 #include "hal.h"
 
-using namespace hal;
 using namespace std;
 
 
-class Insertion {
+class Sequence {
 public:
   hal_size_t start;
   hal_size_t end;
@@ -20,13 +19,13 @@ public:
   char strand;
   int score;
 
-  Insertion() {};
+  Sequence() {};
   
   //Create annotation string
   void toGFF(ostream* gffStream);
 
   //Metric for similarity between insertions
-  double distance(Insertion *other);
+  double distance(Sequence *other);
 };
 
 
@@ -37,19 +36,19 @@ private:
   hal_size_t insertionJoinDistance;
   hal_size_t minInsertionSize;
   hal_size_t maxInsertionSize;
-  TopSegmentIteratorConstPtr topSeg;
-  TopSegmentIteratorConstPtr endSeg;
-  const Genome *genome;
+  hal::TopSegmentIteratorConstPtr topSeg;
+  hal::TopSegmentIteratorConstPtr endSeg;
+  const hal::Genome *genome;
   bool filter(string seq);
 public:
   InsertionIterator() {};
   string toGFF();
-  void goToGenome(const Genome *genome);
+  void goToGenome(const hal::Genome *genome);
   InsertionIterator(double _maxNFraction,
 				       hal_size_t _insertionJoinDistance,
 		    hal_size_t _minInsertionSize, hal_size_t _maxInsertionSize): maxNFraction(_maxNFraction), insertionJoinDistance(_insertionJoinDistance), minInsertionSize(_minInsertionSize), maxInsertionSize(_maxInsertionSize) {}
-  Insertion* next();
-  Insertion* nextGappedInsertion();
+  Sequence* next();
+  Sequence* nextGappedInsertion();
 };
 
 #endif
