@@ -5,6 +5,9 @@
 #include "annotation.h"
 #include "clustering.h"
 
+#include "lpo.h"
+#include "align_score.h"
+
 
 using namespace std;
 
@@ -45,7 +48,7 @@ vector<Sequence*> annotateRepeatsOnBranch(const hal::Genome *genome, InsertionIt
   cerr << "Built distance matrix of size " << seqs.size() << endl;
   double **distanceMatrix = buildDistanceMatrix(seqs, 5);
   cerr << "Finished building distance matrix" << endl;
-  map<Sequence*, vector<Sequence*> > clusters = buildTransitiveClusters<Sequence>(insertions, distanceMatrix, 0.5);
+  map<Sequence*, vector<Sequence*> > clusters = buildTransitiveClusters<Sequence>(insertions, distanceMatrix, 0.8);
   cerr << "Built " << clusters.size() << " clusters from " << insertions.size() << " insertions " << endl;
   
   vector<Sequence*> repeats;
@@ -65,6 +68,15 @@ vector<Sequence*> annotateRepeatsOnBranch(const hal::Genome *genome, InsertionIt
   }
   return repeats;
   
+}
+
+void getInsertionLengthsOnBranch(const hal::Genome* genome, InsertionIterator &insertionIt) {
+  insertionIt.goToGenome(genome);
+  Sequence *insertion;
+  while((insertion = insertionIt.next())) {
+    cout << genome->getName() << " " << (insertion->seq).length() << endl;
+  }
+  delete insertion;
 }
 
 vector<Sequence*> liftoverRepeatAnnotations(vector<Sequence*> repeats, const hal::Genome *source, const hal::Genome *target) {
@@ -148,3 +160,24 @@ double kmerDistance(string seq1, string seq2) {
   return dist;
 }
   
+/*
+LPOSequence_T *buildSequenceGraph(vector<Sequence*> &sequences, char *matrixFilename) {
+  ResidueScoreMatrix_T scoreMatrix;
+  
+  read_score_matrix(matrixFilename, &scoreMatrix);
+  
+  LPOSequence_T **inputSeqs =  (LPOSequence_T**)calloc(sequences.size(), sizeof(LPOSequence_T*));
+  for (uint i = 0; i < sequences.size(); i++) {
+    char *seqName = new char[(sequences[i]->seqName).length() + 1];
+    strcpy(seqName, (sequences[i]->seqName).c_str());
+    char *seq = new char[(sequences[i]->seq).length() + 1];
+    strcpy(seq, (sequences[i]->seq).c_str());
+    create_seq(i, inputSeqs, seqName, seqName, seq, false)
+  }
+
+  LPOSequence_T *align = buildup_progressive_lpo(sequences.size(), inputSeqs, &scoreMatrix,
+						 false, true, NULL, matrix_scoring_function, false, true);
+  return align;
+}
+  
+*/

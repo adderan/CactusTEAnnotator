@@ -13,6 +13,7 @@ public:
   const hal::Genome *next();
 };
 
+void getInsertionLengthsOnBranch(const hal::Genome *genome, InsertionIterator &it);
 double kmerDistance(string a, string b);
 double **buildDistanceMatrix(vector<string> seqs, int kmerLength);
 vector<Sequence*> annotateRepeatsOnBranch(const hal::Genome *reference, InsertionIterator &insertionIt);

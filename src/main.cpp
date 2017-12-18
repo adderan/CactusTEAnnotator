@@ -93,12 +93,14 @@ int main(int argc, char** argv)
     if (getInsertionLengths) {
       if (referenceName != "") {
 	const hal::Genome *reference = alignment->openGenome(referenceName);
-	insertionIt.goToGenome(reference);
-	Sequence *insertion;
-	while((insertion = insertionIt.next())) {
-	  cerr << (insertion->seq).length() << endl;
+	getInsertionLengthsOnBranch(reference, insertionIt);
+      }
+      else {
+	GenomeIterator genomeIt(alignment);
+	const hal::Genome *genome;
+	while ((genome = genomeIt.next()) != NULL) {
+	  getInsertionLengthsOnBranch(genome, insertionIt);
 	}
-	delete insertion;
       }
     }
 

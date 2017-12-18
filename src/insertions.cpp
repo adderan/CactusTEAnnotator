@@ -17,7 +17,7 @@ double fractionN(string seq) {
 }
 
 void Sequence::toGFF(ostream* gffStream) {
-  *gffStream << seqName << "\tcactus_repeat_annotation\trepeat_copy " << start << "\t" << end <<  "\t" << score << "\t" << strand << "\t" << "." << "\t" << group << endl;
+  *gffStream << seqName << "\tcactus_repeat_annotation\trepeat_copy" << "\t" << start << "\t" << end <<  "\t" << score << "\t" << strand << "\t" << "." << "\t" << group << endl;
 }
 
 void InsertionIterator::goToGenome(const hal::Genome * _genome) {
@@ -42,8 +42,8 @@ Sequence* InsertionIterator::next() {
   while (topSeg->equals(endSeg) == false) {
     if (!topSeg->hasParent()) {
       string seq;
+      seq.clear();
       topSeg->getString(seq);
-      topSeg->toRight();
       if (filter(seq)) {
 	Sequence *insertion = new Sequence;
 	insertion->seq = seq;
@@ -53,6 +53,7 @@ Sequence* InsertionIterator::next() {
 	insertion->end = topSeg->getEndPosition() - seqStart;
 	insertion->strand = '+';
 	insertion->score = 0;
+	topSeg->toRight();
 	return insertion;
       }
     }
@@ -60,48 +61,22 @@ Sequence* InsertionIterator::next() {
   }
   return NULL;
 }
+
 /*
 Sequence *SequenceIterator::nextGappedSequence()
 
 {
-
-  vector<TopSegmentIteratorConstPtr> insertion;
-  hal_size_t gapLength = 0;
   
   while (topSeg->equals(endSeg) == false) {
-    string seq;
-    topSeg->getString(seq);
-
     if (!topSeg->hasParent()) {
-      insertion.push_back(seq);
-      gapLength = 0;
-    }
-    else if ((seq.length() + gapLength < insertionJoinDistance) && (insertion.size() > 0)) {
-      gapLength += seq.length();
-      insertion.push_back(seq);
-      cerr << "Appending aligned sequence of length " << seq.length() << endl;
-    }
-
-    topSeg->toRight();
-
-    if (insertion.size() > 0) {
-      string insertionSeq;
-      for (int i = 0; i < insertion.size(); i++) {
-	insertionSeq += insertion.at(i);
-      }
-      if (filter(insertionSeq)) {
-	Sequence *insertion = new Sequence;
-	insertion->seq = insertionSeq;
-	insertion->end = topSeg->getEndPosition();
-	return insertion;
-      }
-    }
-    insertion.clear();
-    gapLength = 0;
-      
+      //Found an insertion. Scan forward for another insertion within a certain distance
+      string insertion;
+      topSeg->getString(insertion);
+      while(topSeg->equals(endSeg) == false) {
+	topSeg->toRight();
+	if (!topSeg->hasParent) {
+	  string seq 
   }
-  return NULL;
   
 }
-
 */

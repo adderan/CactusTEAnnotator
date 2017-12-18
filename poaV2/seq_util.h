@@ -54,6 +54,7 @@ void shuffle_seq(int len,
 		char randseq[]);
 
 void index_symbols(int nseq,char seq[],char out[],
+
 		   int nsymbs,char symbols[]);
 
 int read_score_matrix(char filename[],ResidueScoreMatrix_T *m);
@@ -61,6 +62,7 @@ int read_score_matrix(char filename[],ResidueScoreMatrix_T *m);
 void print_score_matrix(FILE *ifile,ResidueScoreMatrix_T *m,char subset[]);
 
 int limit_residues(char seq[],char symbol[]);
+
 
 int create_seq(int nseq,Sequence_T **seq,char seq_name[],char seq_title[],char tmp_seq[],int do_switch_case);
 
