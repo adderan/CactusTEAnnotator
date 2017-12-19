@@ -1,10 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "insertions.h"
-#include "annotation.h"
-#include "clustering.h"
+#include "RepeatAnnotation.h"
+
+#include "hal.h"
 
 using namespace std;
+using namespace hal;
 
 
 static hal::CLParserPtr initParser()
@@ -107,7 +108,7 @@ int main(int argc, char** argv)
     else if (annotateInsertions) {
       if (referenceName != "") {
 	const hal::Genome *reference = alignment->openGenome(referenceName);
-	vector<Sequence*> repeats = annotateRepeatsOnBranch(reference, insertionIt);
+	vector<CRASequence*> repeats = annotateRepeatsOnBranch(reference, insertionIt);
 	for (uint i = 0; i < repeats.size(); i++) {
 	  repeats[i]->toGFF(&cout);
 	}

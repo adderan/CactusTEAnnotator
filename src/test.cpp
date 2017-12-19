@@ -1,8 +1,7 @@
 #include <math.h>
 #include <vector>
-#include "clustering.h"
-#include "insertions.h"
-#include "annotation.h"
+#include <stdlib.h>
+#include "RepeatAnnotation.h"
 
 using namespace std;
 
@@ -63,6 +62,7 @@ void testDistanceMatrix() {
   assert(dist[2][1] > 0);
 
 }
+/*
 
 void kmerDistanceTest() {
   string kmer1 = "AAGTCAGTACATAGGGACAGTCAG";
@@ -73,12 +73,11 @@ void kmerDistanceTest() {
   assert(kmerDistance(a, b) < 1.0);
   assert(kmerDistance(a, b) == kmerDistance(b, a));
 }
-  
+*/
 
 
 int main(int argc, char **argv) {
   clusterBuilderTest();
   insertionIteratorTest();
-  kmerDistanceTest();
   testDistanceMatrix();
 }
