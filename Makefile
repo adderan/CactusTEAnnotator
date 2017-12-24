@@ -1,7 +1,7 @@
 rootPath = .
 include hal/include.mk
 
-libSourcesAll = $(wildcard src/*.cpp)
+libSourcesAll = $(wildcard src/*.cpp smhasher/src/*.cpp)
 libSources = $(subst src/main.cpp,,${libSourcesAll})
 libHeaders = $(wildcard src/*.h)
 
@@ -9,7 +9,7 @@ all: cactusRepeatAnnotator repeatAnnotatorTests
 
 repeats.a: ${libSources} ${libHeaders} hal/lib/halLib.a sonLib/lib/sonLib.a ${basicLibsDependencies}
 	rm -f *.o
-	${cpp} ${cppflags} -I src/ -I poaV2/ -I hal/lib -I sonLib/lib -c ${libSources} poaV2/liblpo.a
+	${cpp} ${cppflags} -I src/ -I smhasher/src/ -I poaV2/ -I hal/lib -I sonLib/lib -c ${libSources} poaV2/liblpo.a
 	ar rc repeats.a *.o
 	ranlib repeats.a
 
