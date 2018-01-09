@@ -93,25 +93,25 @@ int main(int argc, char** argv)
     InsertionIterator insertionIt = InsertionIterator(maxNFraction, insertionJoinDistance, minInsertionSize, maxInsertionSize);
     if (getInsertionLengths) {
       if (referenceName != "") {
-	const hal::Genome *reference = alignment->openGenome(referenceName);
-	getInsertionLengthsOnBranch(reference, insertionIt);
+	    const hal::Genome *reference = alignment->openGenome(referenceName);
+	    getInsertionLengthsOnBranch(reference, insertionIt);
       }
       else {
-	GenomeIterator genomeIt(alignment);
-	const hal::Genome *genome;
-	while ((genome = genomeIt.next()) != NULL) {
-	  getInsertionLengthsOnBranch(genome, insertionIt);
-	}
+	    GenomeIterator genomeIt(alignment);
+	    const hal::Genome *genome;
+	    while ((genome = genomeIt.next()) != NULL) {
+	      getInsertionLengthsOnBranch(genome, insertionIt);
+	    }
       }
     }
 
     else if (annotateInsertions) {
       if (referenceName != "") {
-	const hal::Genome *reference = alignment->openGenome(referenceName);
-	vector<CRASequence*> repeats = annotateRepeatsOnBranch(reference, insertionIt);
-	for (uint i = 0; i < repeats.size(); i++) {
-	  repeats[i]->toGFF(&cout);
-	}
+        const hal::Genome *reference = alignment->openGenome(referenceName);
+	    vector<CRASequence*> repeats = annotateRepeatsOnBranch(reference, insertionIt);
+	    for (uint i = 0; i < repeats.size(); i++) {
+	      repeats[i]->toGFF(&cout);
+        }
       }
     }
 

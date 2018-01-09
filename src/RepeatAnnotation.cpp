@@ -17,7 +17,7 @@
 using namespace std;
 using namespace hal;
 
-char *getSequenceFromHal(Genome *genome, hal_size_t start, hal_size_t end) {
+char *getSequenceFromHal(const Genome *genome, hal_size_t start, hal_size_t end) {
   DNAIteratorConstPtr dnaIt = genome->getDNAIterator(start);
   char *seq = new char[end - start + 1];
   for (hal_size_t i = 0; i < end - start; i++) {
@@ -85,13 +85,15 @@ CRASequence* InsertionIterator::next() {
       	return insertion;
       }
       else {
-	       delete seq;
+        delete seq;
       }
     }
     topSeg->toRight();
   }
   return NULL;
 }
+
+/*
 
 CRASequence *InsertionIterator::nextGappedInsertion() {
   hal_size_t start = topSeg->getStartPosition();
@@ -130,6 +132,7 @@ CRASequence *InsertionIterator::nextGappedInsertion() {
     }
   }
 }
+*/
 
 GenomeIterator::GenomeIterator(hal::AlignmentConstPtr _alignment) {
   alignment = _alignment;
@@ -158,7 +161,7 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<char*> s
   //Build index from kmers to sequences containing that kmer
   for (uint i = 0; i < seqs.size(); i++) {
     char *seq = seqs[i];
-    if (i%100 == 0) {
+    if (i%1000 == 0) {
       cerr << "Indexed " << i << " sequences" << endl;
     }
     if (strlen(seq) < kmerLength) continue;
@@ -169,17 +172,18 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<char*> s
   }
   cerr << "Finished building kmer index " << endl;
 
-  //Allocate only above the diagonal of the distance matrix
-
   int N = seqs.size();
   boost::numeric::ublas::mapped_matrix<double> dist(N, N, N);
 
+  int npairs = 0;
   BOOST_FOREACH(KmerIndex::value_type kv, index) {
     vector<int> seqsWithKmer = kv.second;
     for (uint i = 0; i < seqsWithKmer.size(); i++) {
       for (uint j = 0; j < i; j++) {
         if (seqsWithKmer[i] == seqsWithKmer[j]) continue;
-	      int a = (seqsWithKmer[i] > seqsWithKmer[j]) ? seqsWithKmer[i] : seqsWithKmer[j];
+        npairs++;
+        if (npairs % 1000000 == 0) cerr << "Filled " << npairs << " matrix cells" << endl;
+	    int a = (seqsWithKmer[i] > seqsWithKmer[j]) ? seqsWithKmer[i] : seqsWithKmer[j];
         int b = (seqsWithKmer[i] > seqsWithKmer[j]) ? seqsWithKmer[j] : seqsWithKmer[i];
         dist (a, b) += 1.0;
       }
@@ -203,6 +207,7 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<char*> s
       dist (i, j) = dist (i, j) / nKmers;
     }
   }
+  cerr << "Finished normalizing distances" << endl;
   return dist;
 }
 
@@ -210,7 +215,10 @@ vector<CRASequence*> annotateRepeatsOnBranch(const hal::Genome *genome, Insertio
   insertionIter.goToGenome(genome);
   CRASequence *insertion;
   vector<CRASequence*> insertions;
+  int i = 0;
   while((insertion = insertionIter.next())) {
+    if (i%1000 == 0) cerr << "Read " << i << " insertions" << endl;
+    i++;
     insertions.push_back(insertion);
   }
   cerr << "Found " << insertions.size() << " candidate insertions on branch " << genome->getName() << endl;
