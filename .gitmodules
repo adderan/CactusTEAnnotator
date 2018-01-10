@@ -10,3 +10,6 @@
 [submodule "boost"]
 	path = boost
 	url = https://github.com/boostorg/boost
+[submodule "hdf5"]
+	path = hdf5
+	url = https://github.com/UCSCReconGroup/hdf5
