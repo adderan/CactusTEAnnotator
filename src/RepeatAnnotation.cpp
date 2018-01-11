@@ -230,7 +230,7 @@ vector<CRASequence*> annotateRepeatsOnBranch(const hal::Genome *genome, Insertio
     seqs.push_back(insertions[i]->seq);
   }
   cerr << "Built distance matrix of size " << seqs.size() << endl;
-  boost::numeric::ublas::mapped_matrix<double> distanceMatrix = buildDistanceMatrix(seqs, 20);
+  boost::numeric::ublas::mapped_matrix<double> distanceMatrix = buildDistanceMatrix(seqs, 30);
   cerr << "Finished building distance matrix" << endl;
   map<CRASequence*, vector<CRASequence*> > clusters = buildTransitiveClusters<CRASequence>(insertions, distanceMatrix, 0.3);
   cerr << "Built " << clusters.size() << " clusters from " << insertions.size() << " insertions " << endl;
