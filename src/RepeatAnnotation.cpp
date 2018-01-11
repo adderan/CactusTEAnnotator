@@ -29,6 +29,9 @@ char *getSequenceFromHal(const Genome *genome, hal_size_t start, hal_size_t end)
 }
 
 uint32_t hashKmer(char *seq, int length) {
+  for (int i = 0; i < length; i++) {
+    if (seq[i] == 'N') return -1;
+  }
   char data[8];
   MurmurHash3_x86_32(seq, length, 0, data);
   return *(uint32_t*)data;
@@ -167,6 +170,7 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<char*> s
     if (strlen(seq) < kmerLength) continue;
     for (int j = 0; j < (strlen(seq) - kmerLength); j++) {
       uint32_t kmerHash = hashKmer(seq + j, kmerLength);
+      if (kmerHash == -1) continue;
       index[kmerHash].push_back(i);
     }
   }
