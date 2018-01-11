@@ -180,13 +180,18 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<char*> s
   boost::numeric::ublas::mapped_matrix<double> dist(N, N, N);
 
   int npairs = 0;
+  int nrows = 0;
   BOOST_FOREACH(KmerIndex::value_type kv, index) {
     vector<int> seqsWithKmer = kv.second;
+    nrows++;
     for (uint i = 0; i < seqsWithKmer.size(); i++) {
       for (uint j = 0; j < i; j++) {
         if (seqsWithKmer[i] == seqsWithKmer[j]) continue;
         npairs++;
-        if (npairs % 1000000 == 0) cerr << "Filled " << npairs << " matrix cells" << endl;
+        if (npairs % 1000000 == 0) {
+          cerr << "Filled " << npairs << " matrix cells" << endl;
+          cerr << "Processed " << nrows << " out of " << index.size() << " rows of index" << endl;
+        }
         int a = (seqsWithKmer[i] > seqsWithKmer[j]) ? seqsWithKmer[i] : seqsWithKmer[j];
         int b = (seqsWithKmer[i] > seqsWithKmer[j]) ? seqsWithKmer[j] : seqsWithKmer[i];
         dist (a, b) += 1.0;
