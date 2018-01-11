@@ -183,12 +183,13 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<char*> s
         if (seqsWithKmer[i] == seqsWithKmer[j]) continue;
         npairs++;
         if (npairs % 1000000 == 0) cerr << "Filled " << npairs << " matrix cells" << endl;
-	    int a = (seqsWithKmer[i] > seqsWithKmer[j]) ? seqsWithKmer[i] : seqsWithKmer[j];
+        int a = (seqsWithKmer[i] > seqsWithKmer[j]) ? seqsWithKmer[i] : seqsWithKmer[j];
         int b = (seqsWithKmer[i] > seqsWithKmer[j]) ? seqsWithKmer[j] : seqsWithKmer[i];
         dist (a, b) += 1.0;
       }
     }
   }
+  cerr << "Computed " << npairs << " pairwise distances" << endl;
 
   cerr << "Finished computing pairwise distances" << endl;
 
@@ -211,7 +212,7 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<char*> s
   return dist;
 }
 
-vector<CRASequence*> annotateRepeatsOnBranch(const hal::Genome *genome, InsertionIterator &insertionIter) {
+vector<CRASequence*> annotateRepeatsOnBranch(const hal::Genome *genome, InsertionIterator &insertionIter, hal_size_t maxInsertions) {
   insertionIter.goToGenome(genome);
   CRASequence *insertion;
   vector<CRASequence*> insertions;
@@ -219,6 +220,7 @@ vector<CRASequence*> annotateRepeatsOnBranch(const hal::Genome *genome, Insertio
   while((insertion = insertionIter.next())) {
     if (i%1000 == 0) cerr << "Read " << i << " insertions" << endl;
     i++;
+    if (maxInsertions != 0 && i >= maxInsertions) break;
     insertions.push_back(insertion);
   }
   cerr << "Found " << insertions.size() << " candidate insertions on branch " << genome->getName() << endl;
@@ -228,7 +230,7 @@ vector<CRASequence*> annotateRepeatsOnBranch(const hal::Genome *genome, Insertio
     seqs.push_back(insertions[i]->seq);
   }
   cerr << "Built distance matrix of size " << seqs.size() << endl;
-  boost::numeric::ublas::mapped_matrix<double> distanceMatrix = buildDistanceMatrix(seqs, 5);
+  boost::numeric::ublas::mapped_matrix<double> distanceMatrix = buildDistanceMatrix(seqs, 20);
   cerr << "Finished building distance matrix" << endl;
   map<CRASequence*, vector<CRASequence*> > clusters = buildTransitiveClusters<CRASequence>(insertions, distanceMatrix, 0.3);
   cerr << "Built " << clusters.size() << " clusters from " << insertions.size() << " insertions " << endl;

@@ -22,7 +22,6 @@ public:
   int score;
 
   CRASequence() {};
-
   //Create annotation string
   void toGFF(ostream* gffStream);
 
@@ -101,7 +100,7 @@ template <typename Object> map<Object*, vector<Object*> > buildTransitiveCluster
 
 
 void getInsertionLengthsOnBranch(const Genome* genome, InsertionIterator &insertionIt);
-vector<CRASequence*> annotateRepeatsOnBranch(const Genome *genome, InsertionIterator &insertionIter);
+vector<CRASequence*> annotateRepeatsOnBranch(const Genome *genome, InsertionIterator &insertionIter, hal_size_t maxInsertions);
 
 boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<char*> seqs, int kmerLength);
 

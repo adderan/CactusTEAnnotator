@@ -35,6 +35,7 @@ static hal::CLParserPtr initParser()
   optionsParser->addOptionFlag("getInsertionLengths", "", false);
   optionsParser->addOptionFlag("getInsertions", "", false);
   optionsParser->addOptionFlag("annotateInsertions", "", false);
+  optionsParser->addOption("maxInsertions", "Maximum number of insertions to process", 0);
   return optionsParser;
 }
 
@@ -97,18 +98,17 @@ int main(int argc, char** argv)
 	    getInsertionLengthsOnBranch(reference, insertionIt);
       }
       else {
-	    GenomeIterator genomeIt(alignment);
-	    const hal::Genome *genome;
-	    while ((genome = genomeIt.next()) != NULL) {
-	      getInsertionLengthsOnBranch(genome, insertionIt);
-	    }
+  	    GenomeIterator genomeIt(alignment);
+  	    const hal::Genome *genome;
+  	    while ((genome = genomeIt.next()) != NULL) {
+  	      getInsertionLengthsOnBranch(genome, insertionIt);
+  	    }
       }
     }
-
     else if (annotateInsertions) {
       if (referenceName != "") {
         const hal::Genome *reference = alignment->openGenome(referenceName);
-	    vector<CRASequence*> repeats = annotateRepeatsOnBranch(reference, insertionIt);
+	    vector<CRASequence*> repeats = annotateRepeatsOnBranch(reference, insertionIt, optionsParser->getOption<hal_size_t>("maxInsertions"));
 	    for (uint i = 0; i < repeats.size(); i++) {
 	      repeats[i]->toGFF(&cout);
         }
@@ -129,4 +129,3 @@ int main(int argc, char** argv)
   
   return 0;
 }
-

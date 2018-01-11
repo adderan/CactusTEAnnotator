@@ -1,8 +1,10 @@
 rootPath = .
 
-libSourcesAll = $(wildcard src/*.cpp smhasher/src/*.cpp)
+libSourcesAll = $(wildcard src/*.cpp)
 libSources = $(subst src/main.cpp,,${libSourcesAll})
 libHeaders = $(wildcard src/*.h)
+
+murmurHashSources=${PWD}/smhasher/src/MurmurHash3.cpp
 
 cpp=h5c++
 cppflags=-fPIC
@@ -11,7 +13,7 @@ all: cactusRepeatAnnotator repeatAnnotatorTests
 
 repeats.a: ${libSources} ${libHeaders} ${PWD}/hal/lib/halLib.a ${PWD}/sonLib/lib/sonLib.a ${PWD}/poaV2/liblpo.a ${basicLibsDependencies}
 	rm -f *.o
-	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -I src/ -I smhasher/src/ -I poaV2/ -I hal/lib -I sonLib/lib -c ${libSources}
+	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -I src/ -I smhasher/src/ -I poaV2/ -I hal/lib -I sonLib/lib -c ${libSources} ${murmurHashSources}
 	ar rc repeats.a *.o
 	ranlib repeats.a
 
