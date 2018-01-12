@@ -155,61 +155,20 @@ const hal::Genome * GenomeIterator::next() {
 
 }
 
-boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<char*> seqs, int kmerLength) {
-  typedef boost::unordered_map<uint32_t, vector<int> > KmerIndex;
-  KmerIndex index;
-  //Build index from kmers to sequences containing that kmer
-  for (uint i = 0; i < seqs.size(); i++) {
-    char *seq = seqs[i];
-    if (i%1000 == 0) {
-      cerr << "Indexed " << i << " sequences" << endl;
-    }
-    if (strlen(seq) < kmerLength) continue;
-    for (int j = 0; j < (strlen(seq) - kmerLength); j++) {
-      uint32_t kmerHash = hashKmer(seq + j, kmerLength);
-      index[kmerHash].push_back(i);
-    }
+double CRASequence::distance(CRASequence *other, int kmerSize) {
+  set<uint32_t> a;
+  set<uint32_t> b;
+  for (int i = 0; i < strlen(seq) - kmerSize; i++) {
+    a.insert(hashKmer(seq + i), kmerSize);
   }
-  cerr << "Finished building kmer index " << endl;
-
-  int N = seqs.size();
-  boost::numeric::ublas::mapped_matrix<double> dist(N, N, N);
-
-  int npairs = 0;
-  BOOST_FOREACH(KmerIndex::value_type kv, index) {
-    vector<int> seqsWithKmer = kv.second;
-    for (uint i = 0; i < seqsWithKmer.size(); i++) {
-      for (uint j = 0; j < i; j++) {
-        if (seqsWithKmer[i] == seqsWithKmer[j]) continue;
-        npairs++;
-        if (npairs % 1000000 == 0) cerr << "Filled " << npairs << " matrix cells" << endl;
-        int a = (seqsWithKmer[i] > seqsWithKmer[j]) ? seqsWithKmer[i] : seqsWithKmer[j];
-        int b = (seqsWithKmer[i] > seqsWithKmer[j]) ? seqsWithKmer[j] : seqsWithKmer[i];
-        dist (a, b) += 1.0;
-      }
-    }
+  for (int i = 0; i < strlen(other->seq) - kmerSize; i++) {
+    b.insert(hashKmer(other->seq + i), kmerSize);
   }
-  cerr << "Computed " << npairs << " pairwise distances" << endl;
-
-  cerr << "Finished computing pairwise distances" << endl;
-
-  //Divide by the number of kmers in each sequence
-  for (uint i = 0; i < N; i++) {
-    for (uint j = 0; j < i; j++) {
-      if (dist(i, j) == 0.0) {
-        continue;
-      }
-      string a = seqs[i];
-      string b = seqs[j];
-      if (a.length() < kmerLength || b.length() < kmerLength) {
-        dist (i, j) = 1.0;
-      }
-      double nKmers = (double)(a.length())/kmerLength + (double)(b.length())/kmerLength;
-      dist (i, j) = dist (i, j) / nKmers;
-    }
-  }
-  cerr << "Finished normalizing distances" << endl;
-  return dist;
+  set<uint32_t> setIntersection;
+  set_intersection(a.begin(),a.end(),b.begin(),b.end(), back_inserter(setIntersection));
+  set<uint32_t> setUnion;
+  set_union(a.begin(), a.end(), b.begin(), b.end(), back_inserter(setUnion));
+  return (double)setIntersection.size()/(double)setUnion.size();
 }
 
 vector<CRASequence*> annotateRepeatsOnBranch(const hal::Genome *genome, InsertionIterator &insertionIter, hal_size_t maxInsertions) {
@@ -229,29 +188,7 @@ vector<CRASequence*> annotateRepeatsOnBranch(const hal::Genome *genome, Insertio
   for (uint i = 0; i < insertions.size(); i++) {
     seqs.push_back(insertions[i]->seq);
   }
-  cerr << "Built distance matrix of size " << seqs.size() << endl;
-  boost::numeric::ublas::mapped_matrix<double> distanceMatrix = buildDistanceMatrix(seqs, 20);
-  cerr << "Finished building distance matrix" << endl;
-  map<CRASequence*, vector<CRASequence*> > clusters = buildTransitiveClusters<CRASequence>(insertions, distanceMatrix, 0.3);
-  cerr << "Built " << clusters.size() << " clusters from " << insertions.size() << " insertions " << endl;
-
-  vector<CRASequence*> repeats;
-  map<CRASequence*, vector<CRASequence*> >::iterator clusterIter;
-  int familyNumber = 0;
-  for (clusterIter = clusters.begin(); clusterIter != clusters.end(); clusterIter++) {
-    vector<CRASequence*> insertionsInCluster = clusterIter->second;
-    if (insertionsInCluster.size() > 1) {
-      for(uint i = 0; i < insertionsInCluster.size(); i++) {
-        CRASequence* insertion = insertionsInCluster[i];
-        insertion->repeatFamily = "cactus";
-        insertion->group = familyNumber;
-        repeats.push_back(insertion);
-      }
-      familyNumber++;
-    }
-  }
   return repeats;
-
 }
 
 void getInsertionLengthsOnBranch(const hal::Genome* genome, InsertionIterator &insertionIt) {

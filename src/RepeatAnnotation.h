@@ -26,7 +26,7 @@ public:
   void toGFF(ostream* gffStream);
 
   //Metric for similarity between insertions
-  double distance(CRASequence *other);
+  double distance(CRASequence *other, int kmerSize);
 };
 
 
@@ -63,7 +63,7 @@ public:
 };
 
 
-template <typename Object> map<Object*, vector<Object*> > buildTransitiveClusters(vector<Object*> objects, boost::numeric::ublas::mapped_matrix<double> similarityMatrix, double similarityThreshold) {
+template <typename Object> map<Object*, vector<Object*> > groupByDistance(vector<Object*> objects, double similarityThreshold) {
 
   map<Object *,vector<Object *> > clusterToObj;
   map<Object *,Object *> objToCluster;
@@ -76,8 +76,8 @@ template <typename Object> map<Object*, vector<Object*> > buildTransitiveCluster
     for (uint j = 0; j < i; j++) {
       Object *a = objects[i];
       Object *b = objects[j];
-      double similarity = similarityMatrix (i, j);
-      if (similarity > similarityThreshold) {
+      double similarity = a->dist(b);
+      if (dist < similarityThreshold) {
         //Combine the clusters
         Object* cluster_a = objToCluster[a];
         Object* cluster_b = objToCluster[b];
