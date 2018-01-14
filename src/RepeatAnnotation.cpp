@@ -17,6 +17,22 @@
 using namespace std;
 using namespace hal;
 
+class RepeatSet {
+  private:
+    map<Seq*, vector<Seq*> > groups;
+    map<Seq*, Seq*> seqToGroup;
+  public:
+    void join(Seq* a0, Seq* b0) {
+      vector<Seq*> a = groups[seqToGroup[a0]];
+      vector<Seq*> b = groups[seqToGroup[b0]];
+      for (int i = 0; i < b.size(); i++) {
+        a.push_back(b[i]);
+        seqToGroup[b[i]] = seqToGroup[a0];
+      }
+    }
+
+};
+
 char *getSequenceFromHal(const Genome *genome, hal_size_t start, hal_size_t end) {
   DNAIteratorConstPtr dnaIt = genome->getDNAIterator(start);
   char *seq = new char[end - start + 1];
@@ -49,7 +65,7 @@ double fractionN(char *seq) {
   return numN/10.0;
 }
 
-void CRASequence::toGFF(ostream* gffStream) {
+void Seq::toGFF(ostream* gffStream) {
   *gffStream << seqName << "\tcactus_repeat_annotation\trepeat_copy" << "\t" << start << "\t" << end <<  "\t" << score << "\t" << strand << "\t" << "." << "\t" << group << endl;
 }
 
@@ -67,8 +83,43 @@ bool InsertionIterator::filter(char *seq) {
   return true;
 }
 
+template <typename Object> map<Object*, vector<Object*> > buildTransitiveClusters(vector<Object*> objects, boost::numeric::ublas::mapped_matrix<double> similarityMatrix, double similarityThreshold) {
 
-CRASequence* InsertionIterator::next() {
+  map<Object *,vector<Object *> > clusterToObj;
+  map<Object *,Object *> objToCluster;
+
+  for (uint i = 0; i < objects.size(); i++) {
+    objToCluster[objects[i]] = objects[i];
+    clusterToObj[objects[i]].push_back(objects[i]);
+  }
+  for (uint i = 0; i < objects.size(); i++) {
+    for (uint j = 0; j < i; j++) {
+      Object *a = objects[i];
+      Object *b = objects[j];
+      double similarity = similarityMatrix (i, j);
+      if (similarity > similarityThreshold) {
+        //Combine the clusters
+        Object* cluster_a = objToCluster[a];
+        Object* cluster_b = objToCluster[b];
+        if (cluster_a != cluster_b) {
+          Object* new_cluster = (cluster_a > cluster_b) ? cluster_a : cluster_b;
+          Object* cluster_to_delete = (cluster_a > cluster_b) ? cluster_b : cluster_a;
+          vector<Object*> objectsInCluster = clusterToObj[cluster_to_delete];
+          typename vector<Object*>::iterator it;
+          for (it = objectsInCluster.begin(); it != objectsInCluster.end(); it++) {
+            objToCluster[*it] = new_cluster;
+            clusterToObj[new_cluster].push_back(*it);
+          }
+          clusterToObj.erase(cluster_to_delete);
+        }
+      }
+    }
+  }
+  return clusterToObj;
+};
+
+
+Seq* InsertionIterator::next() {
   if (insertionJoinDistance > 0) {
     return NULL;
   }
@@ -76,16 +127,16 @@ CRASequence* InsertionIterator::next() {
     if (!topSeg->hasParent()) {
       char *seq = getSequenceFromHal(topSeg->getGenome(), topSeg->getStartPosition(), topSeg->getEndPosition());
       if (filter(seq)) {
-      	CRASequence *insertion = new CRASequence;
-      	insertion->seq = seq;
-      	insertion->seqName = topSeg->getSequence()->getName();
-      	hal_size_t seqStart = topSeg->getSequence()->getStartPosition();
-      	insertion->start = topSeg->getStartPosition() - seqStart;
-      	insertion->end = topSeg->getEndPosition() - seqStart;
+        Seq *insertion = new Seq;
+        insertion->seq = seq;
+        insertion->seqName = topSeg->getSequence()->getName();
+        hal_size_t seqStart = topSeg->getSequence()->getStartPosition();
+        insertion->start = topSeg->getStartPosition() - seqStart;
+        insertion->end = topSeg->getEndPosition() - seqStart;
         insertion->strand = '+';
-      	insertion->score = 0;
+        insertion->score = 0;
         topSeg->toRight();
-      	return insertion;
+        return insertion;
       }
       else {
         delete seq;
@@ -98,42 +149,42 @@ CRASequence* InsertionIterator::next() {
 
 /*
 
-CRASequence *InsertionIterator::nextGappedInsertion() {
-  hal_size_t start = topSeg->getStartPosition();
-  hal_size_t gapLength = 0;
-  while (topSeg->equals(endSeg) == false) {
-    if (!topSeg->hasParent()) {
-      hal_size_t length = topSeg->getEndPosition() - start;
-      if (length >= minInsertionSize) {
-        char *seq = getSequenceFromHal(topSeg->getGenome(), start, topSeg->getEndPosition());
-        if (filter(seq)) {
-          CRASequence *insertion = new CRASequence;
-          insertion->seq = seq;
-          insertion->seqName = topSeg->getSequence()->getName();
-          hal_size_t seqStart = topSeg->getSequence()->getStartPosition();
-          insertion->start = start - seqStart;
-          insertion->end = topSeg->getEndPosition() - seqStart;
-          insertion->strand = '+';
-          insertion->score = 0;
-          topSeg->toRight();
-          return insertion;
-        }
-        else {
-          delete seq;
-          topSeg->toRight();
-          start = topSeg->getStartPosition();
-          gapLength = 0;
-        }
-      }
-    }
-    else {
-      //has has parent
-      hal_size_t length = topSeg->getEndPosition() - topSeg->getStartPosition();
-      if (length < insertionJoinDistance) {
+   Seq *InsertionIterator::nextGappedInsertion() {
+   hal_size_t start = topSeg->getStartPosition();
+   hal_size_t gapLength = 0;
+   while (topSeg->equals(endSeg) == false) {
+   if (!topSeg->hasParent()) {
+   hal_size_t length = topSeg->getEndPosition() - start;
+   if (length >= minInsertionSize) {
+   char *seq = getSequenceFromHal(topSeg->getGenome(), start, topSeg->getEndPosition());
+   if (filter(seq)) {
+   Seq *insertion = new Seq;
+   insertion->seq = seq;
+   insertion->seqName = topSeg->getSequence()->getName();
+   hal_size_t seqStart = topSeg->getSequence()->getStartPosition();
+   insertion->start = start - seqStart;
+   insertion->end = topSeg->getEndPosition() - seqStart;
+   insertion->strand = '+';
+   insertion->score = 0;
+   topSeg->toRight();
+   return insertion;
+   }
+   else {
+   delete seq;
+   topSeg->toRight();
+   start = topSeg->getStartPosition();
+   gapLength = 0;
+   }
+   }
+   }
+   else {
+//has has parent
+hal_size_t length = topSeg->getEndPosition() - topSeg->getStartPosition();
+if (length < insertionJoinDistance) {
 
-      }
-    }
-  }
+}
+}
+}
 }
 */
 
@@ -221,10 +272,10 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<char*> s
   return dist;
 }
 
-vector<CRASequence*> annotateRepeatsOnBranch(const hal::Genome *genome, InsertionIterator &insertionIter, hal_size_t maxInsertions) {
+vector<Seq*> annotateRepeatsOnBranch(const hal::Genome *genome, InsertionIterator &insertionIter, hal_size_t maxInsertions) {
   insertionIter.goToGenome(genome);
-  CRASequence *insertion;
-  vector<CRASequence*> insertions;
+  Seq *insertion;
+  vector<Seq*> insertions;
   int i = 0;
   while((insertion = insertionIter.next())) {
     if (i%1000 == 0) cerr << "Read " << i << " insertions" << endl;
@@ -241,17 +292,17 @@ vector<CRASequence*> annotateRepeatsOnBranch(const hal::Genome *genome, Insertio
   cerr << "Built distance matrix of size " << seqs.size() << endl;
   boost::numeric::ublas::mapped_matrix<double> distanceMatrix = buildDistanceMatrix(seqs, 30);
   cerr << "Finished building distance matrix" << endl;
-  map<CRASequence*, vector<CRASequence*> > clusters = buildTransitiveClusters<CRASequence>(insertions, distanceMatrix, 0.3);
+  map<Seq*, vector<Seq*> > clusters = buildTransitiveClusters<Seq>(insertions, distanceMatrix, 0.3);
   cerr << "Built " << clusters.size() << " clusters from " << insertions.size() << " insertions " << endl;
 
-  vector<CRASequence*> repeats;
-  map<CRASequence*, vector<CRASequence*> >::iterator clusterIter;
+  vector<Seq*> repeats;
+  map<Seq*, vector<Seq*> >::iterator clusterIter;
   int familyNumber = 0;
   for (clusterIter = clusters.begin(); clusterIter != clusters.end(); clusterIter++) {
-    vector<CRASequence*> insertionsInCluster = clusterIter->second;
+    vector<Seq*> insertionsInCluster = clusterIter->second;
     if (insertionsInCluster.size() > 1) {
       for(uint i = 0; i < insertionsInCluster.size(); i++) {
-        CRASequence* insertion = insertionsInCluster[i];
+        Seq* insertion = insertionsInCluster[i];
         insertion->repeatFamily = "cactus";
         insertion->group = familyNumber;
         repeats.push_back(insertion);
@@ -265,19 +316,19 @@ vector<CRASequence*> annotateRepeatsOnBranch(const hal::Genome *genome, Insertio
 
 void getInsertionLengthsOnBranch(const hal::Genome* genome, InsertionIterator &insertionIt) {
   insertionIt.goToGenome(genome);
-  CRASequence *insertion;
+  Seq *insertion;
   while((insertion = insertionIt.next())) {
     cout << genome->getName() << " " << insertion->end - insertion->start << endl;
   }
   delete insertion;
 }
 
-vector<CRASequence*> liftoverRepeatAnnotations(vector<CRASequence*> repeats, const hal::Genome *source, const hal::Genome *target) {
+vector<Seq*> liftoverRepeatAnnotations(vector<Seq*> repeats, const hal::Genome *source, const hal::Genome *target) {
 
 }
 
 /*
-LPOCRASequence_T *buildSequenceGraph(vector<Sequence*> &sequences, char *matrixFilename) {
+LPOSeq_T *buildSequenceGraph(vector<Sequence*> &sequences, char *matrixFilename) {
   ResidueScoreMatrix_T scoreMatrix;
 
   read_score_matrix(matrixFilename, &scoreMatrix);
@@ -292,8 +343,7 @@ LPOCRASequence_T *buildSequenceGraph(vector<Sequence*> &sequences, char *matrixF
   }
 
   LPOSequence_T *align = buildup_progressive_lpo(sequences.size(), inputSeqs, &scoreMatrix,
-						 false, true, NULL, matrix_scoring_function, false, true);
+      false, true, NULL, matrix_scoring_function, false, true);
   return align;
 }
-
 */
