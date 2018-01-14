@@ -1,7 +1,7 @@
 rootPath = .
 
 libSourcesAll = $(wildcard src/*.cpp)
-libSources = $(subst src/main.cpp,,${libSourcesAll})
+libSources = $(subst src/cactus_repeats.cpp,,${libSourcesAll})
 libHeaders = $(wildcard src/*.h)
 
 murmurHashSources=${PWD}/smhasher/src/MurmurHash3.cpp
@@ -17,8 +17,8 @@ repeats.a: ${libSources} ${libHeaders} ${PWD}/hal/lib/halLib.a ${PWD}/sonLib/lib
 	ar rc repeats.a *.o
 	ranlib repeats.a
 
-cactusRepeatAnnotator : src/main.cpp repeats.a hal/lib/halLib.a
-	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -I src -I src -I hal/lib -I sonLib/lib -I src -I tests -o cactusRepeatAnnotator src/main.cpp repeats.a hal/lib/halLib.a sonLib/lib/sonLib.a poaV2/liblpo.a ${basicLibs}
+cactusRepeatAnnotator : src/cactus_repeats.cpp repeats.a hal/lib/halLib.a
+	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -I src -I src -I hal/lib -I sonLib/lib -I src -I tests -o cactusRepeatAnnotator src/cactus_repeats.cpp repeats.a hal/lib/halLib.a sonLib/lib/sonLib.a poaV2/liblpo.a ${basicLibs}
 
 repeatAnnotatorTests: src/test.cpp repeats.a hal/lib/halLib.a
 	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -UNDEBUG -I src -I src -I hal/lib -I sonLib/lib -I src -I tests -o repeatAnnotatorTests src/test.cpp ${PWD}/repeats.a ${PWD}/sonLib/lib/sonLib.a ${PWD}/hal/lib/halLib.a ${basicLibs}

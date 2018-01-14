@@ -16,22 +16,7 @@
 
 using namespace std;
 using namespace hal;
-
-class RepeatSet {
-  private:
-    map<Seq*, vector<Seq*> > groups;
-    map<Seq*, Seq*> seqToGroup;
-  public:
-    void join(Seq* a0, Seq* b0) {
-      vector<Seq*> a = groups[seqToGroup[a0]];
-      vector<Seq*> b = groups[seqToGroup[b0]];
-      for (int i = 0; i < b.size(); i++) {
-        a.push_back(b[i]);
-        seqToGroup[b[i]] = seqToGroup[a0];
-      }
-    }
-
-};
+using namespace boost::numeric::ublas;
 
 char *getSequenceFromHal(const Genome *genome, hal_size_t start, hal_size_t end) {
   DNAIteratorConstPtr dnaIt = genome->getDNAIterator(start);
@@ -83,39 +68,39 @@ bool InsertionIterator::filter(char *seq) {
   return true;
 }
 
-template <typename Object> map<Object*, vector<Object*> > buildTransitiveClusters(vector<Object*> objects, boost::numeric::ublas::mapped_matrix<double> similarityMatrix, double similarityThreshold) {
+map<Seq*, vector<Seq*> > buildGroups(vector<Seq*> seqs, boost::numeric::ublas::mapped_matrix<double> similarityMatrix, double similarityThreshold) {
 
-  map<Object *,vector<Object *> > clusterToObj;
-  map<Object *,Object *> objToCluster;
+  map<Seq *,vector<Seq *> > clusterToSeq;
+  map<Seq *,Seq *> seqToCluster;
 
-  for (uint i = 0; i < objects.size(); i++) {
-    objToCluster[objects[i]] = objects[i];
-    clusterToObj[objects[i]].push_back(objects[i]);
+  for (uint i = 0; i < seqs.size(); i++) {
+    objToCluster[seqs[i]] = seqs[i];
+    clusterToObj[seqs[i]].push_back(seqs[i]);
   }
-  for (uint i = 0; i < objects.size(); i++) {
+  for (uint i = 0; i < seqs.size(); i++) {
     for (uint j = 0; j < i; j++) {
-      Object *a = objects[i];
-      Object *b = objects[j];
+      Seq *a = seqs[i];
+      Seq *b = seqs[j];
       double similarity = similarityMatrix (i, j);
       if (similarity > similarityThreshold) {
         //Combine the clusters
-        Object* cluster_a = objToCluster[a];
-        Object* cluster_b = objToCluster[b];
+        Seq* cluster_a = seqToCluster[a];
+        Seq* cluster_b = seqToCluster[b];
         if (cluster_a != cluster_b) {
-          Object* new_cluster = (cluster_a > cluster_b) ? cluster_a : cluster_b;
-          Object* cluster_to_delete = (cluster_a > cluster_b) ? cluster_b : cluster_a;
-          vector<Object*> objectsInCluster = clusterToObj[cluster_to_delete];
-          typename vector<Object*>::iterator it;
-          for (it = objectsInCluster.begin(); it != objectsInCluster.end(); it++) {
-            objToCluster[*it] = new_cluster;
-            clusterToObj[new_cluster].push_back(*it);
+          Seq* new_cluster = (cluster_a > cluster_b) ? cluster_a : cluster_b;
+          Seq* cluster_to_delete = (cluster_a > cluster_b) ? cluster_b : cluster_a;
+          vector<Seq*> seqsInCluster = clusterToSeq[cluster_to_delete];
+          vector<Seq*>::iterator it;
+          for (it = seqsInCluster.begin(); it != seqsInCluster.end(); it++) {
+            seqToCluster[*it] = new_cluster;
+            clusterToSeq[new_cluster].push_back(*it);
           }
-          clusterToObj.erase(cluster_to_delete);
+          clusterToSeq.erase(cluster_to_delete);
         }
       }
     }
   }
-  return clusterToObj;
+  return clusterToSeq;
 };
 
 
@@ -209,12 +194,12 @@ const hal::Genome * GenomeIterator::next() {
 
 }
 
-boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<char*> seqs, int kmerLength) {
+mapped_matrix<double> buildDistanceMatrix(vector<Seq*> seqs, int kmerLength) {
   typedef boost::unordered_map<uint32_t, vector<int> > KmerIndex;
   KmerIndex index;
   //Build index from kmers to sequences containing that kmer
   for (uint i = 0; i < seqs.size(); i++) {
-    char *seq = seqs[i];
+    char *seq = seqs[i]->seq;
     if (i%1000 == 0) {
       cerr << "Indexed " << i << " sequences" << endl;
     }
@@ -228,7 +213,7 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<char*> s
   cerr << "Finished building kmer index " << endl;
 
   int N = seqs.size();
-  boost::numeric::ublas::mapped_matrix<double> dist(N, N, N);
+  mapped_matrix<double> dist(N, N, N);
 
   int npairs = 0;
   int nrows = 0;
@@ -238,21 +223,12 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<char*> s
     for (uint i = 0; i < seqsWithKmer.size(); i++) {
       for (uint j = 0; j < i; j++) {
         if (seqsWithKmer[i] == seqsWithKmer[j]) continue;
-        npairs++;
-        if (npairs % 1000000 == 0) {
-          cerr << "Filled " << npairs << " matrix cells" << endl;
-          cerr << "Processed " << nrows << " out of " << index.size() << " rows of index" << endl;
-        }
         int a = (seqsWithKmer[i] > seqsWithKmer[j]) ? seqsWithKmer[i] : seqsWithKmer[j];
         int b = (seqsWithKmer[i] > seqsWithKmer[j]) ? seqsWithKmer[j] : seqsWithKmer[i];
         dist (a, b) += 1.0;
       }
     }
   }
-  cerr << "Computed " << npairs << " pairwise distances" << endl;
-
-  cerr << "Finished computing pairwise distances" << endl;
-
   //Divide by the number of kmers in each sequence
   for (uint i = 0; i < N; i++) {
     for (uint j = 0; j < i; j++) {
@@ -272,78 +248,27 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<char*> s
   return dist;
 }
 
-vector<Seq*> annotateRepeatsOnBranch(const hal::Genome *genome, InsertionIterator &insertionIter, hal_size_t maxInsertions) {
-  insertionIter.goToGenome(genome);
-  Seq *insertion;
-  vector<Seq*> insertions;
-  int i = 0;
-  while((insertion = insertionIter.next())) {
-    if (i%1000 == 0) cerr << "Read " << i << " insertions" << endl;
-    i++;
-    if (maxInsertions != 0 && i >= maxInsertions) break;
-    insertions.push_back(insertion);
-  }
-  cerr << "Found " << insertions.size() << " candidate insertions on branch " << genome->getName() << endl;
-
-  vector<char*> seqs;
-  for (uint i = 0; i < insertions.size(); i++) {
-    seqs.push_back(insertions[i]->seq);
-  }
-  cerr << "Built distance matrix of size " << seqs.size() << endl;
-  boost::numeric::ublas::mapped_matrix<double> distanceMatrix = buildDistanceMatrix(seqs, 30);
-  cerr << "Finished building distance matrix" << endl;
-  map<Seq*, vector<Seq*> > clusters = buildTransitiveClusters<Seq>(insertions, distanceMatrix, 0.3);
-  cerr << "Built " << clusters.size() << " clusters from " << insertions.size() << " insertions " << endl;
-
-  vector<Seq*> repeats;
-  map<Seq*, vector<Seq*> >::iterator clusterIter;
-  int familyNumber = 0;
-  for (clusterIter = clusters.begin(); clusterIter != clusters.end(); clusterIter++) {
-    vector<Seq*> insertionsInCluster = clusterIter->second;
-    if (insertionsInCluster.size() > 1) {
-      for(uint i = 0; i < insertionsInCluster.size(); i++) {
-        Seq* insertion = insertionsInCluster[i];
-        insertion->repeatFamily = "cactus";
-        insertion->group = familyNumber;
-        repeats.push_back(insertion);
-      }
-      familyNumber++;
-    }
-  }
-  return repeats;
-
-}
-
-void getInsertionLengthsOnBranch(const hal::Genome* genome, InsertionIterator &insertionIt) {
-  insertionIt.goToGenome(genome);
-  Seq *insertion;
-  while((insertion = insertionIt.next())) {
-    cout << genome->getName() << " " << insertion->end - insertion->start << endl;
-  }
-  delete insertion;
-}
-
 vector<Seq*> liftoverRepeatAnnotations(vector<Seq*> repeats, const hal::Genome *source, const hal::Genome *target) {
 
 }
 
 /*
-LPOSeq_T *buildSequenceGraph(vector<Sequence*> &sequences, char *matrixFilename) {
-  ResidueScoreMatrix_T scoreMatrix;
+   LPOSeq_T *buildSequenceGraph(vector<Sequence*> &sequences, char *matrixFilename) {
+   ResidueScoreMatrix_T scoreMatrix;
 
-  read_score_matrix(matrixFilename, &scoreMatrix);
+   read_score_matrix(matrixFilename, &scoreMatrix);
 
-  LPOSequence_T **inputSeqs =  (LPOSequence_T**)calloc(sequences.size(), sizeof(LPOSequence_T*));
-  for (uint i = 0; i < sequences.size(); i++) {
-    char *seqName = new char[(sequences[i]->seqName).length() + 1];
-    strcpy(seqName, (sequences[i]->seqName).c_str());
-    char *seq = new char[(sequences[i]->seq).length() + 1];
-    strcpy(seq, (sequences[i]->seq).c_str());
-    create_seq(i, inputSeqs, seqName, seqName, seq, false)
-  }
+   LPOSequence_T **inputSeqs =  (LPOSequence_T**)calloc(sequences.size(), sizeof(LPOSequence_T*));
+   for (uint i = 0; i < sequences.size(); i++) {
+   char *seqName = new char[(sequences[i]->seqName).length() + 1];
+   strcpy(seqName, (sequences[i]->seqName).c_str());
+   char *seq = new char[(sequences[i]->seq).length() + 1];
+   strcpy(seq, (sequences[i]->seq).c_str());
+   create_seq(i, inputSeqs, seqName, seqName, seq, false)
+   }
 
-  LPOSequence_T *align = buildup_progressive_lpo(sequences.size(), inputSeqs, &scoreMatrix,
-      false, true, NULL, matrix_scoring_function, false, true);
-  return align;
-}
-*/
+   LPOSequence_T *align = buildup_progressive_lpo(sequences.size(), inputSeqs, &scoreMatrix,
+   false, true, NULL, matrix_scoring_function, false, true);
+   return align;
+   }
+   */
