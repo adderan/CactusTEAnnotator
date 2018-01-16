@@ -16,7 +16,7 @@
 
 using namespace std;
 using namespace hal;
-using namespace boost::numeric::ublas;
+//using namespace boost::numeric::ublas;
 
 char *getSequenceFromHal(const Genome *genome, hal_size_t start, hal_size_t end) {
   DNAIteratorConstPtr dnaIt = genome->getDNAIterator(start);
@@ -68,14 +68,14 @@ bool InsertionIterator::filter(char *seq) {
   return true;
 }
 
-map<Seq*, vector<Seq*> > buildGroups(vector<Seq*> seqs, boost::numeric::ublas::mapped_matrix<double> similarityMatrix, double similarityThreshold) {
+map<Seq*, vector<Seq*> > buildGroups(vector<Seq*> &seqs, boost::numeric::ublas::mapped_matrix<double> &similarityMatrix, double similarityThreshold) {
 
   map<Seq *,vector<Seq *> > clusterToSeq;
   map<Seq *,Seq *> seqToCluster;
 
   for (uint i = 0; i < seqs.size(); i++) {
-    objToCluster[seqs[i]] = seqs[i];
-    clusterToObj[seqs[i]].push_back(seqs[i]);
+    seqToCluster[seqs[i]] = seqs[i];
+    clusterToSeq[seqs[i]].push_back(seqs[i]);
   }
   for (uint i = 0; i < seqs.size(); i++) {
     for (uint j = 0; j < i; j++) {
@@ -194,7 +194,7 @@ const hal::Genome * GenomeIterator::next() {
 
 }
 
-mapped_matrix<double> buildDistanceMatrix(vector<Seq*> seqs, int kmerLength) {
+boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<Seq*> &seqs, int kmerLength) {
   typedef boost::unordered_map<uint32_t, vector<int> > KmerIndex;
   KmerIndex index;
   //Build index from kmers to sequences containing that kmer
@@ -213,7 +213,7 @@ mapped_matrix<double> buildDistanceMatrix(vector<Seq*> seqs, int kmerLength) {
   cerr << "Finished building kmer index " << endl;
 
   int N = seqs.size();
-  mapped_matrix<double> dist(N, N, N);
+  boost::numeric::ublas::mapped_matrix<double> dist(N, N, N);
 
   int npairs = 0;
   int nrows = 0;
@@ -235,18 +235,19 @@ mapped_matrix<double> buildDistanceMatrix(vector<Seq*> seqs, int kmerLength) {
       if (dist(i, j) == 0.0) {
         continue;
       }
-      string a = seqs[i];
-      string b = seqs[j];
-      if (a.length() < kmerLength || b.length() < kmerLength) {
+      Seq *a = seqs[i];
+      Seq *b = seqs[j];
+      if (strlen(a->seq) < kmerLength || strlen(b->seq) < kmerLength) {
         dist (i, j) = 1.0;
       }
-      double nKmers = (double)(a.length())/kmerLength + (double)(b.length())/kmerLength;
+      double nKmers = (double)(strlen(a->seq))/kmerLength + (double)(strlen(b->seq))/kmerLength;
       dist (i, j) = dist (i, j) / nKmers;
     }
   }
   cerr << "Finished normalizing distances" << endl;
   return dist;
 }
+
 
 vector<Seq*> liftoverRepeatAnnotations(vector<Seq*> repeats, const hal::Genome *source, const hal::Genome *target) {
 

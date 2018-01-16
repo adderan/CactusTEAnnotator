@@ -49,7 +49,7 @@ void clusterBuilderTest() {
 void insertionIteratorTest() {
 }
 
-
+/*
 void testDistanceMatrix() {
   char *kmer1 = "AAGTCAGTACATAGGGACAGTCAG";
   char *kmer2 = "GTACGTACAATGAGAAGGGAATCA";
@@ -70,6 +70,8 @@ void testDistanceMatrix() {
   assert(dist(1,0) < dist(2,0));
   assert(dist(2,1) > 0);
 }
+
+*/
 /*
 
 void kmerDistanceTest() {
@@ -87,5 +89,5 @@ void kmerDistanceTest() {
 int main(int argc, char **argv) {
   //clusterBuilderTest();
   insertionIteratorTest();
-  testDistanceMatrix();
+  //testDistanceMatrix();
 }
