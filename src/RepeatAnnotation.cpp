@@ -249,6 +249,30 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<Seq*> &s
 }
 
 
+set<uint32_t> getKmers(vector<Seq*> &seqs, int kmerSize) {
+
+  set<uint32_t> kmers;
+  for (int i = 0; i < seqs.size(); i++) {
+    int seqLen = strlen(seqs[i]->seq);
+    for (int j = 0; j < seqLen - kmerSize; i++) {
+      kmers.insert(hashKmer(seqs[i]->seq + i, kmerLength));
+    }
+
+  }
+  return kmers;
+}
+
+
+double kmerDistance(vector<Seq*> &a, vector<Seq*> &b, int kmerSize) {
+  set<uint32_t> a_kmers = getKmers(a, kmerSize);
+  set<uint32_t> b_kmers = getKmers(b, kmerSize);
+  set<uint32_t> a_u_b;
+  set<uint32_t> a_int_b;
+
+  set_union(a_kmers.begin(), a_kmers.end(), b_kmers.begin(), b_kmers.end(), 
+  set_intersection(a_kmers.begin(),a_kmers.end(),b_kmers.begin(), b_kmers.end(), std::inserter(a_int_b, a_int_b.begin()));
+}
+
 vector<Seq*> liftoverRepeatAnnotations(vector<Seq*> repeats, const hal::Genome *source, const hal::Genome *target) {
 
 }
