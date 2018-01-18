@@ -68,7 +68,7 @@ bool InsertionIterator::filter(char *seq) {
   return true;
 }
 
-map<Seq*, vector<Seq*> > buildGroups(vector<Seq*> &seqs, boost::numeric::ublas::mapped_matrix<double> &similarityMatrix, double similarityThreshold) {
+map<Seq*, vector<Seq*> > buildGroups(vector<Seq*> &seqs, boost::numeric::ublas::mapped_matrix<double> &similarityMatrix, double similarityThreshold, int minGroupSize) {
 
   map<Seq *,vector<Seq *> > clusterToSeq;
   map<Seq *,Seq *> seqToCluster;
@@ -249,28 +249,46 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<Seq*> &s
 }
 
 
-set<uint32_t> getKmers(vector<Seq*> &seqs, int kmerSize) {
+set<uint32_t> getKmers(vector<Seq*> &seqs, int kmerLength) {
 
   set<uint32_t> kmers;
   for (int i = 0; i < seqs.size(); i++) {
     int seqLen = strlen(seqs[i]->seq);
-    for (int j = 0; j < seqLen - kmerSize; i++) {
-      kmers.insert(hashKmer(seqs[i]->seq + i, kmerLength));
+    for (int pos = 0; pos < seqLen - kmerLength; pos++) {
+      kmers.insert(hashKmer(seqs[i]->seq + pos, kmerLength));
     }
 
   }
   return kmers;
 }
 
-
-double kmerDistance(vector<Seq*> &a, vector<Seq*> &b, int kmerSize) {
-  set<uint32_t> a_kmers = getKmers(a, kmerSize);
-  set<uint32_t> b_kmers = getKmers(b, kmerSize);
+double kmerDistance(vector<Seq*> &a, vector<Seq*> &b, int kmerLength) {
+  set<uint32_t> a_kmers = getKmers(a, kmerLength);
+  set<uint32_t> b_kmers = getKmers(b, kmerLength);
   set<uint32_t> a_u_b;
   set<uint32_t> a_int_b;
 
-  set_union(a_kmers.begin(), a_kmers.end(), b_kmers.begin(), b_kmers.end(), 
+  set_union(a_kmers.begin(), a_kmers.end(), b_kmers.begin(), b_kmers.end(), std::inserter(a_u_b, a_u_b.begin()));
   set_intersection(a_kmers.begin(),a_kmers.end(),b_kmers.begin(), b_kmers.end(), std::inserter(a_int_b, a_int_b.begin()));
+  return (double) (a_int_b.size()) / (double) (a_u_b.size());
+}
+
+void joinGroups(vector<vector<Seq*> > &groups, int kmerLength, double similarityThreshold) {
+  for (int i = 0; i < groups.size(); i++) {
+    for (int j = 0; j < i; j++) {
+      if (groups[i].size() <= 1 || groups[j].size() <= 1) continue;
+      double similarity = kmerDistance(groups[i], groups[j], kmerLength);
+      cerr << "Similarity between groups " << i << " and " << j << " = " << similarity << endl;
+      if (similarity > similarityThreshold) {
+        cerr << "Joining group " << i << " to group " << j << endl;
+        for (vector<Seq*>::iterator it = groups[i].begin(); it != groups[i].end(); it++) {
+          groups[j].push_back(*it);
+        } 
+        groups[i] = vector<Seq*>();
+      }
+    }
+
+  }
 }
 
 vector<Seq*> liftoverRepeatAnnotations(vector<Seq*> repeats, const hal::Genome *source, const hal::Genome *target) {

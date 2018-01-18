@@ -32,10 +32,11 @@ static hal::CLParserPtr initParser()
   optionsParser->addOptionFlag("getLengths", "Get insertion lengths", true);
   optionsParser->addOption("maxNFraction", "Maximum fraction of Ns in insertion", 0.1);
 
-  optionsParser->addOption("kmerSize", "Length of seeds to use for insertion clustering", 20);
+  optionsParser->addOption("kmerLength", "Length of seeds to use for insertion clustering", 20);
   optionsParser->addOption("chunkSize", "Number of insertions to cluster in one chunk", 1000);
 
   optionsParser->addOption("similarityThreshold", "Similarity level for joining sequences into a cluster", 0.4);
+  optionsParser->addOption("groupJoinThreshold", "Jaccard distance threshold for joining clusters", 0.1);
   optionsParser->addOptionFlag("getInsertionLengths", "", false);
   optionsParser->addOptionFlag("getInsertions", "", false);
   optionsParser->addOptionFlag("annotateInsertions", "", false);
@@ -58,9 +59,10 @@ int main(int argc, char** argv)
   double maxNFraction;
 
 
-  int kmerSize;
+  int kmerLength;
   int chunkSize;
   double similarityThreshold;
+  double groupJoinThreshold;
 
   bool getInsertionLengths;
   bool annotateInsertions;
@@ -80,9 +82,10 @@ int main(int argc, char** argv)
     maxInsertions = optionsParser->getOption<int>("maxInsertions");
 
     //Clustering
-    kmerSize = optionsParser->getOption<int>("kmerSize");
+    kmerLength = optionsParser->getOption<int>("kmerLength");
     chunkSize = optionsParser->getOption<int>("chunkSize");
     similarityThreshold = optionsParser->getOption<double>("similarityThreshold");
+    groupJoinThreshold = optionsParser->getOption<double>("groupJoinThreshold");
 
   }
   catch(exception& e)
@@ -116,25 +119,30 @@ int main(int argc, char** argv)
     }
     cerr << "Found " << n_insertions << " candidate insertions on branch " << reference->getName() << endl;
 
-    map<Seq*, std::vector<Seq*> > groups;
+    std::vector<std::vector<Seq*> > groups;
     for (int i = 0; i < chunks.size(); i++) {
       cerr << "Processing chunk of size " << chunks[i]->size() << endl;
-      mapped_matrix<double> similarityMatrix = buildDistanceMatrix(*chunks[i], kmerSize);
+      mapped_matrix<double> similarityMatrix = buildDistanceMatrix(*chunks[i], kmerLength);
       map<Seq*, std::vector<Seq*> > groups_chunk_i = buildGroups(*chunks[i], similarityMatrix, 
           similarityThreshold);
 
       for (map<Seq*, std::vector<Seq*> >::iterator it = groups_chunk_i.begin(); it != groups_chunk_i.end(); it++) {
-        groups[it->first] = it->second;
+        if (it->second.size() > 1) {
+          groups.push_back(it->second);
+        }
       }
     }
+
+    //join groups based on kmer distance
+    joinGroups(groups, kmerLength, groupJoinThreshold);
 
 
     //produce final output
     std::vector<Seq*> repeats;
-    map<Seq*, std::vector<Seq*> >::iterator clusterIter;
+    std::vector<std::vector<Seq*> >::iterator clusterIter;
     int familyNumber = 0;
     for (clusterIter = groups.begin(); clusterIter != groups.end(); clusterIter++) {
-      std::vector<Seq*> insertionsInCluster = clusterIter->second;
+      std::vector<Seq*> insertionsInCluster = *clusterIter;
       if (insertionsInCluster.size() > 1) {
         for(uint i = 0; i < insertionsInCluster.size(); i++) {
           Seq* insertion = insertionsInCluster[i];
