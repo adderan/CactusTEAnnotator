@@ -220,6 +220,9 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<Seq*> &s
   BOOST_FOREACH(KmerIndex::value_type kv, index) {
     vector<int> seqsWithKmer = kv.second;
     nrows++;
+    if (nrows%10000 == 0) {
+      cerr << "Processed " << nrows << " rows out of " << index.size() << endl;
+    }
     for (uint i = 0; i < seqsWithKmer.size(); i++) {
       for (uint j = 0; j < i; j++) {
         if (seqsWithKmer[i] == seqsWithKmer[j]) continue;
