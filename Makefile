@@ -18,7 +18,7 @@ repeats.a: ${libSources} ${libHeaders} ${PWD}/hal/lib/halLib.a ${PWD}/sonLib/lib
 	ranlib repeats.a
 
 cactusRepeatAnnotator : src/cactus_repeats.cpp repeats.a hal/lib/halLib.a
-	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -I src -I src -I hal/lib -I sonLib/lib -I src -I tests -o cactusRepeatAnnotator src/cactus_repeats.cpp repeats.a hal/lib/halLib.a sonLib/lib/sonLib.a poaV2/liblpo.a ${basicLibs}
+	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -I src -I src -I hal/lib -I sonLib/lib -I src -I tests -o cactusRepeatAnnotator src/cactus_repeats.cpp repeats.a hal/lib/halLib.a sonLib/lib/sonLib.a poaV2/liblpo.a ${basicLibs} -fopenmp
 
 repeatAnnotatorTests: src/test.cpp repeats.a hal/lib/halLib.a
 	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -UNDEBUG -I src -I src -I hal/lib -I sonLib/lib -I src -I tests -o repeatAnnotatorTests src/test.cpp ${PWD}/repeats.a ${PWD}/sonLib/lib/sonLib.a ${PWD}/hal/lib/halLib.a ${basicLibs}
