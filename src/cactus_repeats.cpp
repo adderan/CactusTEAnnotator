@@ -37,6 +37,7 @@ static hal::CLParserPtr initParser()
 
   optionsParser->addOption("similarityThreshold", "Similarity level for joining sequences into a cluster", 0.4);
   optionsParser->addOption("groupJoinThreshold", "Jaccard distance threshold for joining clusters", 0.1);
+  optionsParser->addOption("minGroupSize", "Minimium size of repeat family to output", 5);
   optionsParser->addOptionFlag("getInsertionLengths", "", false);
   optionsParser->addOptionFlag("getInsertions", "", false);
   optionsParser->addOptionFlag("annotateInsertions", "", false);
@@ -63,6 +64,7 @@ int main(int argc, char** argv)
   int chunkSize;
   double similarityThreshold;
   double groupJoinThreshold;
+  int minGroupSize;
 
   bool getInsertionLengths;
   bool annotateInsertions;
@@ -86,6 +88,7 @@ int main(int argc, char** argv)
     chunkSize = optionsParser->getOption<int>("chunkSize");
     similarityThreshold = optionsParser->getOption<double>("similarityThreshold");
     groupJoinThreshold = optionsParser->getOption<double>("groupJoinThreshold");
+    minGroupSize = optionsParser->getOption<int>("minGroupSize");
 
   }
   catch(exception& e)
@@ -122,12 +125,12 @@ int main(int argc, char** argv)
     std::vector<std::vector<Seq*> > groups;
     for (int i = 0; i < chunks.size(); i++) {
       cerr << "Processing chunk of size " << chunks[i]->size() << endl;
-      mapped_matrix<double> similarityMatrix = buildDistanceMatrix(*chunks[i], kmerLength);
-      map<Seq*, std::vector<Seq*> > groups_chunk_i = buildGroups(*chunks[i], similarityMatrix, 
+      mapped_matrix<double> similarityMatrix = buildDistanceMatrix(*(chunks[i]), kmerLength);
+      map<Seq*, std::vector<Seq*> > groups_chunk_i = buildGroups(*(chunks[i]), similarityMatrix, 
           similarityThreshold);
 
       for (map<Seq*, std::vector<Seq*> >::iterator it = groups_chunk_i.begin(); it != groups_chunk_i.end(); it++) {
-        if (it->second.size() > 1) {
+        if (it->second.size() > minGroupSize) {
           groups.push_back(it->second);
         }
       }
@@ -143,15 +146,13 @@ int main(int argc, char** argv)
     int familyNumber = 0;
     for (clusterIter = groups.begin(); clusterIter != groups.end(); clusterIter++) {
       std::vector<Seq*> insertionsInCluster = *clusterIter;
-      if (insertionsInCluster.size() > 1) {
-        for(uint i = 0; i < insertionsInCluster.size(); i++) {
-          Seq* insertion = insertionsInCluster[i];
-          insertion->repeatFamily = "cactus";
-          insertion->group = familyNumber;
-          repeats.push_back(insertion);
-        }
-        familyNumber++;
+      for(uint i = 0; i < insertionsInCluster.size(); i++) {
+        Seq* insertion = insertionsInCluster[i];
+        insertion->repeatFamily = "cactus";
+        insertion->group = familyNumber;
+        repeats.push_back(insertion);
       }
+      familyNumber++;
     }
 
     for (uint i = 0; i < repeats.size(); i++) {

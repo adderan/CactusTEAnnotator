@@ -67,7 +67,7 @@ void getInsertionLengthsOnBranch(const Genome* genome, InsertionIterator &insert
 vector<Seq*> annotateRepeatsOnBranch(const Genome *genome, InsertionIterator &insertionIter, hal_size_t maxInsertions);
 
 boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<Seq*> &seqs, int kmerLength);
-map<Seq*, vector<Seq*> > buildGroups(vector<Seq*> &seqs, boost::numeric::ublas::mapped_matrix<double> &distanceMatrix, double similarityThreshold, int minGroupSize);
+map<Seq*, vector<Seq*> > buildGroups(vector<Seq*> &seqs, boost::numeric::ublas::mapped_matrix<double> &distanceMatrix, double similarityThreshold);
 
 void joinGroups(vector<vector<Seq*> > &groups, int kmerLength, double similarityThreshold);
 
