@@ -260,7 +260,10 @@ set<uint32_t> getKmers(vector<Seq*> &seqs, int kmerLength, int maxKmers) {
     int seqLen = strlen(seqs[seqnum]->seq);
     if (seqLen < kmerLength) continue;
     int pos = (int)(((double)(seqLen - kmerLength - 1)/RAND_MAX) * rand());
-    kmers.insert(hashKmer(seqs[seqnum]->seq + pos, kmerLength));
+    uint32_t kmer = hashKmer(seqs[seqnum]->seq + pos, kmerLength);
+    if (kmer != -1) {
+      kmers.insert(kmer);
+    }
   }
   return kmers;
 
