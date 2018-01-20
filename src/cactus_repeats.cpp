@@ -17,6 +17,8 @@ static hal::CLParserPtr initParser()
   optionsParser->addOption("alignment", "input hal file", "");
   optionsParser->addOption("insertionsFasta", "Input fasta file containing insertions to annotate with repeat classes", "");
 
+  optionsParser->addOption("numThreads", "Maximum number of threads to use", 8);
+
   optionsParser->setDescription("Identify mutations on branch between given "
       "genome and its parent.");
 
@@ -52,6 +54,7 @@ int main(int argc, char** argv)
 
   string halPath;
   string insertionsFasta;
+  int numThreads;
 
   hal_size_t minInsertionSize;
   hal_size_t maxInsertionSize;
@@ -75,6 +78,7 @@ int main(int argc, char** argv)
     optionsParser->parseOptions(argc, argv);
     halPath = optionsParser->getOption<string>("alignment");
     insertionsFasta = optionsParser->getOption<string>("insertionsFasta");
+    numThreads = optionsParser->getOption<int>("numThreads");
 
     //Insertions
     referenceName = optionsParser->getOption<string>("reference");
@@ -124,7 +128,7 @@ int main(int argc, char** argv)
     cerr << "Found " << n_insertions << " candidate insertions on branch " << reference->getName() << endl;
 
     std::vector<std::vector<Seq*> > groups;
-    #pragma omp parallel for num_threads(8)
+    #pragma omp parallel for num_threads(numThreads)
     for (int i = 0; i < chunks.size(); i++) {
 
       #pragma omp critical
