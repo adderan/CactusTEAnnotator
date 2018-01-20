@@ -200,9 +200,6 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<Seq*> &s
   //Build index from kmers to sequences containing that kmer
   for (uint i = 0; i < seqs.size(); i++) {
     char *seq = seqs[i]->seq;
-    if (i%1000 == 0) {
-      cerr << "Indexed " << i << " sequences" << endl;
-    }
     if (strlen(seq) < kmerLength) continue;
     for (int j = 0; j < (strlen(seq) - kmerLength); j++) {
       uint32_t kmerHash = hashKmer(seq + j, kmerLength);
@@ -210,8 +207,6 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<Seq*> &s
       index[kmerHash].push_back(i);
     }
   }
-  cerr << "Finished building kmer index " << endl;
-
   int N = seqs.size();
   boost::numeric::ublas::mapped_matrix<double> dist(N, N, N);
 
@@ -220,9 +215,6 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<Seq*> &s
   BOOST_FOREACH(KmerIndex::value_type kv, index) {
     vector<int> seqsWithKmer = kv.second;
     nrows++;
-    if (nrows%10 == 0) {
-      cerr << "Processed " << nrows << " rows out of " << index.size() << endl;
-    }
     for (uint i = 0; i < seqsWithKmer.size(); i++) {
       for (uint j = 0; j < i; j++) {
         if (seqsWithKmer[i] == seqsWithKmer[j]) continue;

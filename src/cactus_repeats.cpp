@@ -126,7 +126,11 @@ int main(int argc, char** argv)
     std::vector<std::vector<Seq*> > groups;
     #pragma omp parallel for num_threads(8)
     for (int i = 0; i < chunks.size(); i++) {
-      cerr << "Processing chunk of size " << chunks[i]->size() << endl;
+
+      #pragma omp critical
+      {
+        cerr << "Processing chunk # " << i << " of " << chunks.size() << ", of size " << chunks[i]->size() << endl;
+      }
       mapped_matrix<double> similarityMatrix = buildDistanceMatrix(*(chunks[i]), kmerLength);
       map<Seq*, std::vector<Seq*> > groups_chunk_i = buildGroups(*(chunks[i]), similarityMatrix, 
           similarityThreshold);
