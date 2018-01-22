@@ -13,3 +13,6 @@
 [submodule "hdf5"]
 	path = hdf5
 	url = https://github.com/UCSCReconGroup/hdf5
+[submodule "vg"]
+	path = vg
+	url = https://github.com/vgteam/vg

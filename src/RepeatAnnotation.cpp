@@ -297,27 +297,22 @@ void joinGroups(vector<vector<Seq*> > &groups, int kmerLength, double similarity
   }
 }
 
-vector<Seq*> liftoverRepeatAnnotations(vector<Seq*> repeats, const hal::Genome *source, const hal::Genome *target) {
+LPOSequence_T *buildSequenceGraph(vector<Seq*> &seqs, char *matrixFilename) {
+  ResidueScoreMatrix_T scoreMatrix;
 
+  read_score_matrix(matrixFilename, &scoreMatrix);
+
+  int nSeqs = seqs.size();
+  LPOSequence_T **inputSeqs =  (LPOSequence_T**)calloc(seqs.size(), sizeof(LPOSequence_T*));
+
+  Sequence_T **seqs;
+  for (uint i = 0; i < seqs.size(); i++) {
+    char *seqName = new char[(seqs[i]->seqName).length() + 1];
+    strcpy(seqName, (seqs[i]->seqName).c_str());
+    create_seq(i, inputSeqs, seqName, seqName, seqs[i]->seq, false);
+  }
+
+  LPOSequence_T *align = buildup_progressive_lpo(nSeqs, inputSeqs, &scoreMatrix,
+      false, true, NULL, matrix_scoring_function, false, true);
+  return align;
 }
-
-/*
-   LPOSeq_T *buildSequenceGraph(vector<Sequence*> &sequences, char *matrixFilename) {
-   ResidueScoreMatrix_T scoreMatrix;
-
-   read_score_matrix(matrixFilename, &scoreMatrix);
-
-   LPOSequence_T **inputSeqs =  (LPOSequence_T**)calloc(sequences.size(), sizeof(LPOSequence_T*));
-   for (uint i = 0; i < sequences.size(); i++) {
-   char *seqName = new char[(sequences[i]->seqName).length() + 1];
-   strcpy(seqName, (sequences[i]->seqName).c_str());
-   char *seq = new char[(sequences[i]->seq).length() + 1];
-   strcpy(seq, (sequences[i]->seq).c_str());
-   create_seq(i, inputSeqs, seqName, seqName, seq, false)
-   }
-
-   LPOSequence_T *align = buildup_progressive_lpo(sequences.size(), inputSeqs, &scoreMatrix,
-   false, true, NULL, matrix_scoring_function, false, true);
-   return align;
-   }
-   */
