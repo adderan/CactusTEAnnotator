@@ -127,6 +127,7 @@ int main(int argc, char** argv)
     }
     cerr << "Found " << n_insertions << " candidate insertions on branch " << reference->getName() << endl;
 
+    int nTotalInsertions = 0;
     std::vector<std::vector<Seq*> > groups;
     #pragma omp parallel for num_threads(numThreads)
     for (int i = 0; i < chunks.size(); i++) {
@@ -145,10 +146,12 @@ int main(int argc, char** argv)
             it != groups_chunk_i.end(); it++) {
           if (it->second.size() > minGroupSize) {
             groups.push_back(it->second);
+            nTotalInsertions += it->second.size();
           }
         }
       }
     }
+    cerr << "Found " << nTotalInsertions << " total insertions before joining clusters." << endl;
 
     //join groups based on kmer distance
     joinGroups(groups, kmerLength, groupJoinThreshold);
