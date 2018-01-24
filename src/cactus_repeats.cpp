@@ -141,6 +141,7 @@ int main(int argc, char** argv)
 
       #pragma omp critical
       {
+        cerr << "Found " << groups_chunk_i.size() << " insertions in chunk #" << i << endl;
         for (map<Seq*, std::vector<Seq*> >::iterator it = groups_chunk_i.begin(); 
             it != groups_chunk_i.end(); it++) {
           if (it->second.size() > minGroupSize) {

@@ -218,6 +218,7 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<Seq*> &s
     for (uint i = 0; i < seqsWithKmer.size(); i++) {
       for (uint j = 0; j < i; j++) {
         if (seqsWithKmer[i] == seqsWithKmer[j]) continue;
+
         int a = (seqsWithKmer[i] > seqsWithKmer[j]) ? seqsWithKmer[i] : seqsWithKmer[j];
         int b = (seqsWithKmer[i] > seqsWithKmer[j]) ? seqsWithKmer[j] : seqsWithKmer[i];
         dist (a, b) += 1.0;
@@ -235,8 +236,11 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<Seq*> &s
       if (strlen(a->seq) < kmerLength || strlen(b->seq) < kmerLength) {
         dist (i, j) = 1.0;
       }
-      double nKmers = (double)(strlen(a->seq))/kmerLength + (double)(strlen(b->seq))/kmerLength;
-      dist (i, j) = dist (i, j) / nKmers;
+      double nKmers = ((double)strlen(a->seq) - (double)kmerLength) + ((double)strlen(b->seq) - (double)kmerLength);
+
+      //avoid double-counting shared kmers
+      double unionSize = nKmers - dist(i, j);
+      dist (i, j) = dist (i, j) / unionSize;
     }
   }
   cerr << "Finished normalizing distances" << endl;
