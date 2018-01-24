@@ -142,14 +142,16 @@ int main(int argc, char** argv)
 
       #pragma omp critical
       {
-        cerr << "Found " << groups_chunk_i.size() << " insertions in chunk #" << i << endl;
+        int nInsertionsInCluster = 0;
         for (map<Seq*, std::vector<Seq*> >::iterator it = groups_chunk_i.begin(); 
             it != groups_chunk_i.end(); it++) {
           if (it->second.size() > minGroupSize) {
             groups.push_back(it->second);
             nTotalInsertions += it->second.size();
+            nInsertionsInCluster += it->second.size();
           }
         }
+        cerr << "Found " << nInsertionsInCluster << " insertions in cluster " << i << endl;
       }
     }
     cerr << "Found " << nTotalInsertions << " total insertions before joining clusters." << endl;

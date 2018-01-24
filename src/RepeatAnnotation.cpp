@@ -83,6 +83,7 @@ map<Seq*, vector<Seq*> > buildGroups(vector<Seq*> &seqs, boost::numeric::ublas::
       Seq *b = seqs[j];
       double similarity = similarityMatrix (i, j);
       if (similarity > similarityThreshold) {
+        cerr << "Found similarity " << similarity << endl;
         //Combine the clusters
         Seq* cluster_a = seqToCluster[a];
         Seq* cluster_b = seqToCluster[b];
@@ -195,7 +196,7 @@ const hal::Genome * GenomeIterator::next() {
 }
 
 boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<Seq*> &seqs, int kmerLength) {
-  typedef boost::unordered_map<uint32_t, vector<int> > KmerIndex;
+  typedef boost::unordered_map<uint32_t, set<int> > KmerIndex;
   KmerIndex index;
   //Build index from kmers to sequences containing that kmer
   for (uint i = 0; i < seqs.size(); i++) {
@@ -204,7 +205,7 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<Seq*> &s
     for (int j = 0; j < (strlen(seq) - kmerLength); j++) {
       uint32_t kmerHash = hashKmer(seq + j, kmerLength);
       if (kmerHash == -1) continue;
-      index[kmerHash].push_back(i);
+      index[kmerHash].insert(i);
     }
   }
   int N = seqs.size();
@@ -213,7 +214,8 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<Seq*> &s
   int npairs = 0;
   int nrows = 0;
   BOOST_FOREACH(KmerIndex::value_type kv, index) {
-    vector<int> seqsWithKmer = kv.second;
+    vector<int> seqsWithKmer;
+    std::copy(kv.second.begin(), kv.second.end(), std::back_inserter(seqsWithKmer));
     nrows++;
     for (uint i = 0; i < seqsWithKmer.size(); i++) {
       for (uint j = 0; j < i; j++) {
@@ -241,6 +243,7 @@ boost::numeric::ublas::mapped_matrix<double> buildDistanceMatrix(vector<Seq*> &s
       //avoid double-counting shared kmers
       double unionSize = nKmers - dist(i, j);
       dist (i, j) = dist (i, j) / unionSize;
+      assert(dist(i, j) <= 1.0);
     }
   }
   cerr << "Finished normalizing distances" << endl;
