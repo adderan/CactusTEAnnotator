@@ -305,12 +305,13 @@ LPOSequence_T *buildSequenceGraph(vector<Seq*> &seqs, char *matrixFilename) {
   int nSeqs = seqs.size();
   LPOSequence_T **inputSeqs =  (LPOSequence_T**)calloc(seqs.size(), sizeof(LPOSequence_T*));
 
-  Sequence_T **seqs;
+  Sequence_T **fastaSeqs
   for (uint i = 0; i < seqs.size(); i++) {
     char *seqName = new char[(seqs[i]->seqName).length() + 1];
     strcpy(seqName, (seqs[i]->seqName).c_str());
-    create_seq(i, inputSeqs, seqName, seqName, seqs[i]->seq, false);
+    create_seq(i, fastaSeqs, seqName, seqName, seqs[i]->seq, false);
   }
+  initialize_seqs_as_lpo(inputSeqs);
 
   LPOSequence_T *align = buildup_progressive_lpo(nSeqs, inputSeqs, &scoreMatrix,
       false, true, NULL, matrix_scoring_function, false, true);
