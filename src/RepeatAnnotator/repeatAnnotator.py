@@ -27,13 +27,18 @@ def annotateInsertions(job, halID, args):
     getInsertionsJob = Job.wrapJobFn(getInsertions, halID = halID, args = args)
 
     extractFastaSequencesJob = Job.wrapJobFn(extractFastaSequences, halID=halID, insertionsBedID = getInsertionsJob.rv(), args = args)
-    getDistancesJob = Job.wrapJobFn(getDistances, extractFastaSequencesJob.rv())
+    getDistancesJob = Job.wrapJobFn(getDistances, insertionsFastaID=extractFastaSequencesJob.rv(0))
+    buildClustersJob = Job.wrapJobFn(buildClusters, distancesID=getDistancesJob.rv(), insertionsBedID=getInsertionsJob.rv(1), args=args)
+    writeGFFJob = Job.wrapJobFn(writeGFF, elements=buildClustersJob.rv())
 
     getInsertionsJob.addFollowOn(extractFastaSequencesJob)
     extractFastaSequencesJob.addFollowOn(getDistancesJob)
+    getDistancesJob.addFollowOn(buildClustersJob)
+    buildClustersJob.addFollowOn(writeGFFJob)
     job.addChild(getInsertionsJob)
 
-    return getDistancesJob.rv()
+    return writeGFFJob.rv()
+
 def getInsertions(job, halID, args):
     hal = job.fileStore.readGlobalFile(halID)
     insertions = job.fileStore.getLocalTempFile()
@@ -45,26 +50,36 @@ def extractFastaSequences(job, halID, insertionsBedID, args):
     insertionsBed = job.fileStore.readGlobalFile(insertionsBedID)
     fasta = job.fileStore.getLocalTempFile()
     hal = job.fileStore.readGlobalFile(halID)
+    filteredBed = job.fileStore.getLocalTempFile()
     i = 0
-    with open(fasta, 'w') as fastaWrite:
-        with open(insertionsBed, 'r') as bedRead:
-            for bedLine in bedRead:
-                chrom, start, end = bedLine.split()
-                fastaLines = subprocess.check_output(["hal2fasta", hal, args.reference, "--sequence", chrom, "--start", start, "--length", str(int(end) - int(start))])
+    with open(filteredBed, 'w') as filteredBedWrite:
+        with open(fasta, 'w') as fastaWrite:
+            with open(insertionsBed, 'r') as bedRead:
+                for bedLine in bedRead:
+                    chrom, start, end = bedLine.split()
+                    fastaLines = subprocess.check_output(["hal2fasta", hal, args.reference, "--sequence", chrom, "--start", start, "--length", str(int(end) - int(start))])
 
-                seqLen = sum([len(line) for line in fastaLines[1:]])
-                if seqLen > args.maxInsertionSize:
-                    continue
-                if seqLen < args.minInsertionSize:
-                    continue
-                if highNFraction(fastaLines[1:]):
-                    continue
-                for fastaLine in fastaLines:
-                    fastaWrite.write(fastaLine)
-                i = i + 1
-                if i > args.maxInsertions:
-                    break
-    return job.fileStore.writeGlobalFile(fasta)
+                    seqLen = sum([len(line) for line in fastaLines[1:]])
+                    if seqLen > args.maxInsertionSize:
+                        continue
+                    if seqLen < args.minInsertionSize:
+                        continue
+                    if highNFraction(fastaLines[1:]):
+                        continue
+                    for fastaLine in fastaLines:
+                        fastaWrite.write(fastaLine)
+                    filteredBedWrite.write(bedLine)
+                    i = i + 1
+                    if args.maxInsertions > 0 and i > args.maxInsertions:
+                        break
+    return (job.fileStore.writeGlobalFile(fasta), job.fileStore.writeGlobalFile(filteredBed))
+
+def getDistances(job, insertionsFastaID):
+    insertionsFasta = job.fileStore.readGlobalFile(insertionsFastaID)
+    distances = job.fileStore.getLocalTempFile()
+    with open(distances, 'w') as distancesWrite:
+        subprocess.check_call(["pairwise_distances", "--sequences", insertionsFasta], stdout=distancesWrite)
+    return job.fileStore.writeGlobalFile(distances)
 
 class TEInsertion:
     def __init__(self, chrom, start, end, group):
@@ -74,11 +89,11 @@ class TEInsertion:
         self.group = group
 
 def buildClusters(job, distancesID, insertionsBedID, args):
-    distancesFile = job.fileStore.readGlobalFile(distancesID)
-    insertionsFile = job.fileStore.readGlobalFile(insertionsBedID)
+    distances = job.fileStore.readGlobalFile(distancesID)
+    insertionsBed = job.fileStore.readGlobalFile(insertionsBedID)
    
     insertions = []
-    with open(insertionsFile, 'r') as insertionsRead:
+    with open(insertionsBed, 'r') as insertionsRead:
         for line, i in enumerate(insertionsRead):
             chrom, start, end = line.split()
             insertions.append(TEInsertion(chrom = chrom, start = start, end = end, group = i))
@@ -88,15 +103,22 @@ def buildClusters(job, distancesID, insertionsBedID, args):
         for line in distancesRead:
             i, j, dist = line.split()
             assert i > j
-            clusterToSeq[i].extend(clusterToSeq[j])
+            if dist > args.distanceThreshold:
+                clusterToSeq[i].extend(clusterToSeq[j])
+                insertions[j].group = i
+    return insertions
 
-def getDistances(job, insertionsFastaID):
-    insertionsFasta = job.fileStore.readGlobalFile(insertionsFastaID)
-    distances = job.fileStore.getLocalTempFile()
-    with open(distances, 'w') as distancesWrite:
-        subprocess.check_call(["pairwise_distances", "--sequences", insertionsFasta], stdout=distancesWrite)
-    assert False
-    return job.fileStore.writeGlobalFile(distances)
+def writeGFF(job, elements):
+    gff = job.fileStore.getLocalTempFile()
+    with open(gff, 'w') as gffWrite:
+        for element in elements:
+            gffWrite.write("%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\t%d\n" % 
+                    (element.chrom, "cactus_repeat_annotation",
+                    "repeat_copy", start, end, 0, '+', '.', group))
+
+    return job.fileStore.writeGlobalFile(writeGFF)
+
+
 
 def buildClusters(job, distancesID, insertionsFastaID):
     clusters = {}
@@ -119,8 +141,9 @@ def main():
     parser.add_argument("--maxNFraction", type=float, default=0.1)
 
     parser.add_argument("--kmerLength", type=int, default=10)
+    parser.add_argument("--distanceThreshold", type=float, default=0.2)
 
-    parser.add_argument("--maxInsertions", type=int, default=1000)
+    parser.add_argument("--maxInsertions", type=int, default=0)
 
     Job.Runner.addToilOptions(parser)
 
@@ -129,7 +152,10 @@ def main():
         args.substMatrixID = toil.importFile(makeURL(os.path.join(getRootPath(), "blosum80.mat")))
         halID = toil.importFile(args.alignmentFile)
         rootJob = Job.wrapJobFn(annotateInsertions, halID=halID, args=args)
-        gffID = toil.start(rootJob)
+        if args.restart:
+            gffID = toil.restart()
+        else:
+            gffID = toil.start(rootJob)
         toil.exportFile(gffID, args.gffFile)
 
 
