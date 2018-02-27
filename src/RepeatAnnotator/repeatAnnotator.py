@@ -94,12 +94,12 @@ def buildClusters(job, distancesID, insertionsBedID, args):
    
     insertions = []
     with open(insertionsBed, 'r') as insertionsRead:
-        for line, i in enumerate(insertionsRead):
+        for i, line in enumerate(insertionsRead):
             chrom, start, end = line.split()
             insertions.append(TEInsertion(chrom = chrom, start = start, end = end, group = i))
 
     clusterToSeq = {i: [insertions[i]] for i in range(len(insertions))}
-    with open(distancesFile, 'r') as distancesRead:
+    with open(distances, 'r') as distancesRead:
         for line in distancesRead:
             i, j, dist = line.split()
             assert i > j
