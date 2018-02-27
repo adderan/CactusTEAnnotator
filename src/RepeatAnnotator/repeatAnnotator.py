@@ -28,7 +28,7 @@ def annotateInsertions(job, halID, args):
 
     extractFastaSequencesJob = Job.wrapJobFn(extractFastaSequences, halID=halID, insertionsBedID = getInsertionsJob.rv(), args = args)
     getDistancesJob = Job.wrapJobFn(getDistances, insertionsFastaID=extractFastaSequencesJob.rv(0))
-    buildClustersJob = Job.wrapJobFn(buildClusters, distancesID=getDistancesJob.rv(), insertionsBedID=getInsertionsJob.rv(1), args=args)
+    buildClustersJob = Job.wrapJobFn(buildClusters, distancesID=getDistancesJob.rv(), insertionsBedID=extractFastaSequencesJob.rv(1), args=args)
     writeGFFJob = Job.wrapJobFn(writeGFF, elements=buildClustersJob.rv())
 
     getInsertionsJob.addFollowOn(extractFastaSequencesJob)
@@ -117,12 +117,6 @@ def writeGFF(job, elements):
                     "repeat_copy", start, end, 0, '+', '.', group))
 
     return job.fileStore.writeGlobalFile(writeGFF)
-
-
-
-def buildClusters(job, distancesID, insertionsFastaID):
-    clusters = {}
-    insertionsFasta = job.fileStore.readGlobalFile(insertionsFastaID)
 
 def extractConsensus(job, seqsID, args):
     seqs = job.fileStore.readGlobalFile(seqsID)
