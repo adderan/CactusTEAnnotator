@@ -16,4 +16,4 @@ setup(
     install_requires=[],
     
     entry_points={
-        'console_scripts': ['repeatAnnotator = RepeatAnnotator.repeatAnnotator:main', 'buildSubfamilies = RepeatAnnotator.buildSubfamilies:main']})
+        'console_scripts': ['repeatAnnotator = RepeatAnnotator.repeatAnnotator:main', 'buildSubfamilies = RepeatAnnotator.buildSubfamilies:main', 'treeBuilding = RepeatAnnotator.treeBuilding:main']})
