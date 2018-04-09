@@ -4,6 +4,8 @@ import re
 import argparse
 import multiset
 
+nucleotides = ["A", "G", "C", "T", "a", "c", "t", "g"]
+
 def buildTree(threads, partitions):
     #initialize star tree
     tree = networkx.DiGraph()
@@ -56,6 +58,8 @@ def applyPartition(tree, partition):
             tree.add_node(new_parent)
             tree.add_edge(parent, new_parent)
             for thread in threadSet:
+                if not tree.has_edge(parent, thread):
+                    import pdb; pdb.set_trace()
                 assert tree.has_edge(parent, thread)
                 tree.remove_edge(parent, thread)
                 tree.add_edge(new_parent, thread)
@@ -81,7 +85,7 @@ class POGraph:
                 lineinfo = line.split("=")
                 self.threads.append(lineinfo[1].rstrip())
 
-            elif line.startswith("A:") or line.startswith("C:") or line.startswith("G:") or line.startswith("T:"):
+            elif line[0] in nucleotides and line[1] == ":":
                 base, nodeinfo = line.split(":")
                 labels = re.findall("[ASL]\d+", nodeinfo)
 
@@ -144,7 +148,10 @@ def main():
     args = parser.parse_args()
     graph = POGraph(args.graphFile)
     partitions = graph.getPartitions()
+    for partition in partitions:
+        print partition
     tree = buildTree(graph.threads, partitions)
+    assert networkx.is_tree(tree)
     categories = getCategories(tree)
     print categories
 

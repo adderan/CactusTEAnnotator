@@ -3,17 +3,20 @@ import os
 from toil.common import Toil
 from toil.job import Job
 
-from RepeatAnnotator.repeatAnnotator import addRepeatAnnotatorOptions, readGFF, writeGFF, buildSubfamilies, makeURL, getRootPath
+from RepeatAnnotator.repeatAnnotator import addRepeatAnnotatorOptions, readGFF, writeGFF, buildSubfamiliesHeaviestBundling, buildSubfamiliesPartialOrderTreeBuilding, makeURL, getRootPath
 
 def buildSubfamilesFromGFF(job, gffID, halID, args):
     readGFFJob = Job.wrapJobFn(readGFF, gffID = gffID)
-    buildSubfamiliesJob = Job.wrapJobFn(buildSubfamilies, elements=readGFFJob.rv(), halID=halID, args=args)
+
+    if args.heaviestBundling:
+        buildSubfamiliesJob = Job.wrapJobFn(buildSubfamiliesHeaviestBundling, elements=readGFFJob.rv(), halID=halID, args=args)
+    elif args.partialOrderTreeBuilding:
+        buildSubfamiliesJob = Job.wrapJobFn(buildSubfamiliesPartialOrderTreeBuilding, elements=readGFFJob.rv(), halID=halID, args=args)
     writeGFFJob = Job.wrapJobFn(writeGFF, elements=buildSubfamiliesJob.rv())
     readGFFJob.addFollowOn(buildSubfamiliesJob)
     buildSubfamiliesJob.addFollowOn(writeGFFJob)
     job.addChild(readGFFJob)
     return writeGFFJob.rv()
-
 
 def main():
     parser = argparse.ArgumentParser()

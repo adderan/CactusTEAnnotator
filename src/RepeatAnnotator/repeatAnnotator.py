@@ -8,6 +8,9 @@ import os
 from sonLib.bioio import fastaRead, fastaWrite
 from toil.lib.bioio import logger
 
+import treeBuilding
+
+
 class Element:
     def __init__(self, chrom, start, end, group, name):
         self.chrom = chrom
@@ -151,47 +154,51 @@ def readGFF(job, gffID):
 
 ####Partial order alignment###########
 
-def runPoa(job, elements, halID, args):
-    """Run partial order alignment with heaviest bundling to assign each TE sequence
-    to a consensus.
-    """
+def runPoa(job, elements, halID, heaviestBundle, args):
     logger.info("Aligning group with %d elements" % len(elements))
     logger.info("Elements: %s" % [element.name for element in elements])
     hal = job.fileStore.readGlobalFile(halID)
     seqs = job.fileStore.getLocalTempFile()
     getFastaSequences(elements=elements, hal=hal, seqs=seqs, args=args)
+    seqsID = job.fileStore.writeGlobalFile(seqs)
+    return job.addChildJobFn(runPoa2, seqsID=seqsID, heaviestBundle=heaviestBundle, args=args).rv()
+
+def runPoa2(job, seqsID, heaviestBundle, args):
+    seqs = job.fileStore.readGlobalFile(seqsID)
     graph = job.fileStore.getLocalTempFile()
     substMatrix = job.fileStore.readGlobalFile(args.substMatrixID)
-    subprocess.check_call(["poa", "-hb", "-read_fasta", seqs, "-po", graph, substMatrix])
-    seqToBundle = parsePartialOrder(graph)
-    logger.info("Parsed families: %s" % seqToBundle)
-    elementsAfterBundling = []
-    for element in elements:
-        if element.name in seqToBundle:
-            element.group = "%s_%s" % (element.group, seqToBundle[element.name])
-        elementsAfterBundling.append(element)
+    cmd = ["poa", "-read_fasta", seqs, "-po", graph, substMatrix]
+    if heaviestBundle:
+        cmd.extend(["-hb"])
+    subprocess.check_call(cmd)
+    return job.fileStore.writeGlobalFile(graph)
 
-    return elementsAfterBundling
+def parseHeaviestBundles(job, graphID):
+    graph = job.fileStore.readGlobalFile(graphID)
 
-def parsePartialOrder(poFile):
+    #Parse the PO file produced by poa
     sequences = {}
     name = ""
-    with open(poFile, 'r') as poRead:
+    with open(graph, 'r') as poRead:
         for line in poRead:
             if line.startswith("SOURCENAME"):
                 name = line.split("=")[1].rstrip()
             elif line.startswith("SOURCEINFO"):
-                info = line.split("=")[1].rstrip()
+                info = line.split("=")[1].rstrip().split()
                 bundle = info[3]
                 if bundle == -1:
                     continue
                 #Ignore the consensus sequences
                 if name.startswith("CONSENS"):
+                    bundle = -1
                     continue
-                sequences[name] = bundle
-    return sequences
+                if not bundle in sequences:
+                    sequences[bundle] = []
+                sequences[bundle].append(name)
+    sequences = [frozenset(sequenceList) for sequenceList in sequences.values()]
+    return frozenset(sequences)
 
-def buildSubfamilies(job, elements, halID, args):
+def buildSubfamiliesHeaviestBundling(job, elements, halID, args):
     families = {}
     for element in elements:
         if element.group not in families:
@@ -201,17 +208,54 @@ def buildSubfamilies(job, elements, halID, args):
     updatedElements = []
     for family in families:
         elementsInFamily = families[family]
-        updatedElements.append(job.addChildJobFn(runPoa, elements=elementsInFamily, halID=halID, args=args).rv())
+        poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, halID=halID, heaviestBundle=True, args=args)
+        updatedElements.append(poaJob.addFollowOnJobFn(parseHeaviestBundles, graphID=poaJob.rv()).rv())
+        job.addChild(poaJob)
 
     return job.addFollowOnJobFn(buildSubfamilies2, updatedElements).rv()
 
 def buildSubfamilies2(job, updatedElements):
     elements = []
-    logger.info("Processing updated elements for %d families" % len(updatedElements))
     for elementsList in updatedElements:
-        logger.info("Processing %d elements in family" % len(elementsList))
         elements.extend(elementsList)
     return elements
+
+def runTreeBuilding(job, elements, graphID, args):
+    graphFile = job.fileStore.readGlobalFile(graphID)
+    
+    graph = treeBuilding.POGraph(graphFile)
+    partitions = graph.getPartitions()
+    job.fileStore.logToMaster("Parsed partitions %s" % partitions)
+    job.fileStore.logToMaster("tmp file: %s" % os.path.dirname(graphFile))
+    tree = treeBuilding.buildTree(graph.threads, partitions)
+    categories = treeBuilding.getCategories(tree)
+
+    nameToElement = {element.name: element for element in elements}
+
+    updatedElements = []
+    for i, category in enumerate(categories):
+        for elementName in category:
+            updatedElement = nameToElement[elementName]
+            updatedElement.group = updatedElement.group + "_%d" % i
+            updatedElements.append(updatedElement)
+    return updatedElements
+
+def buildSubfamiliesPartialOrderTreeBuilding(job, elements, halID, args):
+    families = {}
+    for element in elements:
+        if element.group not in families:
+            families[element.group] = []
+        families[element.group].append(element)
+    updatedElements = []
+    for family in families:
+        elementsInFamily = families[family]
+        poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, halID=halID, heaviestBundle=False, args=args)
+        treeBuildingJob = Job.wrapJobFn(runTreeBuilding, elements=elementsInFamily,
+                graphID=poaJob.rv(), args=args)
+        job.addChild(poaJob)
+        poaJob.addFollowOn(treeBuildingJob)
+        updatedElements.append(treeBuildingJob.rv())
+    return job.addFollowOnJobFn(buildSubfamilies2, updatedElements).rv()
 
 def getFastaSequences(elements, hal, seqs, args):
     logger.info("Extracting sequences for %d elements" % len(elements))
@@ -221,7 +265,7 @@ def getFastaSequences(elements, hal, seqs, args):
             #Write header
             seqsWrite.write(">%s\n" % element.name)
             #Write sequence
-            seqsWrite.write(" ".join(fastaLines[1:]))
+            seqsWrite.write("%s\n" % "".join(fastaLines[1:]))
 
 def addRepeatAnnotatorOptions(parser):
     parser.add_argument("reference", type=str)
@@ -235,6 +279,8 @@ def addRepeatAnnotatorOptions(parser):
 
     parser.add_argument("--maxInsertions", type=int, default=0)
     parser.add_argument("--buildSubfamilies", action="store_true", default=False)
+    parser.add_argument("--heaviestBundling", action="store_true")
+    parser.add_argument("--partialOrderTreeBuilding", action="store_true")
 
 def main():
     parser = argparse.ArgumentParser()
