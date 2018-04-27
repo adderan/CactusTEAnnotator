@@ -174,9 +174,13 @@ def runPoa2(job, seqsID, heaviestBundle, args):
     return job.fileStore.writeGlobalFile(graph)
 
 def parseHeaviestBundles(job, graphID):
+    """Parses the PO file produced by POA and returns
+    a set of sets of sequence names representing the consensus
+    each sequence was assigned to, e.g. (('seq1', 'seq2'), ('seq3')).
+    """
+
     graph = job.fileStore.readGlobalFile(graphID)
 
-    #Parse the PO file produced by poa
     sequences = {}
     name = ""
     with open(graph, 'r') as poRead:
@@ -198,9 +202,18 @@ def parseHeaviestBundles(job, graphID):
     sequences = [frozenset(sequenceList) for sequenceList in sequences.values()]
     return frozenset(sequences)
 
+def updateElements(job, elements, partitioning):
+    nameToElement = {element.name:element for element in elements}
+    for i, partition in enumerate(partitioning):
+        for elementName in partition:
+            element = nameToElement[elementName]
+            element.group = element.group + "_%d" % i
+    return nameToElement.values()
+
+
 def buildSubfamiliesHeaviestBundling(job, elements, halID, args):
     families = {}
-    for element in elements:
+    for element in elements[1:100]:
         if element.group not in families:
             families[element.group] = []
         families[element.group].append(element)
@@ -209,16 +222,20 @@ def buildSubfamiliesHeaviestBundling(job, elements, halID, args):
     for family in families:
         elementsInFamily = families[family]
         poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, halID=halID, heaviestBundle=True, args=args)
-        updatedElements.append(poaJob.addFollowOnJobFn(parseHeaviestBundles, graphID=poaJob.rv()).rv())
+        parseHeaviestBundlesJob = Job.wrapJobFn(parseHeaviestBundles, graphID=poaJob.rv())
+        updateElementsJob = Job.wrapJobFn(updateElements, elements=elementsInFamily, partitioning=parseHeaviestBundlesJob.rv())
+        poaJob.addFollowOn(parseHeaviestBundlesJob)
+        parseHeaviestBundlesJob.addFollowOn(updateElementsJob)
         job.addChild(poaJob)
+        updatedElements.append(updateElementsJob.rv())
 
-    return job.addFollowOnJobFn(buildSubfamilies2, updatedElements).rv()
+    return job.addFollowOnJobFn(flatten, updatedElements).rv()
 
-def buildSubfamilies2(job, updatedElements):
-    elements = []
-    for elementsList in updatedElements:
-        elements.extend(elementsList)
-    return elements
+def flatten(job, listOfLists):
+    flattenedList = []
+    for l in listOfLists:
+        flattenedList.extend(l)
+    return flattenedList
 
 def runTreeBuilding(job, elements, graphID, args):
     graphFile = job.fileStore.readGlobalFile(graphID)
@@ -228,17 +245,9 @@ def runTreeBuilding(job, elements, graphID, args):
     job.fileStore.logToMaster("Parsed partitions %s" % partitions)
     job.fileStore.logToMaster("tmp file: %s" % os.path.dirname(graphFile))
     tree = treeBuilding.buildTree(graph.threads, partitions)
-    categories = treeBuilding.getCategories(tree)
+    partitioning = treeBuilding.getCategories(tree)
 
-    nameToElement = {element.name: element for element in elements}
-
-    updatedElements = []
-    for i, category in enumerate(categories):
-        for elementName in category:
-            updatedElement = nameToElement[elementName]
-            updatedElement.group = updatedElement.group + "_%d" % i
-            updatedElements.append(updatedElement)
-    return updatedElements
+    return job.addFollowOn(updateElements, partitioning=partitioning, elements=elements).rv()
 
 def buildSubfamiliesPartialOrderTreeBuilding(job, elements, halID, args):
     families = {}
@@ -255,7 +264,7 @@ def buildSubfamiliesPartialOrderTreeBuilding(job, elements, halID, args):
         job.addChild(poaJob)
         poaJob.addFollowOn(treeBuildingJob)
         updatedElements.append(treeBuildingJob.rv())
-    return job.addFollowOnJobFn(buildSubfamilies2, updatedElements).rv()
+    return job.addFollowOnJobFn(flatten, updatedElements).rv()
 
 def getFastaSequences(elements, hal, seqs, args):
     logger.info("Extracting sequences for %d elements" % len(elements))
