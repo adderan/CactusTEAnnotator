@@ -31,15 +31,15 @@ def applyPartition(tree, partition):
         for thread in threadSet:
             parents.add(getParent(tree, thread))
         if len(parents) > 1:
-            #Partition isn't compatible with the tree
-            #print "Skipping partition %s because nodes have different parents" % partition
+            #Partition isn't compatible with the tree, and since it has
+            #lower priority than partitions we applied previously, we ignore it.
             return
 
     #Build dictionary of parent nodes to the thread sets that
     #descend from them, so we can split thread sets that share a parent
     parentToThreadSets = {}
     for threadSet in partition:
-        parent = getParent(tree, threadSet[0])
+        parent = getParent(tree, list(threadSet)[0])
         if parent not in parentToThreadSets:
             parentToThreadSets[parent] = []
         parentToThreadSets[parent].append(threadSet)
@@ -49,7 +49,6 @@ def applyPartition(tree, partition):
         if len(parentToThreadSets[parent]) < 2:
             #nothing to do
             continue
-        #print parentToThreadSets[parent]
         for threadSet in parentToThreadSets[parent]:
             if len(threadSet) < 2:
                 continue
@@ -111,33 +110,34 @@ class POGraph:
         for j in range(len(self.nodes)):
             #Nodes i with edges to j
             for i in self.nodes[j].incidentNodes:
-                threads_i = set([self.threads[thread_id] for thread_id in self.nodes[i].incidentThreads])
-                threads_j = set([self.threads[thread_id] for thread_id in self.nodes[j].incidentThreads])
+                threads_i = frozenset([self.threads[thread_id] for thread_id in self.nodes[i].incidentThreads])
+                threads_j = frozenset([self.threads[thread_id] for thread_id in self.nodes[j].incidentThreads])
                 #threads connecting i and j
                 threads_ij = threads_i.intersection(threads_j)
-                left_partitions[j].add(tuple(threads_ij))
-                right_partitions[i].add(tuple(threads_ij))
+                left_partitions[j].add(threads_ij)
+                right_partitions[i].add(threads_ij)
 
         partitions = left_partitions + right_partitions
         partition_set = multiset.Multiset()
         for partition in partitions:
-            partition_set.add(tuple(partition))
+            partition_set.add(frozenset(partition))
         partitions = partition_set.items()
         #Sort by multiplicity of the partition
         partitions.sort(key=lambda x: x[1], reverse=True)
         return partitions
 
-def getCategories(tree):
-    categories = {}
+def getLeafPartitioning(tree):
+    parentToLeaves = {}
     for node in tree.nodes():
         if tree.out_degree(node) > 0:
             #not a leaf
             continue
         parent = getParent(tree, node)
-        if not parent in categories:
-            categories[parent] = []
-        categories[parent].append(node)
-    return categories.values()
+        if not parent in parentToLeaves:
+            parentToLeaves[parent] = []
+        parentToLeaves[parent].append(node)
+    partitioning = frozenset([frozenset(leaves) for leaves in parentToLeaves.values()])
+    return partitioning
 
 
 def main():
@@ -152,8 +152,8 @@ def main():
         print partition
     tree = buildTree(graph.threads, partitions)
     assert networkx.is_tree(tree)
-    categories = getCategories(tree)
-    print categories
+    leafPartitioning = getLeafPartitioning(tree)
+    print leafPartitioning
 
 if __name__ == "__main__":
     main()

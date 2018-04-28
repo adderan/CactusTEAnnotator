@@ -169,7 +169,7 @@ def runPoa2(job, seqsID, heaviestBundle, args):
     substMatrix = job.fileStore.readGlobalFile(args.substMatrixID)
     cmd = ["poa", "-read_fasta", seqs, "-po", graph, substMatrix]
     if heaviestBundle:
-        cmd.extend(["-hb"])
+        cmd.extend(["-hb", "-hbmin", str(args.heaviestBundlingThreshold)])
     subprocess.check_call(cmd)
     return job.fileStore.writeGlobalFile(graph)
 
@@ -213,7 +213,7 @@ def updateElements(job, elements, partitioning):
 
 def buildSubfamiliesHeaviestBundling(job, elements, halID, args):
     families = {}
-    for element in elements[1:100]:
+    for element in elements:
         if element.group not in families:
             families[element.group] = []
         families[element.group].append(element)
@@ -237,7 +237,10 @@ def flatten(job, listOfLists):
         flattenedList.extend(l)
     return flattenedList
 
-def runTreeBuilding(job, elements, graphID, args):
+def runTreeBuilding(job, graphID, args):
+    """Runs the partitioning tree building method on a sequence graph in 
+    PO format.
+    """
     graphFile = job.fileStore.readGlobalFile(graphID)
     
     graph = treeBuilding.POGraph(graphFile)
@@ -245,9 +248,8 @@ def runTreeBuilding(job, elements, graphID, args):
     job.fileStore.logToMaster("Parsed partitions %s" % partitions)
     job.fileStore.logToMaster("tmp file: %s" % os.path.dirname(graphFile))
     tree = treeBuilding.buildTree(graph.threads, partitions)
-    partitioning = treeBuilding.getCategories(tree)
-
-    return job.addFollowOn(updateElements, partitioning=partitioning, elements=elements).rv()
+    partitioning = treeBuilding.getLeafPartitioning(tree)
+    return partitioning
 
 def buildSubfamiliesPartialOrderTreeBuilding(job, elements, halID, args):
     families = {}
@@ -259,11 +261,14 @@ def buildSubfamiliesPartialOrderTreeBuilding(job, elements, halID, args):
     for family in families:
         elementsInFamily = families[family]
         poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, halID=halID, heaviestBundle=False, args=args)
-        treeBuildingJob = Job.wrapJobFn(runTreeBuilding, elements=elementsInFamily,
-                graphID=poaJob.rv(), args=args)
+        treeBuildingJob = Job.wrapJobFn(runTreeBuilding, graphID=poaJob.rv(), args=args)
+        updateElementsJob = Job.wrapJobFn(updateElements, elements=elementsInFamily, 
+                partitioning=treeBuildingJob.rv())
+        
         job.addChild(poaJob)
         poaJob.addFollowOn(treeBuildingJob)
-        updatedElements.append(treeBuildingJob.rv())
+        treeBuildingJob.addFollowOn(updateElementsJob)
+        updatedElements.append(updateElementsJob.rv())
     return job.addFollowOnJobFn(flatten, updatedElements).rv()
 
 def getFastaSequences(elements, hal, seqs, args):
@@ -290,6 +295,9 @@ def addRepeatAnnotatorOptions(parser):
     parser.add_argument("--buildSubfamilies", action="store_true", default=False)
     parser.add_argument("--heaviestBundling", action="store_true")
     parser.add_argument("--partialOrderTreeBuilding", action="store_true")
+
+    #POA default is 0.9, which leaves most sequences un-bundled
+    parser.add_argument("--heaviestBundlingThreshold", type=float, default=0.5)
 
 def main():
     parser = argparse.ArgumentParser()
