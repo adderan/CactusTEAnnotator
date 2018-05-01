@@ -16,4 +16,4 @@ setup(
     install_requires=['networkx'],
     
     entry_points={
-        'console_scripts': ['repeatAnnotator = RepeatAnnotator.repeatAnnotator:main', 'buildSubfamilies = RepeatAnnotator.buildSubfamilies:main', 'treeBuilding = RepeatAnnotator.treeBuilding:main']})
+        'console_scripts': ['repeatAnnotator = RepeatAnnotator.repeatAnnotator:main', 'buildSubfamilies = RepeatAnnotator.buildSubfamilies:main', 'treeBuilding = RepeatAnnotator.treeBuilding:main,' 'scoreGFF = RepeatAnnotator.ari:main']})

@@ -126,8 +126,12 @@ def main():
     b = 0.0
     c = 0.0
     d = 0.0
+
+    k = 0
     for i in range(len(elements)):
         for j in range(i):
+            if k % 1000 != 0:
+                continue
             if (elements[i].name == elements[j].name) and (elements[i].refName == elements[j].refName):
                 a += 1.0
             elif (elements[i].name != elements[j].name) and (elements[i].refName != elements[j].refName):
@@ -145,8 +149,12 @@ def main():
     print("d = %f" % d)
 
     r = (a + b)/(a + b + c + d)
+    overCollapsed = float(c)/(a + b + c + d)
+    underCollapsed = float(d)/(a + b + c + d)
 
     print("Rand index = %f" % r)
+    print("Overcollapsed = %f" % overCollapsed)
+    print("Undercollapsed = %f" % underCollapsed)
 
 
 if __name__ == "__main__":

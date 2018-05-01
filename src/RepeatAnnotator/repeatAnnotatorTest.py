@@ -62,10 +62,10 @@ class RepeatAnnotatorTests(unittest.TestCase):
     def testTreeBuilding(self):
         args = Job.Runner.getDefaultOptions(os.path.join(self.tempDir, "tmp_toil"))
         args.disableCaching = 'True'
+        args.logLevel = "Debug"
         results = None
         with Toil(args) as toil:
             args.substMatrixID = toil.importFile(makeURL(os.path.join(getRootPath(), "blosum80.mat")))
             results = toil.start(Job.wrapJobFn(treeBuildingTest, args))
-        print results
         self.assertEqual(results, frozenset([frozenset(['seq1', 'seq2']), frozenset(['seq3'])]))
 

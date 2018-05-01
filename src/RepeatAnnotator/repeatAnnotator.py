@@ -8,8 +8,7 @@ import os
 from sonLib.bioio import fastaRead, fastaWrite
 from toil.lib.bioio import logger
 
-import treeBuilding
-
+import RepeatAnnotator.treeBuilding as treeBuilding
 
 class Element:
     def __init__(self, chrom, start, end, group, name):
@@ -210,27 +209,6 @@ def updateElements(job, elements, partitioning):
             element.group = element.group + "_%d" % i
     return nameToElement.values()
 
-
-def buildSubfamiliesHeaviestBundling(job, elements, halID, args):
-    families = {}
-    for element in elements:
-        if element.group not in families:
-            families[element.group] = []
-        families[element.group].append(element)
-
-    updatedElements = []
-    for family in families:
-        elementsInFamily = families[family]
-        poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, halID=halID, heaviestBundle=True, args=args)
-        parseHeaviestBundlesJob = Job.wrapJobFn(parseHeaviestBundles, graphID=poaJob.rv())
-        updateElementsJob = Job.wrapJobFn(updateElements, elements=elementsInFamily, partitioning=parseHeaviestBundlesJob.rv())
-        poaJob.addFollowOn(parseHeaviestBundlesJob)
-        parseHeaviestBundlesJob.addFollowOn(updateElementsJob)
-        job.addChild(poaJob)
-        updatedElements.append(updateElementsJob.rv())
-
-    return job.addFollowOnJobFn(flatten, updatedElements).rv()
-
 def flatten(job, listOfLists):
     flattenedList = []
     for l in listOfLists:
@@ -249,7 +227,29 @@ def runTreeBuilding(job, graphID, args):
     job.fileStore.logToMaster("tmp file: %s" % os.path.dirname(graphFile))
     tree = treeBuilding.buildTree(graph.threads, partitions)
     partitioning = treeBuilding.getLeafPartitioning(tree)
+
     return partitioning
+
+def buildSubfamiliesHeaviestBundling(job, elements, halID, args):
+    families = {}
+    for element in elements:
+        if element.group not in families:
+            families[element.group] = []
+        families[element.group].append(element)
+
+    updatedElements = []
+    for family in families:
+        elementsInFamily = families[family]
+        poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, halID=halID, heaviestBundle=True, args=args)
+        parseHeaviestBundlesJob = Job.wrapJobFn(parseHeaviestBundles, graphID=poaJob.rv())
+        updateElementsJob = Job.wrapJobFn(updateElements, elements=elementsInFamily, partitioning=parseHeaviestBundlesJob.rv())
+
+        poaJob.addFollowOn(parseHeaviestBundlesJob)
+        parseHeaviestBundlesJob.addFollowOn(updateElementsJob)
+        job.addChild(poaJob)
+        updatedElements.append(updateElementsJob.rv())
+
+    return job.addFollowOnJobFn(flatten, updatedElements).rv()
 
 def buildSubfamiliesPartialOrderTreeBuilding(job, elements, halID, args):
     families = {}
@@ -308,6 +308,7 @@ def main():
     Job.Runner.addToilOptions(parser)
 
     args = parser.parse_args()
+
     with Toil(args) as toil:
         args.substMatrixID = toil.importFile(makeURL(os.path.join(getRootPath(), "blosum80.mat")))
         halID = toil.importFile(makeURL(args.alignmentFile))

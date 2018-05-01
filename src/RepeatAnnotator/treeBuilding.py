@@ -52,7 +52,6 @@ def applyPartition(tree, partition):
         for threadSet in parentToThreadSets[parent]:
             if len(threadSet) < 2:
                 continue
-            print("Joining %s" % "_".join(threadSet))
             new_parent = "_".join(threadSet) + "_anc"
             tree.add_node(new_parent)
             tree.add_edge(parent, new_parent)
@@ -105,25 +104,38 @@ class POGraph:
         graphRead.close()
 
     def getPartitions(self):
-        right_partitions = [set() for i in range(len(self.nodes))]
-        left_partitions = [set() for i in range(len(self.nodes))]
-        for j in range(len(self.nodes)):
-            #Nodes i with edges to j
-            for i in self.nodes[j].incidentNodes:
-                threads_i = frozenset([self.threads[thread_id] for thread_id in self.nodes[i].incidentThreads])
-                threads_j = frozenset([self.threads[thread_id] for thread_id in self.nodes[j].incidentThreads])
-                #threads connecting i and j
-                threads_ij = threads_i.intersection(threads_j)
-                left_partitions[j].add(threads_ij)
-                right_partitions[i].add(threads_ij)
+        #Sequence of nodes traversed by each thread
+        nodeSequences = [[] for thread in self.threads]
 
-        partitions = left_partitions + right_partitions
+        for node in self.nodes:
+            for thread in node.incidentThreads:
+                nodeSequences[thread].append(node)
+
+
+        leftPartitions = {node:dict() for node in self.nodes}
+        rightPartitions = {node:dict() for node in self.nodes}
+
+        for thread, nodeSequence in zip(self.threads, nodeSequences):
+            for i in range(1, len(nodeSequence)):
+                leftPartition = leftPartitions[nodeSequence[i]]
+                if nodeSequence[i-1] not in leftPartition:
+                    leftPartition[nodeSequence[i-1]] = set([])
+                leftPartition[nodeSequence[i-1]].add(thread)
+                rightPartition = rightPartitions[nodeSequence[i]]
+                if i >= len(nodeSequence) - 1:
+                    break
+                if nodeSequence[i+1] not in rightPartition:
+                    rightPartition[nodeSequence[i+1]] = set([])
+                rightPartition[nodeSequence[i+1]].add(thread)
+
         partition_set = multiset.Multiset()
-        for partition in partitions:
+        for partition in leftPartitions.values() + rightPartitions.values():
+            partition = frozenset([frozenset(threadSet) for threadSet in partition.values()])
             partition_set.add(frozenset(partition))
         partitions = partition_set.items()
         #Sort by multiplicity of the partition
         partitions.sort(key=lambda x: x[1], reverse=True)
+
         return partitions
 
 def getLeafPartitioning(tree):
@@ -148,12 +160,11 @@ def main():
     args = parser.parse_args()
     graph = POGraph(args.graphFile)
     partitions = graph.getPartitions()
-    for partition in partitions:
-        print partition
     tree = buildTree(graph.threads, partitions)
     assert networkx.is_tree(tree)
     leafPartitioning = getLeafPartitioning(tree)
-    print leafPartitioning
+    for partition in leafPartitioning:
+        sys.stdout.write(" ".join(partition) + "\n")
 
 if __name__ == "__main__":
     main()

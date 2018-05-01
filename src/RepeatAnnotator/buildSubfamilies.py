@@ -20,6 +20,7 @@ def buildSubfamilesFromGFF(job, gffID, halID, args):
 
 def main():
     parser = argparse.ArgumentParser()
+
     parser.add_argument("hal", type=str)
     parser.add_argument("inGFF", type=str)
     parser.add_argument("outGFF", type=str)
