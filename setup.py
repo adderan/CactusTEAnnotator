@@ -13,7 +13,7 @@ setup(
     # We use the __file__ attribute so this package isn't zip_safe.
     zip_safe=False,
 
-    install_requires=['networkx'],
+    install_requires=['networkx', 'multiset'],
     
     entry_points={
-        'console_scripts': ['repeatAnnotator = RepeatAnnotator.repeatAnnotator:main', 'buildSubfamilies = RepeatAnnotator.buildSubfamilies:main', 'treeBuilding = RepeatAnnotator.treeBuilding:main,' 'scoreGFF = RepeatAnnotator.ari:main']})
+        'console_scripts': ['repeatAnnotator = RepeatAnnotator.repeatAnnotator:main', 'buildSubfamilies = RepeatAnnotator.buildSubfamilies:main', 'treeBuilding = RepeatAnnotator.treeBuilding:main', 'scoreGFF = RepeatAnnotator.ari:main']})

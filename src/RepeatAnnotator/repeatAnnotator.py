@@ -188,7 +188,7 @@ def parseHeaviestBundles(job, graphID):
                 name = line.split("=")[1].rstrip()
             elif line.startswith("SOURCEINFO"):
                 info = line.split("=")[1].rstrip().split()
-                bundle = info[3]
+                bundle = int(info[3])
                 if bundle == -1:
                     continue
                 #Ignore the consensus sequences
@@ -203,11 +203,13 @@ def parseHeaviestBundles(job, graphID):
 
 def updateElements(job, elements, partitioning):
     nameToElement = {element.name:element for element in elements}
+    updatedElements = []
     for i, partition in enumerate(partitioning):
         for elementName in partition:
             element = nameToElement[elementName]
             element.group = element.group + "_%d" % i
-    return nameToElement.values()
+            updatedElements.append(element)
+    return updatedElements
 
 def flatten(job, listOfLists):
     flattenedList = []
