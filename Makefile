@@ -8,10 +8,13 @@ murmurHashSources=${PWD}/smhasher/src/MurmurHash3.cpp
 
 cpp=g++
 
-all: ./bin/pairwise_distances ${PWD}/hal/lib/halLib.a ./bin/poa
+all: ./bin/pairwise_distances ${PWD}/hal/lib/halLib.a ./bin/neighborJoining
 
 ./bin/pairwise_distances: impl/pairwise_distances.cpp ${PWD}/sonLib/lib/sonLib.a
 	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -I smhasher/src -I hal/lib -I sonLib/lib -o ./bin/pairwise_distances impl/pairwise_distances.cpp ${murmurHashSources} sonLib/lib/sonLib.a
+
+./bin/neighborJoining: impl/neighborJoining.c ${PWD}/sonLib/lib/sonLib.a
+	gcc -g -o bin/neighborJoining -I sonLib/lib impl/neighborJoining.c ${PWD}/sonLib/lib/sonLib.a -lm
 
 ${PWD}/sonLib/lib/sonLib.a:
 	cd ${PWD}/sonLib/ && make

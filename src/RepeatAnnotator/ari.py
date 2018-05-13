@@ -27,7 +27,7 @@ def readGff(gff):
             continue          
         if not chrom in features:
             features[chrom] = []
-        features[chrom].append(Feature(chrom, int(start), int(end), name))
+        features[chrom].append(Feature(chrom=chrom, start=int(start), end=int(end), name=name))
     return(features)
 
 def readRmaskGff(gff):
@@ -63,7 +63,7 @@ def findIntersectionEfficient(features, refFeatures):
     elements = []
     for chrom in features:
         if chrom not in refFeatures:
-            print("Skipping chromosome %s" % chrom)
+            #print("Skipping chromosome %s" % chrom)
             continue
         #sort by start position
         features[chrom].sort(key=lambda x: x.start)
@@ -84,9 +84,9 @@ def findIntersectionEfficient(features, refFeatures):
             if overlap(feature, refFeatures[chrom][i]) == 0:
                 #print "Found overlap betwen " + feature.name + " and " + refFeatures[chrom][i].name
                 elements.append(Element(name=feature.name, refName=refFeatures[chrom][i].name))
-                print("Found overlapping feature %d %d and %s" % (len(elements), i, refFeatures[chrom][i].name))
-                print("%d %d" % (feature.start, feature.end))
-                print("%d %d" % (refFeatures[chrom][i].start, refFeatures[chrom][i].end))
+                #print("Found overlapping feature %d %d and %s" % (len(elements), i, refFeatures[chrom][i].name))
+                #print("%d %d" % (feature.start, feature.end))
+                #print("%d %d" % (refFeatures[chrom][i].start, refFeatures[chrom][i].end))
 
     return(elements)
 
@@ -99,9 +99,9 @@ def findIntersectionSlow(features, refFeatures):
             for j in range(len(refFeatures[chrom])):
                 if overlap(features[chrom][i], refFeatures[chrom][j]) == 0:
                     elements.append(Element(name=features[chrom][i].name, refName=refFeatures[chrom][j].name))
-                    print("Found overlapping feature %d %d and %s" % (len(elements), i, refFeatures[chrom][j].name))
-                    print("%d %d" % (features[chrom][i].start, features[chrom][i].end))
-                    print("%d %d" % (refFeatures[chrom][j].start, refFeatures[chrom][j].end))
+                    #print("Found overlapping feature %d %d and %s" % (len(elements), i, refFeatures[chrom][j].name))
+                    #print("%d %d" % (features[chrom][i].start, features[chrom][i].end))
+                    #print("%d %d" % (refFeatures[chrom][j].start, refFeatures[chrom][j].end))
 
 
 def main():
@@ -113,14 +113,15 @@ def main():
 
     
     features = readGff(args.features)
+
     refFeatures = readRmaskGff(args.rmask)
     
-    print("Found %d chromosomes" % len(features))
-    print("Found %d chromosomes in reference" % len(refFeatures))
+    #print("Found %d chromosomes" % len(features))
+    #print("Found %d chromosomes in reference" % len(refFeatures))
     
     elements = findIntersectionEfficient(features, refFeatures)
 
-    print("Found %d elements" % len(elements))
+    #print("Found %d elements" % len(elements))
     #Calculate rand index
     a = 0.0
     b = 0.0
@@ -141,17 +142,19 @@ def main():
             elif (elements[i].name != elements[j].name) and (elements[i].refName == elements[j].refName):
                 d += 1.0
 
-    print("Found %d elements" % len(elements))
+    #print("Found %d elements" % len(elements))
 
-    print("a = %f" % a)
-    print("b = %f" % b)
-    print("c = %f" % c)
-    print("d = %f" % d)
+    #print("a = %f" % a)
+    #print("b = %f" % b)
+    #print("c = %f" % c)
+    #print("d = %f" % d)
 
     r = (a + b)/(a + b + c + d)
     overCollapsed = float(c)/(a + b + c + d)
     underCollapsed = float(d)/(a + b + c + d)
 
+    clusters = set([feature.name for feature in features.values()])
+    print("Number of clusters = %d" % len(clusters))
     print("Rand index = %f" % r)
     print("Overcollapsed = %f" % overCollapsed)
     print("Undercollapsed = %f" % underCollapsed)

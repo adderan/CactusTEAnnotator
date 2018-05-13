@@ -9,6 +9,7 @@ from sonLib.bioio import fastaRead, fastaWrite
 from toil.lib.bioio import logger
 
 import RepeatAnnotator.treeBuilding as treeBuilding
+from sonLib.nxnewick import NXNewick
 
 class Element:
     def __init__(self, chrom, start, end, group, name):
@@ -87,6 +88,7 @@ def getInsertions(job, halID, args):
                 break
             insertions.append(Element(chrom=chrom, start=start, end=end, group=i, name="cte%d" % i))
             i = i + 1
+    job.fileStore.logToMaster("Found %d insertions on branch" % len(insertions))
     return insertions
 
 def getDistances(job, halID, elements, args):
@@ -232,7 +234,37 @@ def runTreeBuilding(job, graphID, args):
 
     return partitioning
 
-def buildSubfamiliesHeaviestBundling(job, elements, halID, args):
+def runNeighborJoining(job, elements, halID, args):
+    if len(elements) < 3:
+        return frozenset([frozenset([element.name for element in elements])])
+    hal = job.fileStore.readGlobalFile(halID)
+
+    seqs = job.fileStore.getLocalTempFile()
+    getFastaSequences(elements=elements, hal=hal, seqs=seqs, args=args)
+
+    distances = job.fileStore.getLocalTempFile()
+    with open(distances, 'w') as distancesWrite:
+        subprocess.check_call(["pairwise_distances", "--sequences", seqs], stdout=distancesWrite)
+
+    partitioning = {}
+    for line in subprocess.check_output(["neighborJoining", distances, str(len(elements))]).split("\n"):
+        if line == "":
+            continue
+        nodeNum, family = line.split()
+        family = int(family)
+        nodeNum = int(nodeNum)
+        if not family in partitioning:
+            partitioning[family] = set()
+        partitioning[family].add(elements[nodeNum].name)
+
+
+    partitioning = frozenset([frozenset(partition) for partition in partitioning.values()])
+    job.fileStore.logToMaster("Partitioning = %s" % partitioning)
+    job.fileStore.logToMaster("work dir = %s" % os.path.dirname(seqs))
+
+    return partitioning
+
+def buildSubfamilies(job, elements, halID, args):
     families = {}
     for element in elements:
         if element.group not in families:
@@ -242,35 +274,27 @@ def buildSubfamiliesHeaviestBundling(job, elements, halID, args):
     updatedElements = []
     for family in families:
         elementsInFamily = families[family]
-        poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, halID=halID, heaviestBundle=True, args=args)
-        parseHeaviestBundlesJob = Job.wrapJobFn(parseHeaviestBundles, graphID=poaJob.rv())
-        updateElementsJob = Job.wrapJobFn(updateElements, elements=elementsInFamily, partitioning=parseHeaviestBundlesJob.rv())
+        if args.heaviestBundling:
+            poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, halID=halID, heaviestBundle=True, args=args)
+            partitioningJob = Job.wrapJobFn(parseHeaviestBundles, graphID=poaJob.rv())
+            job.addChild(poaJob)
+            poaJob.addFollowOn(partitioningJob)
 
-        poaJob.addFollowOn(parseHeaviestBundlesJob)
-        parseHeaviestBundlesJob.addFollowOn(updateElementsJob)
-        job.addChild(poaJob)
+        elif args.partialOrderTreeBuilding:
+            poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, halID=halID, heaviestBundle=False, args=args)
+            partitioningJob = Job.wrapJobFn(runTreeBuilding, graphID=poaJob.rv(), args=args)
+            job.addChild(poaJob)
+            poaJob.addFollowOn(partitioningJob)
+
+        elif args.neighborJoining:
+            partitioningJob = Job.wrapJobFn(runNeighborJoining, elements=elementsInFamily, halID=halID, args=args)
+            job.addChild(partitioningJob)
+
+        updateElementsJob = Job.wrapJobFn(updateElements, elements=elementsInFamily, partitioning=partitioningJob.rv())
+
+        partitioningJob.addFollowOn(updateElementsJob)
         updatedElements.append(updateElementsJob.rv())
 
-    return job.addFollowOnJobFn(flatten, updatedElements).rv()
-
-def buildSubfamiliesPartialOrderTreeBuilding(job, elements, halID, args):
-    families = {}
-    for element in elements:
-        if element.group not in families:
-            families[element.group] = []
-        families[element.group].append(element)
-    updatedElements = []
-    for family in families:
-        elementsInFamily = families[family]
-        poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, halID=halID, heaviestBundle=False, args=args)
-        treeBuildingJob = Job.wrapJobFn(runTreeBuilding, graphID=poaJob.rv(), args=args)
-        updateElementsJob = Job.wrapJobFn(updateElements, elements=elementsInFamily, 
-                partitioning=treeBuildingJob.rv())
-        
-        job.addChild(poaJob)
-        poaJob.addFollowOn(treeBuildingJob)
-        treeBuildingJob.addFollowOn(updateElementsJob)
-        updatedElements.append(updateElementsJob.rv())
     return job.addFollowOnJobFn(flatten, updatedElements).rv()
 
 def getFastaSequences(elements, hal, seqs, args):
@@ -294,9 +318,11 @@ def addRepeatAnnotatorOptions(parser):
     parser.add_argument("--minClusterSize", type=int, default=2)
 
     parser.add_argument("--maxInsertions", type=int, default=0)
-    parser.add_argument("--buildSubfamilies", action="store_true", default=False)
+
+    #Methods for splitting families of insertions
     parser.add_argument("--heaviestBundling", action="store_true")
     parser.add_argument("--partialOrderTreeBuilding", action="store_true")
+    parser.add_argument("--neighborJoining", action="store_true")
 
     #POA default is 0.9, which leaves most sequences un-bundled
     parser.add_argument("--heaviestBundlingThreshold", type=float, default=0.5)
