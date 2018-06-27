@@ -5,22 +5,27 @@ import argparse
 import random
 import os
 
-from sonLib.bioio import fastaRead, fastaWrite
+from sonLib.bioio import fastaRead, fastaWrite, catFiles
 from toil.lib.bioio import logger
 
 import RepeatAnnotator.treeBuilding as treeBuilding
 from sonLib.nxnewick import NXNewick
 
 class Element:
-    def __init__(self, chrom, start, end, group, name):
+    def __init__(self, chrom, start, end, group, name, seqID):
         self.chrom = chrom
         self.start = start
         self.end = end
         self.group = group
         self.name = name
+        self.seqID = seqID
 
 def makeURL(path):
     return "file://" + path
+
+def getFastaSequence(hal, chrom, start, end, args):
+    fastaLines = subprocess.check_output(["hal2fasta", hal, args.reference, "--sequence", chrom, "--start", str(start), "--length", str(end - start)]).strip().split("\n")
+    return fastaLines
 
 def getRootPath():
     import RepeatAnnotator
@@ -30,14 +35,12 @@ def getRootPath():
 def highNFraction(seqs):
     for i in range(10):
         seq = random.choice(seqs)
+        if seq == '':
+            continue
         base = random.choice(seq)
         if base == 'N' or base == 'n':
             return True
     return False
-
-def extractFastaSequence(hal, reference, chrom, start, end):
-    fastaLines = subprocess.check_output(["hal2fasta", hal, reference, "--sequence", chrom, "--start", str(start), "--length", str(int(end) - int(start))]).split("\n")
-    return fastaLines
 
 def annotateInsertions(job, halID, args):
     """Produce a set of TE annotations for one branch of a Cactus alignment.
@@ -46,7 +49,7 @@ def annotateInsertions(job, halID, args):
     job.addChild(getInsertionsJob)
     insertions = getInsertionsJob.rv()
 
-    getDistancesJob = Job.wrapJobFn(getDistances, halID=halID, elements=insertions, args=args)
+    getDistancesJob = Job.wrapJobFn(getDistances, elements=insertions, args=args)
     getInsertionsJob.addFollowOn(getDistancesJob)
 
     joinByDistanceJob = Job.wrapJobFn(joinByDistance, distancesID=getDistancesJob.rv(), elements=insertions, args=args)
@@ -78,7 +81,7 @@ def getInsertions(job, halID, args):
                 continue
             if end - start < args.minInsertionSize:
                 continue
-            fastaLines = subprocess.check_output(["hal2fasta", hal, args.reference, "--sequence", chrom, "--start", str(start), "--length", str(end - start)])
+            fastaLines = getFastaSequence(hal, chrom, start, end, args)
             assert len(fastaLines) > 0
             assert len(fastaLines[0]) > 0
 
@@ -86,15 +89,18 @@ def getInsertions(job, halID, args):
                 continue
             if args.maxInsertions > 0 and i > args.maxInsertions:
                 break
-            insertions.append(Element(chrom=chrom, start=start, end=end, group=i, name="cte%d" % i))
+            seqFasta = job.fileStore.getLocalTempFile()
+            with open(seqFasta, 'w') as seqFastaWrite:
+                seqFastaWrite.write("\n".join(fastaLines))
+            insertions.append(Element(chrom=chrom, start=start, end=end, group=i, name="cte%d" % i, seqID=job.fileStore.writeGlobalFile(seqFasta)))
             i = i + 1
     job.fileStore.logToMaster("Found %d insertions on branch" % len(insertions))
     return insertions
 
-def getDistances(job, halID, elements, args):
-    hal = job.fileStore.readGlobalFile(halID)
+def getDistances(job, elements, args):
     seqs = job.fileStore.getLocalTempFile()
-    getFastaSequences(elements=elements, hal=hal, seqs=seqs, args=args)
+    seqFiles = [job.fileStore.readGlobalFile(element.seqID) for element in elements]
+    catFiles(seqFiles, seqs)
     distances = job.fileStore.getLocalTempFile()
     with open(distances, 'w') as distancesWrite:
         subprocess.check_call(["pairwise_distances", "--sequences", seqs], stdout=distancesWrite)
@@ -144,23 +150,29 @@ def writeGFF(job, elements):
             gffWrite.write("%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n" % (element.chrom, "cactus_repeat_annotation", element.name, element.start, element.end, 0, '+', '.', element.group))
     return job.fileStore.writeGlobalFile(gff)
 
-def readGFF(job, gffID):
+def readGFF(job, halID, gffID, args):
     elements = []
     gff = job.fileStore.readGlobalFile(gffID)
+    hal = job.fileStore.readGlobalFile(halID)
     with open(gff, 'r') as gffRead:
         for line in gffRead:
             chrom, source, name, start, end, score, strand, a, group = line.split()
-            elements.append(Element(chrom=chrom, name=name, start=int(start), end=int(end), group=group))
+
+            fastaLines = getFastaSequence(hal=hal, chrom=chrom, start=int(start), end=int(end), args=args)
+            seqFile = job.fileStore.getLocalTempFile()
+            with open(seqFile, 'w') as seqFileWrite:
+                seqFileWrite.write("\n".join(fastaLines))
+            elements.append(Element(chrom=chrom, name=name, start=int(start), end=int(end), group=group, seqID=job.fileStore.writeGlobalFile(seqFile)))
     return elements
 
 ####Partial order alignment###########
 
-def runPoa(job, elements, halID, heaviestBundle, args):
+def runPoa(job, elements, heaviestBundle, args):
     logger.info("Aligning group with %d elements" % len(elements))
     logger.info("Elements: %s" % [element.name for element in elements])
-    hal = job.fileStore.readGlobalFile(halID)
     seqs = job.fileStore.getLocalTempFile()
-    getFastaSequences(elements=elements, hal=hal, seqs=seqs, args=args)
+    seqFiles = [job.fileStore.readGlobalFile(element.seqID) for element in elements]
+    catFiles(seqFiles, seqs)
     seqsID = job.fileStore.writeGlobalFile(seqs)
     return job.addChildJobFn(runPoa2, seqsID=seqsID, heaviestBundle=heaviestBundle, args=args).rv()
 
@@ -234,14 +246,13 @@ def runTreeBuilding(job, graphID, args):
 
     return partitioning
 
-def runNeighborJoining(job, elements, halID, args):
+def runNeighborJoining(job, elements, args):
     if len(elements) < 3:
         return frozenset([frozenset([element.name for element in elements])])
-    hal = job.fileStore.readGlobalFile(halID)
 
     seqs = job.fileStore.getLocalTempFile()
-    getFastaSequences(elements=elements, hal=hal, seqs=seqs, args=args)
-
+    seqFiles = [job.fileStore.readGlobalFile(element.seqID) for element in elements]
+    catFiles(seqFiles, seqs)
     distances = job.fileStore.getLocalTempFile()
     with open(distances, 'w') as distancesWrite:
         subprocess.check_call(["pairwise_distances", "--sequences", seqs], stdout=distancesWrite)
@@ -264,7 +275,7 @@ def runNeighborJoining(job, elements, halID, args):
 
     return partitioning
 
-def buildSubfamilies(job, elements, halID, args):
+def buildSubfamilies(job, elements, args):
     families = {}
     for element in elements:
         if element.group not in families:
@@ -275,19 +286,19 @@ def buildSubfamilies(job, elements, halID, args):
     for family in families:
         elementsInFamily = families[family]
         if args.heaviestBundling:
-            poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, halID=halID, heaviestBundle=True, args=args)
+            poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, heaviestBundle=True, args=args)
             partitioningJob = Job.wrapJobFn(parseHeaviestBundles, graphID=poaJob.rv())
             job.addChild(poaJob)
             poaJob.addFollowOn(partitioningJob)
 
         elif args.partialOrderTreeBuilding:
-            poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, halID=halID, heaviestBundle=False, args=args)
+            poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, heaviestBundle=False, args=args)
             partitioningJob = Job.wrapJobFn(runTreeBuilding, graphID=poaJob.rv(), args=args)
             job.addChild(poaJob)
             poaJob.addFollowOn(partitioningJob)
 
         elif args.neighborJoining:
-            partitioningJob = Job.wrapJobFn(runNeighborJoining, elements=elementsInFamily, halID=halID, args=args)
+            partitioningJob = Job.wrapJobFn(runNeighborJoining, elements=elementsInFamily, args=args)
             job.addChild(partitioningJob)
 
         updateElementsJob = Job.wrapJobFn(updateElements, elements=elementsInFamily, partitioning=partitioningJob.rv())
@@ -296,16 +307,6 @@ def buildSubfamilies(job, elements, halID, args):
         updatedElements.append(updateElementsJob.rv())
 
     return job.addFollowOnJobFn(flatten, updatedElements).rv()
-
-def getFastaSequences(elements, hal, seqs, args):
-    logger.info("Extracting sequences for %d elements" % len(elements))
-    with open(seqs, 'w') as seqsWrite:
-        for element in elements:
-            fastaLines = extractFastaSequence(hal=hal, reference=args.reference, chrom=element.chrom, start=element.start, end=element.end)
-            #Write header
-            seqsWrite.write(">%s\n" % element.name)
-            #Write sequence
-            seqsWrite.write("%s\n" % "".join(fastaLines[1:]))
 
 def addRepeatAnnotatorOptions(parser):
     parser.add_argument("reference", type=str)

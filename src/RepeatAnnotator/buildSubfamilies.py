@@ -6,9 +6,9 @@ from toil.job import Job
 from RepeatAnnotator.repeatAnnotator import addRepeatAnnotatorOptions, readGFF, writeGFF, buildSubfamilies, buildSubfamilies, makeURL, getRootPath
 
 def buildSubfamilesFromGFF(job, gffID, halID, args):
-    readGFFJob = Job.wrapJobFn(readGFF, gffID = gffID)
+    readGFFJob = Job.wrapJobFn(readGFF, halID=halID, gffID=gffID, args=args)
 
-    buildSubfamiliesJob = Job.wrapJobFn(buildSubfamilies, elements=readGFFJob.rv(), halID=halID, args=args)
+    buildSubfamiliesJob = Job.wrapJobFn(buildSubfamilies, elements=readGFFJob.rv(), args=args)
     writeGFFJob = Job.wrapJobFn(writeGFF, elements=buildSubfamiliesJob.rv())
     readGFFJob.addFollowOn(buildSubfamiliesJob)
     buildSubfamiliesJob.addFollowOn(writeGFFJob)
