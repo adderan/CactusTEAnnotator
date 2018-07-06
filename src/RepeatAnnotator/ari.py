@@ -36,12 +36,16 @@ def readRmaskGff(gff):
         info = line.split()
         if len(info) != 16:
             continue
-        chrom, source, annotationType, start, end, score, strand, a, b, name, c, d, e, f, g, h = info
+        chrom, source, annotationType, start, end, score, strand, a, b, geneID, c, d, e, family, g, h = info
+        geneID = geneID[1:len(geneID) - 2]
+        family = family[1:len(family) - 2]
         if start > end:
             continue
         if not chrom in features:
             features[chrom] = []
-        features[chrom].append(Feature(chrom, int(start), int(end), name))
+
+        #print("family = %s" % family)
+        features[chrom].append(Feature(chrom=chrom, start=int(start), end=int(end), name=family))
     return(features)
 
 def overlap(f1, f2):
@@ -153,8 +157,8 @@ def main():
     overCollapsed = float(c)/(a + b + c + d)
     underCollapsed = float(d)/(a + b + c + d)
 
-    clusters = set([feature.name for feature in features.values()])
-    print("Number of clusters = %d" % len(clusters))
+    #clusters = set([feature.name for feature in features.values()])
+    #print("Number of clusters = %d" % len(clusters))
     print("Rand index = %f" % r)
     print("Overcollapsed = %f" % overCollapsed)
     print("Undercollapsed = %f" % underCollapsed)

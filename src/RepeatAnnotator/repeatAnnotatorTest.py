@@ -13,7 +13,9 @@ ACTCGACCACCAGTCA
 >seq2
 ACTCGACTACCAGTCA
 >seq3
-GTTCACTCACTCCTAACTAACTC"""
+GTTCACTCACTCCTAACTAACTC
+>seq4
+ACTCTCCCATTACACCATTCTACATAATCTTCAGGGCAGCAACATTCCAACACAATTACA"""
 
 def treeBuildingTest(job, args):
     seqFile = job.fileStore.getLocalTempFile()
@@ -67,5 +69,6 @@ class RepeatAnnotatorTests(unittest.TestCase):
         with Toil(args) as toil:
             args.substMatrixID = toil.importFile(makeURL(os.path.join(getRootPath(), "blosum80.mat")))
             results = toil.start(Job.wrapJobFn(treeBuildingTest, args))
-        self.assertEqual(results, frozenset([frozenset(['seq1', 'seq2']), frozenset(['seq3'])]))
+        self.assertEqual(results, frozenset([frozenset(['seq1', 'seq2']), frozenset(['seq3']), frozenset(['seq4'])]))
+        print(results)
 

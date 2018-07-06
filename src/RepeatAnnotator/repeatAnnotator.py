@@ -159,6 +159,9 @@ def readGFF(job, halID, gffID, args):
             chrom, source, name, start, end, score, strand, a, group = line.split()
 
             fastaLines = getFastaSequence(hal=hal, chrom=chrom, start=int(start), end=int(end), args=args)
+
+            #Replace chromosome with name
+            fastaLines[0] = ">%s" % name
             seqFile = job.fileStore.getLocalTempFile()
             with open(seqFile, 'w') as seqFileWrite:
                 seqFileWrite.write("\n".join(fastaLines))
@@ -218,6 +221,9 @@ def parseHeaviestBundles(job, graphID):
 def updateElements(job, elements, partitioning):
     nameToElement = {element.name:element for element in elements}
     updatedElements = []
+    logger.info("Partitioning = %s" % partitioning)
+    logger.info("element names = %s" % nameToElement.keys())
+    assert(sum([len(partition) for partition in partitioning]) == len(nameToElement))
     for i, partition in enumerate(partitioning):
         for elementName in partition:
             element = nameToElement[elementName]
@@ -301,10 +307,10 @@ def buildSubfamilies(job, elements, args):
             partitioningJob = Job.wrapJobFn(runNeighborJoining, elements=elementsInFamily, args=args)
             job.addChild(partitioningJob)
 
-        updateElementsJob = Job.wrapJobFn(updateElements, elements=elementsInFamily, partitioning=partitioningJob.rv())
+            updateElementsJob = Job.wrapJobFn(updateElements, elements=elementsInFamily, partitioning=partitioningJob.rv())
 
-        partitioningJob.addFollowOn(updateElementsJob)
-        updatedElements.append(updateElementsJob.rv())
+            partitioningJob.addFollowOn(updateElementsJob)
+            updatedElements.append(updateElementsJob.rv())
 
     return job.addFollowOnJobFn(flatten, updatedElements).rv()
 
