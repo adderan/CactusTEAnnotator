@@ -107,6 +107,23 @@ def getDistances(job, elements, args):
     return job.fileStore.writeGlobalFile(distances)
 
 
+def getRepeatCopies(job, consensusElements, halID, args):
+    reference = job.fileStore.getLocalTempFile()
+    hal = job.fileStore.readGlobalFile(halID)
+    with open(reference, 'w') as referenceWrite:
+        subprocess.check_call(["hal2fasta", hal, args.reference], stdout=referenceWrite)
+
+    consensusSequenceFiles = [job.fileStore.readGlobalFile(consensusElement.seqID) for consensusElement in consensusElements]
+    consensusSequences = job.fileStore.getLocalTempFile()
+    catFiles(consensusSequenceFiles, consensusSequences)
+
+    alignment = job.fileStore.getLocalTempFile()
+    with open(alignmentFile, 'w') as alignmentWrite:
+        subprocess.check_call(["cPecanLastz", "--format=cigar", "%s[unmask][multiple]" % reference, "%s[unmask][multiple]" % consensusSequences], stdout = alignmentWrite)
+
+    assert False
+
+
 def joinByDistance(job, distancesID, elements, args):
     """Join candidate TE insertions into coarse families based on Jaccard distance. 
     TE insertions transitively joined into the same family if their distance is 
