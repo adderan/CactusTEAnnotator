@@ -7,6 +7,7 @@ import os
 
 from sonLib.bioio import fastaRead, fastaWrite, catFiles
 from toil.lib.bioio import logger
+import networkx
 
 import RepeatAnnotator.treeBuilding as treeBuilding
 from sonLib.nxnewick import NXNewick
@@ -33,7 +34,7 @@ def getRootPath():
     return os.path.split(i)[0]
 
 def highNFraction(seqs):
-    for i in range(10):
+    for i in range(100):
         seq = random.choice(seqs)
         if seq == '':
             continue
@@ -92,7 +93,7 @@ def getInsertions(job, halID, args):
             seqFasta = job.fileStore.getLocalTempFile()
             with open(seqFasta, 'w') as seqFastaWrite:
                 seqFastaWrite.write("\n".join(fastaLines))
-            insertions.append(Element(chrom=chrom, start=start, end=end, group=i, name="cte%d" % i, seqID=job.fileStore.writeGlobalFile(seqFasta)))
+            insertions.append(Element(chrom=chrom, start=start, end=end, group=0, name="cte%d" % i, seqID=job.fileStore.writeGlobalFile(seqFasta)))
             i = i + 1
     job.fileStore.logToMaster("Found %d insertions on branch" % len(insertions))
     return insertions
@@ -106,40 +107,30 @@ def getDistances(job, elements, args):
         subprocess.check_call(["pairwise_distances", "--sequences", seqs], stdout=distancesWrite)
     return job.fileStore.writeGlobalFile(distances)
 
-
 def joinByDistance(job, distancesID, elements, args):
-    """Join candidate TE insertions into coarse families based on Jaccard distance. 
-    TE insertions transitively joined into the same family if their distance is 
-    below the configured threshold.
+    """Join candidate TE insertions into coarse families based on 
+    Jaccard distance. TE insertions are transitively joined into 
+    the same family if their distance is below the configured threshold.
     """
     distances = job.fileStore.readGlobalFile(distancesID)
+    nameToElement = {element.name:element for element in elements}
 
-    clusterToElement = {i: [elements[i]] for i in range(len(elements))}
+    graph = networkx.Graph()
+    for element in elements:
+        graph.add_node(element.name)
     with open(distances, 'r') as distancesRead:
         for line in distancesRead:
             i, j, dist = line.split()
-            i = int(i)
-            j = int(j)
+            element_i = elements[int(i)]
+            element_j = elements[int(j)]
             dist = float(dist)
-            assert i > j
+            logger.info("Distance = %f" % dist)
             if dist > args.distanceThreshold:
-                group_i = elements[i].group
-                group_j = elements[j].group
-                if group_i == group_j:
-                    continue
-                group_a = min(group_i, group_j)
-                group_b = max(group_i, group_j)
-
-                clusterToElement[group_a].extend(clusterToElement[group_b])
-                for element in clusterToElement[group_b]:
-                    element.group = group_a
-                del clusterToElement[group_b]
-
-    filteredElements = []
-    for cluster in clusterToElement:
-        if len(clusterToElement[cluster]) >= args.minClusterSize:
-            filteredElements.extend(clusterToElement[cluster])
-    return filteredElements
+                graph.add_edge(element_i.name, element_j.name)
+    for i, component in enumerate(networkx.connected_components(graph)):
+        for elementName in component:
+            nameToElement[elementName].group = i
+    return elements
 
 def writeGFF(job, elements):
     """Write a set of TE annotations in GFF format.
@@ -176,11 +167,7 @@ def runPoa(job, elements, heaviestBundle, args):
     seqs = job.fileStore.getLocalTempFile()
     seqFiles = [job.fileStore.readGlobalFile(element.seqID) for element in elements]
     catFiles(seqFiles, seqs)
-    seqsID = job.fileStore.writeGlobalFile(seqs)
-    return job.addChildJobFn(runPoa2, seqsID=seqsID, heaviestBundle=heaviestBundle, args=args).rv()
 
-def runPoa2(job, seqsID, heaviestBundle, args):
-    seqs = job.fileStore.readGlobalFile(seqsID)
     graph = job.fileStore.getLocalTempFile()
     substMatrix = job.fileStore.readGlobalFile(args.substMatrixID)
     cmd = ["poa", "-read_fasta", seqs, "-po", graph, substMatrix]
@@ -188,35 +175,6 @@ def runPoa2(job, seqsID, heaviestBundle, args):
         cmd.extend(["-hb", "-hbmin", str(args.heaviestBundlingThreshold)])
     subprocess.check_call(cmd)
     return job.fileStore.writeGlobalFile(graph)
-
-def parseHeaviestBundles(job, graphID):
-    """Parses the PO file produced by POA and returns
-    a set of sets of sequence names representing the consensus
-    each sequence was assigned to, e.g. (('seq1', 'seq2'), ('seq3')).
-    """
-
-    graph = job.fileStore.readGlobalFile(graphID)
-
-    sequences = {}
-    name = ""
-    with open(graph, 'r') as poRead:
-        for line in poRead:
-            if line.startswith("SOURCENAME"):
-                name = line.split("=")[1].rstrip()
-            elif line.startswith("SOURCEINFO"):
-                info = line.split("=")[1].rstrip().split()
-                bundle = int(info[3])
-                if bundle == -1:
-                    continue
-                #Ignore the consensus sequences
-                if name.startswith("CONSENS"):
-                    bundle = -1
-                    continue
-                if not bundle in sequences:
-                    sequences[bundle] = []
-                sequences[bundle].append(name)
-    sequences = [frozenset(sequenceList) for sequenceList in sequences.values()]
-    return frozenset(sequences)
 
 def updateElements(job, elements, partitioning):
     nameToElement = {element.name:element for element in elements}

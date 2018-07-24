@@ -13,9 +13,6 @@
 [submodule "hdf5"]
 	path = hdf5
 	url = https://github.com/UCSCReconGroup/hdf5
-[submodule "jobTree"]
-	path = jobTree
-	url = https://github.com/benedictpaten/jobTree
 [submodule "cPecan"]
 	path = cPecan
 	url = https://github.com/adderan/cPecan
