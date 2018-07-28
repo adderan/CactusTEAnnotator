@@ -1,17 +1,24 @@
 rootPath = .
 
-libSourcesAll = $(wildcard impl/*.cpp)
-libSources = $(subst impl/cactus_repeats.cpp,,${libSourcesAll})
 libHeaders = $(wildcard impl/*.h)
 
 murmurHashSources=${PWD}/smhasher/src/MurmurHash3.cpp
 
 cpp=g++
 
-all: ./bin/pairwise_distances ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/maximizeOverlaps ./bin/getAlignmentDistances
+objs=PairwiseDistances.o
+sources=impl/PairwiseDistances.cpp
 
-./bin/pairwise_distances: impl/pairwise_distances.cpp ${PWD}/sonLib/lib/sonLib.a
-	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -I smhasher/src -I hal/lib -I sonLib/lib -o ./bin/pairwise_distances impl/pairwise_distances.cpp ${murmurHashSources} sonLib/lib/sonLib.a
+all: ./bin/pairwise_distances ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/maximizeOverlaps ./bin/getAlignmentDistances ./bin/getThreadPartitions ./bin/tests
+
+${objs}: ${sources} sonLib/lib/sonLib.a
+	g++ -I sonLib/lib -I smhasher/src -c ${sources}
+
+./bin/tests: impl/tests.cpp ${PWD}/sonLib/lib/sonLib.a ${objs}
+	g++ -g -o bin/tests -I sonLib/lib impl/tests.cpp ${murmurHashSources} ${objs} ${PWD}/sonLib/lib/sonLib.a -lm
+
+./bin/pairwise_distances: impl/PairwiseDistancesMain.cpp ${PWD}/sonLib/lib/sonLib.a ${objs}
+	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -I smhasher/src -I hal/lib -I sonLib/lib -o ./bin/pairwise_distances impl/PairwiseDistancesMain.cpp ${murmurHashSources} ${objs} sonLib/lib/sonLib.a
 
 ./bin/neighborJoining: impl/neighborJoining.c ${PWD}/sonLib/lib/sonLib.a
 	gcc -g -o bin/neighborJoining -I sonLib/lib impl/neighborJoining.c ${PWD}/sonLib/lib/sonLib.a -lm
@@ -21,6 +28,9 @@ all: ./bin/pairwise_distances ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bi
 
 ./bin/getAlignmentDistances: impl/getAlignmentDistances.c ${PWD}/sonLib/lib/sonLib.a
 	gcc -g -o bin/getAlignmentDistances -I sonLib/lib -I poaV2/ impl/getAlignmentDistances.c ${PWD}/sonLib/lib/sonLib.a ${PWD}/poaV2/liblpo.a -lm
+
+./bin/getThreadPartitions: impl/getThreadPartitions.c poaV2/liblpo.a
+	gcc -g -o bin/getThreadPartitions -I poaV2/ impl/getThreadPartitions.c ${PWD}/poaV2/liblpo.a -lm
 
 ${PWD}/sonLib/lib/sonLib.a:
 	cd ${PWD}/sonLib/ && make
