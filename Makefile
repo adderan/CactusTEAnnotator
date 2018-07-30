@@ -8,7 +8,7 @@ murmurHashSources=${PWD}/smhasher/src/MurmurHash3.cpp
 
 cpp=g++
 
-all: ./bin/pairwise_distances ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/maximizeOverlaps ./bin/getAlignmentDistances
+all: ./bin/pairwise_distances ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/maximizeOverlaps ./bin/getAlignmentDistances ./bin/getThreadPartitions
 
 ./bin/pairwise_distances: impl/pairwise_distances.cpp ${PWD}/sonLib/lib/sonLib.a
 	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -I smhasher/src -I hal/lib -I sonLib/lib -o ./bin/pairwise_distances impl/pairwise_distances.cpp ${murmurHashSources} sonLib/lib/sonLib.a
@@ -21,6 +21,9 @@ all: ./bin/pairwise_distances ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bi
 
 ./bin/getAlignmentDistances: impl/getAlignmentDistances.c ${PWD}/sonLib/lib/sonLib.a
 	gcc -g -o bin/getAlignmentDistances -I sonLib/lib -I poaV2/ impl/getAlignmentDistances.c ${PWD}/sonLib/lib/sonLib.a ${PWD}/poaV2/liblpo.a -lm
+
+./bin/getThreadPartitions: impl/getThreadPartitions.c poaV2/liblpo.a
+	gcc -g -o bin/getThreadPartitions -I poaV2/ impl/getThreadPartitions.c ${PWD}/poaV2/liblpo.a -lm
 
 ${PWD}/sonLib/lib/sonLib.a:
 	cd ${PWD}/sonLib/ && make
