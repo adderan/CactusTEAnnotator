@@ -16,9 +16,14 @@ def getPartitions(graphFile):
                 partition.insert(frozenset(threadSet))
             partition = frozenset(partition)
             partitions.insert(partition)
+
+    partitions = partitions.items()
+    partitions.sort(key = lambda x: x[1], reverse=True)
     return partitions
 
-def 
+def buildTree(graphFile):
+    partitions = getPartitions(graphFile)
+
 
 
 def main():

@@ -127,10 +127,16 @@ def joinByDistance(job, distancesID, elements, args):
             logger.info("Distance = %f" % dist)
             if dist > args.distanceThreshold:
                 graph.add_edge(element_i.name, element_j.name)
-    for i, component in enumerate(networkx.connected_components(graph)):
+    i = 0
+    newElements = []
+    for component in networkx.connected_components(graph):
+        if len(component) < args.minClusterSize:
+            continue
         for elementName in component:
             nameToElement[elementName].group = i
-    return elements
+            newElements.append(nameToElement[elementName])
+        i = i + 1
+    return newElements
 
 def writeGFF(job, elements):
     """Write a set of TE annotations in GFF format.
@@ -210,16 +216,16 @@ def runTreeBuilding(job, graphID, args):
 
     return partitioning
 
-def runNeighborJoining(job, elements, args):
+def runNeighborJoining(job, elements, graphID, args):
     if len(elements) < 3:
         return frozenset([frozenset([element.name for element in elements])])
 
     seqs = job.fileStore.getLocalTempFile()
     seqFiles = [job.fileStore.readGlobalFile(element.seqID) for element in elements]
-    catFiles(seqFiles, seqs)
+    graph = job.fileStore.readGlobalFile(graphID)
     distances = job.fileStore.getLocalTempFile()
     with open(distances, 'w') as distancesWrite:
-        subprocess.check_call(["pairwise_distances", "--sequences", seqs], stdout=distancesWrite)
+        subprocess.check_call(["getAlignmentDistances", graph], stdout=distancesWrite)
 
     partitioning = {}
     for line in subprocess.check_output(["neighborJoining", distances, str(len(elements))]).split("\n"):
@@ -262,8 +268,10 @@ def buildSubfamilies(job, elements, args):
             poaJob.addFollowOn(partitioningJob)
 
         elif args.neighborJoining:
-            partitioningJob = Job.wrapJobFn(runNeighborJoining, elements=elementsInFamily, args=args)
-            job.addChild(partitioningJob)
+            poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, heaviestBundle=False, args=args)
+            partitioningJob = Job.wrapJobFn(runNeighborJoining, elements=elementsInFamily, graphID=poaJob.rv(), args=args)
+            job.addChild(poaJob)
+            poaJob.addFollowOn(partitioningJob)
 
             updateElementsJob = Job.wrapJobFn(updateElements, elements=elementsInFamily, partitioning=partitioningJob.rv())
 
