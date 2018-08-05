@@ -113,6 +113,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rmask", type=file)
     parser.add_argument("--features", type=file)
+    parser.add_argument("--minOverlap", type=int, default=100)
     args = parser.parse_args()
 
     
@@ -162,6 +163,7 @@ def main():
     print("Rand index = %f" % r)
     print("Overcollapsed = %f" % overCollapsed)
     print("Undercollapsed = %f" % underCollapsed)
+    print("Found %d overlapping elements" % len(elements))
 
 
 if __name__ == "__main__":

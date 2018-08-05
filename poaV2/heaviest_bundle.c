@@ -78,8 +78,6 @@ LPOLetterRef_T *heaviest_bundle(int len,LPOLetter_T seq[],
 }
 
 
-
-
 int assign_sequence_bundle_id(int path_length,LPOLetterRef_T path[],
 			      LPOSequence_T *seq,int bundle_id,
 			      float minimum_fraction)

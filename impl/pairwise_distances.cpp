@@ -58,8 +58,11 @@ int main(int argc, char **argv) {
   char *sequencesFilename = NULL;
   int kmerLength = 10;
 
-  int seeds[10] = {0, 10, 50, 89, 10000, 45, 8, 20, 56, 22};
-  int numSeeds = 10;
+  int numSeeds = 1000;
+  int *seeds = (int*)calloc(sizeof(int), numSeeds);
+  for (int i = 0; i < numSeeds; i++) {
+      seeds[i] = rand() * INT_MAX;
+  }
 
   /*
    * Parse the options.
@@ -117,7 +120,7 @@ int main(int argc, char **argv) {
     for (int j = 0; j < i; j++) {
       //cerr << "seq = " << string((char*)sequences->list[i]) << endl;
       double dist = minhash_jaccard(i, j, minhashValues, numSeeds);
-      cout << i << " " << j << " " << dist << endl;
+      printf("%s %s %f\n", seqNames->list[i], seqNames->list[j], dist);
     }
   }
 
