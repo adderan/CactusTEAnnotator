@@ -47,7 +47,10 @@ int main(int argc, char **argv) {
 
     fprintf(stderr, "Graph length = %d\n", graph->length);
 
+
     int *seenThreads = (int*) calloc(sizeof(int), graph->nsource_seq);
+
+
     for (int i = graph->length - 1; i >= 0; i--) {
 
         int newThreads = 0;
@@ -74,7 +77,7 @@ int main(int argc, char **argv) {
 
         }
         path[i] = bestEdge;
-        score[i] = rightScore + maxWeight;
+        score[i] = rightScore + maxWeight - newThreads;
         if (score[i] > bestScore) {
             bestScore = score[i];
             bestNode = i;
