@@ -21,6 +21,9 @@ def main():
     parser.add_argument("hal", type=str)
     parser.add_argument("inGFF", type=str)
     parser.add_argument("outGFF", type=str)
+
+    parser.add_argument("--graphsDir", type=str, default=None, help="Folder to store intermediate results")
+
     addRepeatAnnotatorOptions(parser)
     Job.Runner.addToilOptions(parser)
 

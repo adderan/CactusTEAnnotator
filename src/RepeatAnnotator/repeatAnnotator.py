@@ -4,8 +4,9 @@ import subprocess
 import argparse
 import random
 import os
+import shutil
 
-from sonLib.bioio import fastaRead, fastaWrite, catFiles
+from sonLib.bioio import fastaRead, fastaWrite, catFiles, reverseComplement
 from toil.lib.bioio import logger
 import networkx
 
@@ -20,15 +21,17 @@ def catFiles(fileList, target):
                 targetWrite.write("".join(lines))
                 targetWrite.write("\n")
 
-
 class Element:
-    def __init__(self, chrom, start, end, group, name, seqID):
+    def __init__(self, chrom, start, end, family, subfamily, name, seqID, revCompSeqID, strand):
         self.chrom = chrom
         self.start = start
         self.end = end
-        self.group = group
+        self.family = family
+        self.subfamily = None
         self.name = name
         self.seqID = seqID
+        self.revCompSeqID = revCompSeqID
+        self.strand = strand
 
 def makeURL(path):
     return "file://" + path
@@ -100,13 +103,15 @@ def getInsertions(job, halID, args):
             if args.maxInsertions > 0 and i > args.maxInsertions:
                 break
 
-            seqName = "cte%d" % i
             seqFasta = job.fileStore.getLocalTempFile()
             with open(seqFasta, 'w') as seqFastaWrite:
-                seqFastaWrite.write(">%s\n" % seqName)
+                seqFastaWrite.write(">%d\n" % i)
                 seqFastaWrite.write("\n".join(fastaLines[1:]))
                 seqFastaWrite.write("\n")
-            insertions.append(Element(chrom=chrom, start=start, end=end, group="", name=seqName, seqID=job.fileStore.writeGlobalFile(seqFasta)))
+
+
+            insertions.append(Element(chrom=chrom, start=start, end=end, family=None, subfamily=None, name=str(i), seqID=job.fileStore.writeGlobalFile(seqFasta), revCompSeqID=None, strand="+"))
+
             i = i + 1
     job.fileStore.logToMaster("Found %d insertions on branch" % len(insertions))
     return insertions
@@ -120,37 +125,46 @@ def getDistances(job, elements, args):
         subprocess.check_call(["pairwise_distances", "--kmerLength", "5", "--sequences", seqs], stdout=distancesWrite)
     return job.fileStore.writeGlobalFile(distances)
 
-def joinByDistance(job, distancesID, elements, threshold, args):
+def joinByDistance(job, distancesID, elements, threshold, args, subfamily=False):
     """Join candidate TE insertions into coarse families based on 
     Jaccard distance. TE insertions are transitively joined into 
     the same family if their distance is below the configured threshold.
     """
+
+    def complementName(name):
+        return name + "-"
+
     distances = job.fileStore.readGlobalFile(distancesID)
     nameToElement = {element.name:element for element in elements}
 
     graph = networkx.Graph()
     for element in elements:
         graph.add_node(element.name)
+        graph.add_node(complementName(element.name))
     with open(distances, 'r') as distancesRead:
         for line in distancesRead:
-            i, j, dist = line.split()
+            i, j, dist, strand = line.split()
+            if strand == "-":
+                j = complementName(j)
             dist = float(dist)
-            logger.info("Distance %s %s: %f" % (i, j, dist))
             assert graph.has_node(i)
             assert graph.has_node(j)
             if dist > threshold:
-                graph.add_edge(i, j)
+                graph.add_edge(i, j, weight=dist)
     i = 0
     newElements = []
     for component in networkx.connected_components(graph):
         if len(component) < args.minClusterSize:
             continue
         for elementName in component:
-            if nameToElement[elementName].group == "":
-                nameToElement[elementName].group = i
+            if elementName.endswith("-"):
+                elementName = elementName[:-1]
+                strand = "-"
             else:
-                nameToElement[elementName].group = nameToElement[elementName].group + ("_%d" % i)
-            newElements.append(nameToElement[elementName])
+                strand = "+"
+
+            oldElement = nameToElement[elementName]
+            newElements.append(Element(chrom=oldElement.chrom, start=oldElement.start, end=oldElement.end, family=i, subfamily=oldElement.subfamily, name=oldElement.name, seqID=oldElement.seqID, revCompSeqID=oldElement.revCompSeqID, strand=strand))
         i = i + 1
 
     return newElements
@@ -161,7 +175,12 @@ def writeGFF(job, elements):
     gff = job.fileStore.getLocalTempFile()
     with open(gff, 'w') as gffWrite:
         for element in elements:
-            gffWrite.write("%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n" % (element.chrom, "cactus_repeat_annotation", element.name, element.start, element.end, 0, '+', '.', element.group))
+            if element.subfamily:
+                family = "%s_%s" % (element.family, element.subfamily)
+            else:
+                family = element.family
+
+            gffWrite.write("%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n" % (element.chrom, "cactus_repeat_annotation", element.name, element.start, element.end, 0, element.strand, '.', element.family))
     return job.fileStore.writeGlobalFile(gff)
 
 def readGFF(job, halID, gffID, args):
@@ -170,25 +189,38 @@ def readGFF(job, halID, gffID, args):
     hal = job.fileStore.readGlobalFile(halID)
     with open(gff, 'r') as gffRead:
         for line in gffRead:
-            chrom, source, name, start, end, score, strand, a, group = line.split()
+            chrom, source, name, start, end, score, strand, a, family = line.split()
 
             fastaLines = getFastaSequence(hal=hal, chrom=chrom, start=int(start), end=int(end), args=args)
+
 
             #Replace chromosome with name
             fastaLines[0] = ">%s" % name
             seqFile = job.fileStore.getLocalTempFile()
             with open(seqFile, 'w') as seqFileWrite:
                 seqFileWrite.write("\n".join(fastaLines))
-            elements.append(Element(chrom=chrom, name=name, start=int(start), end=int(end), group=group, seqID=job.fileStore.writeGlobalFile(seqFile)))
+
+            revCompSeqFile = job.fileStore.getLocalTempFile()
+            with open(revCompSeqFile, 'w') as seqFileWrite:
+                seqFileWrite.write(">%s\n" % name)
+                seqFileWrite.write(reverseComplement("\n".join(fastaLines)))
+                seqFileWrite.write("\n")
+
+            elements.append(Element(chrom=chrom, name=name, start=int(start), end=int(end), family=family, subfamily=None, seqID=job.fileStore.writeGlobalFile(seqFile), revCompSeqID=job.fileStore.writeGlobalFile(revCompSeqFile), strand=strand))
     return elements
 
 ####Partial order alignment###########
 
-def runPoa(job, elements, heaviestBundle, args):
-    logger.info("Aligning group with %d elements" % len(elements))
+def runPoa(job, elements, heaviestBundle, familyNumber, args):
+    logger.info("Aligning family with %d elements" % len(elements))
     logger.info("Elements: %s" % [element.name for element in elements])
     seqs = job.fileStore.getLocalTempFile()
-    seqFiles = [job.fileStore.readGlobalFile(element.seqID) for element in elements]
+    seqFiles = []
+    for element in elements:
+        if element.strand == "+":
+            seqFiles.append(job.fileStore.readGlobalFile(element.seqID))
+        elif element.strand == "-":
+            seqFiles.append(job.fileStore.readGlobalFile(element.revCompSeqID))
 
     catFiles(seqFiles, seqs)
 
@@ -198,6 +230,14 @@ def runPoa(job, elements, heaviestBundle, args):
     if heaviestBundle:
         cmd.extend(["-hb", "-hbmin", str(args.heaviestBundlingThreshold)])
     subprocess.check_call(cmd)
+
+    #Store the graph for debugging
+    if args.graphsDir:
+        if not os.path.isdir(args.graphsDir):
+            os.mkdir(args.graphsDir)
+        shutil.copyfile(graph, os.path.join(args.graphsDir, "%d.po" % int(familyNumber)))
+        shutil.copyfile(seqs, os.path.join(args.graphsDir, "%d.fa" % int(familyNumber)))
+
     return job.fileStore.writeGlobalFile(graph)
 
 def updateElements(job, elements, partitioning):
@@ -209,7 +249,7 @@ def updateElements(job, elements, partitioning):
     for i, partition in enumerate(partitioning):
         for elementName in partition:
             element = nameToElement[elementName]
-            element.group = element.group + "_%d" % i
+            element.family = element.family + "_%d" % i
             updatedElements.append(element)
     return updatedElements
 
@@ -233,7 +273,7 @@ def runTreeBuilding(job, graphID, args):
     partitioning = treeBuilding.getLeafPartitioning(tree)
 
     return partitioning
-
+    
 def getAlignmentDistances(job, graphID, args):
     graph = job.fileStore.readGlobalFile(graphID)
     distances = job.fileStore.getLocalTempFile()
@@ -274,44 +314,22 @@ def runNeighborJoining(job, elements, graphID, args):
 def buildSubfamilies(job, elements, args):
     families = {}
     for element in elements:
-        if element.group not in families:
-            families[element.group] = []
-        families[element.group].append(element)
+        if element.family not in families:
+            families[element.family] = []
+        families[element.family].append(element)
 
     updatedElements = []
     for family in families:
         elementsInFamily = families[family]
-        if args.heaviestBundling:
-            poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, heaviestBundle=True, args=args)
-            partitioningJob = Job.wrapJobFn(parseHeaviestBundles, graphID=poaJob.rv())
-            job.addChild(poaJob)
-            poaJob.addFollowOn(partitioningJob)
+        poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, heaviestBundle=False, familyNumber=family, args=args)
 
-        elif args.partialOrderTreeBuilding:
-            poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, heaviestBundle=False, args=args)
-            partitioningJob = Job.wrapJobFn(runTreeBuilding, graphID=poaJob.rv(), args=args)
-            job.addChild(poaJob)
-            poaJob.addFollowOn(partitioningJob)
+        alignmentDistancesJob = Job.wrapJobFn(getAlignmentDistances, graphID=poaJob.rv(), args=args)
+        joinByDistanceJob = Job.wrapJobFn(joinByDistance, distancesID=alignmentDistancesJob.rv(), elements=elementsInFamily, threshold=args.alignmentDistanceThreshold, args=args)
 
-        elif args.neighborJoining:
-            poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, heaviestBundle=False, args=args)
-            partitioningJob = Job.wrapJobFn(runNeighborJoining, elements=elementsInFamily, graphID=poaJob.rv(), args=args)
-            job.addChild(poaJob)
-            poaJob.addFollowOn(partitioningJob)
-            updateElementsJob = Job.wrapJobFn(updateElements, elements=elementsInFamily, partitioning=partitioningJob.rv())
-
-            partitioningJob.addFollowOn(updateElementsJob)
-            updatedElements.append(updateElementsJob.rv())
-
-        elif args.alignmentDistance:
-            poaJob = Job.wrapJobFn(runPoa, elements=elementsInFamily, heaviestBundle=False, args=args)
-            alignmentDistancesJob = Job.wrapJobFn(getAlignmentDistances, graphID=poaJob.rv(), args=args)
-            joinByDistanceJob = Job.wrapJobFn(joinByDistance, distancesID=alignmentDistancesJob.rv(), elements=elementsInFamily, threshold=args.alignmentDistanceThreshold, args=args)
-            job.addChild(poaJob)
-            poaJob.addFollowOn(alignmentDistancesJob)
-            alignmentDistancesJob.addFollowOn(joinByDistanceJob)
-            updatedElements.append(joinByDistanceJob.rv())
-
+        job.addChild(poaJob)
+        poaJob.addFollowOn(alignmentDistancesJob)
+        alignmentDistancesJob.addFollowOn(joinByDistanceJob)
+        updatedElements.append(joinByDistanceJob.rv())
 
     return job.addFollowOnJobFn(flatten, updatedElements).rv()
 
@@ -322,7 +340,7 @@ def addRepeatAnnotatorOptions(parser):
     parser.add_argument("--maxNFraction", type=float, default=0.1)
 
     parser.add_argument("--kmerLength", type=int, default=10)
-    parser.add_argument("--distanceThreshold", type=float, default=0.2)
+    parser.add_argument("--distanceThreshold", type=float, default=0.7)
     parser.add_argument("--minClusterSize", type=int, default=1)
 
     parser.add_argument("--maxInsertions", type=int, default=0)
@@ -335,7 +353,7 @@ def addRepeatAnnotatorOptions(parser):
     #POA default is 0.9, which leaves most sequences un-bundled
     parser.add_argument("--heaviestBundlingThreshold", type=float, default=0.5)
 
-    parser.add_argument("--alignmentDistanceThreshold", type=float, default=0.8)
+    parser.add_argument("--alignmentDistanceThreshold", type=float, default=0.7)
 
 def main():
     parser = argparse.ArgumentParser()

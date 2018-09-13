@@ -40,7 +40,11 @@ int main(int argc, char **argv) {
 			int len_j = graph->source_seq[j].length;
 			double p = 2*N/(double)(len_i + len_j);
 
-			printf("%s %s %f\n", graph->source_seq[i].name, graph->source_seq[j].name, p);
+            //Handle correctly later
+            char strand = '+';
+
+			printf("%s %s %f %c\n", graph->source_seq[i].name, graph->source_seq[j].name, p, strand);
 		}
 	}
+
 }

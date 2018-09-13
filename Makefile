@@ -9,7 +9,7 @@ cpp=g++
 objs=PairwiseDistances.o
 sources=impl/PairwiseDistances.cpp
 
-all: ./bin/pairwise_distances ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/maximizeOverlaps ./bin/getAlignmentDistances ./bin/getThreadPartitions ./bin/tests
+all: ./bin/pairwise_distances ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/maximizeOverlaps ./bin/getAlignmentDistances ./bin/getThreadPartitions ./bin/tests ./bin/poToGraphViz
 
 ${objs}: ${sources} sonLib/lib/sonLib.a
 	g++ -I sonLib/lib -I smhasher/src -c ${sources}
@@ -19,6 +19,10 @@ ${objs}: ${sources} sonLib/lib/sonLib.a
 
 ./bin/pairwise_distances: impl/PairwiseDistancesMain.cpp ${PWD}/sonLib/lib/sonLib.a ${objs}
 	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -I smhasher/src -I hal/lib -I sonLib/lib -o ./bin/pairwise_distances impl/PairwiseDistancesMain.cpp ${murmurHashSources} ${objs} sonLib/lib/sonLib.a
+
+./bin/poToGraphViz: impl/poToGraphViz.c ${PWD}/poaV2/liblpo.a ${PWD}/sonLib/lib/sonLib.a
+	gcc -g -o bin/poToGraphViz -I poaV2/ -I sonLib/lib impl/poToGraphViz.c ${PWD}/poaV2/liblpo.a ${PWD}/sonLib/lib/sonLib.a -lm
+
 
 ./bin/neighborJoining: impl/neighborJoining.c ${PWD}/sonLib/lib/sonLib.a
 	gcc -g -o bin/neighborJoining -I sonLib/lib impl/neighborJoining.c ${PWD}/sonLib/lib/sonLib.a -lm
