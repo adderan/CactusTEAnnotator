@@ -4,11 +4,10 @@ import subprocess
 
 
 setup(
-    name="repeatAnnotator",
+    name="CactusTEAnnotator",
     version="1.0",
     author="Alden Deran",
-    package_dir = {'': 'src'},
-    packages=find_packages(where='src'),
+    packages=find_packages(where='.'),
     include_package_data=True,
     # We use the __file__ attribute so this package isn't zip_safe.
     zip_safe=False,
@@ -16,4 +15,4 @@ setup(
     install_requires=['networkx', 'multiset'],
     
     entry_points={
-        'console_scripts': ['repeatAnnotator = RepeatAnnotator.repeatAnnotator:main', 'buildSubfamilies = RepeatAnnotator.buildSubfamilies:main', 'treeBuilding = RepeatAnnotator.treeBuilding:main', 'scoreGFF = RepeatAnnotator.ari:main']})
+        'console_scripts': ['CactusTEAnnotator = CactusTEAnnotator.findRepeats:main', 'buildSubfamilies = CactusTEAnnotator.buildSubfamilies:main', 'treeBuilding = CactusTEAnnotator.treeBuilding:main', 'scoreGFF = CactusTEAnnotator.ari:main']})

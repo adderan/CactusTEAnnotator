@@ -5,7 +5,7 @@ from sonLib.bioio import getTempDirectory
 from toil.job import Job
 from toil.common import Toil
 
-from RepeatAnnotator.repeatAnnotator import makeURL, runPoa, runTreeBuilding, getRootPath, Element, getDistances, joinByDistance
+from CactusTEAnnotator.repeatAnnotator import makeURL, runPoa, runTreeBuilding, getRootPath, Element, getDistances, joinByDistance
 
 fastaTestFile = """
 >seq1

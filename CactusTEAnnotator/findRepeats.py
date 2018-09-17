@@ -10,7 +10,7 @@ from sonLib.bioio import fastaRead, fastaWrite, catFiles, reverseComplement
 from toil.lib.bioio import logger
 import networkx
 
-import RepeatAnnotator.treeBuilding as treeBuilding
+import CactusTEAnnotator.treeBuilding as treeBuilding
 from sonLib.nxnewick import NXNewick
 
 def catFiles(fileList, target):
@@ -41,8 +41,8 @@ def getFastaSequence(hal, chrom, start, end, args):
     return fastaLines
 
 def getRootPath():
-    import RepeatAnnotator
-    i = os.path.abspath(RepeatAnnotator.__file__)
+    import CactusTEAnnotator
+    i = os.path.abspath(CactusTEAnnotator.__file__)
     return os.path.split(i)[0]
 
 def highNFraction(seqs):
@@ -125,7 +125,7 @@ def getDistances(job, elements, args):
         subprocess.check_call(["pairwise_distances", "--kmerLength", "5", "--sequences", seqs], stdout=distancesWrite)
     return job.fileStore.writeGlobalFile(distances)
 
-def joinByDistance(job, distancesID, elements, threshold, args, subfamily=False):
+def joinByDistance(job, distancesID, elements, threshold, args):
     """Join candidate TE insertions into coarse families based on 
     Jaccard distance. TE insertions are transitively joined into 
     the same family if their distance is below the configured threshold.
@@ -164,7 +164,15 @@ def joinByDistance(job, distancesID, elements, threshold, args, subfamily=False)
                 strand = "+"
 
             oldElement = nameToElement[elementName]
-            newElements.append(Element(chrom=oldElement.chrom, start=oldElement.start, end=oldElement.end, family=i, subfamily=oldElement.subfamily, name=oldElement.name, seqID=oldElement.seqID, revCompSeqID=oldElement.revCompSeqID, strand=strand))
+
+            if by_subfamilies:
+                family = i
+                subfamily = oldElement.subfamily
+            elif not by_subfamilies:
+                family = oldElement.family
+                subfamily = i
+                
+            newElements.append(Element(chrom=oldElement.chrom, start=oldElement.start, end=oldElement.end, family=family, subfamily=subfamily, name=oldElement.name, seqID=oldElement.seqID, revCompSeqID=oldElement.revCompSeqID, strand=strand))
         i = i + 1
 
     return newElements

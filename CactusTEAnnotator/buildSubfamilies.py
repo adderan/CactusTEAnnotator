@@ -3,7 +3,7 @@ import os
 from toil.common import Toil
 from toil.job import Job
 
-from RepeatAnnotator.repeatAnnotator import addRepeatAnnotatorOptions, readGFF, writeGFF, buildSubfamilies, buildSubfamilies, makeURL, getRootPath
+from CactusTEAnnotator.repeatAnnotator import addRepeatAnnotatorOptions, readGFF, writeGFF, buildSubfamilies, buildSubfamilies, makeURL, getRootPath
 
 def buildSubfamilesFromGFF(job, gffID, halID, args):
     readGFFJob = Job.wrapJobFn(readGFF, halID=halID, gffID=gffID, args=args)
