@@ -40,7 +40,7 @@ ${PWD}/sonLib/lib/sonLib.a:
 	cd ${PWD}/sonLib/ && make
 
 ${PWD}/hdf5/bin/h5c++:
-	cd ${PWD}/hdf5 && ./configure --enable-cxx --prefix=${PWD}/hdf5 && CFLAGS=-std=c99 make -j4 -e && make install
+	cd ${PWD}/hdf5 && ./configure --enable-shared --enable-cxx --prefix=${PWD}/hdf5 && CFLAGS=-std=c98 make -j4 -e && make install
 
 ${PWD}/hal/lib/halLib.a: ${PWD}/hdf5/bin/h5c++ ${PWD}/sonLib/lib/sonLib.a
 	cd ${PWD}/hal && PATH=${PWD}/hdf5/bin:${PATH} make

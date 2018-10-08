@@ -98,11 +98,6 @@ double **getDistances(char **seqs, int numSeqs, int kmerLength, int numHashes) {
         }
     }
 
-	char **revSeqs = (char**)malloc(sizeof(char*)*numSeqs);
-	for (int i = 0; i < numSeqs; i++) {
-		revSeqs[i] = reverseComplement(seqs[i]);
-	}
-
     uint32_t p = (1 << 16) - 1;
     uint32_t *a = (uint32_t*) malloc(sizeof(uint32_t)*numHashes);
     uint32_t *b = (uint32_t*) malloc(sizeof(uint32_t)*numHashes);
@@ -114,23 +109,14 @@ double **getDistances(char **seqs, int numSeqs, int kmerLength, int numHashes) {
     uint32_t **minhashValues = 
 		precompute_minhash(seqs, numSeqs, kmerLength, numHashes, a, b, p);
 
-	uint32_t **revMinhashValues = 
-		precompute_minhash(revSeqs, numSeqs, kmerLength, numHashes, a, b, p);
-
 	double **distances = (double**) malloc(sizeof(double*) * numSeqs);
     for (int i = 0; i < numSeqs; i++) {
 		distances[i] = (double*) malloc(sizeof(double) * numSeqs);
         for (int j = 0; j < i; j++) {
             //cerr << "seq = " << string((char*)sequences->list[i]) << endl;
             double dist = minhashJaccard(minhashValues[i], minhashValues[j], numHashes);
-			double revDist = minhashJaccard(minhashValues[i], revMinhashValues[j], numHashes);
 
-			if (dist > revDist) {
-				distances[i][j] = dist;
-			}
-			else {
-				distances[i][j] = -1*revDist;
-			}
+			distances[i][j] = dist;
         }
     }
 	return distances;

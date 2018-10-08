@@ -22,15 +22,13 @@ def catFiles(fileList, target):
                 targetWrite.write("\n")
 
 class Element:
-    def __init__(self, chrom, start, end, family, subfamily, name, seqID, revCompSeqID, strand):
+    def __init__(self, chrom, start, end, family, name, seqID, strand):
         self.chrom = chrom
         self.start = start
         self.end = end
         self.family = family
-        self.subfamily = None
         self.name = name
         self.seqID = seqID
-        self.revCompSeqID = revCompSeqID
         self.strand = strand
 
 def makeURL(path):
@@ -59,17 +57,20 @@ def annotateInsertions(job, halID, args):
     """Produce a set of TE annotations for one branch of a Cactus alignment.
         """
     getInsertionsJob = Job.wrapJobFn(getInsertions, halID=halID, args = args)
-    job.addChild(getInsertionsJob)
     insertions = getInsertionsJob.rv()
 
     getDistancesJob = Job.wrapJobFn(getDistances, elements=insertions, args=args)
-    getInsertionsJob.addFollowOn(getDistancesJob)
 
     joinByDistanceJob = Job.wrapJobFn(joinByDistance, distancesID=getDistancesJob.rv(), elements=insertions, threshold=args.distanceThreshold, args=args)
-    getDistancesJob.addFollowOn(joinByDistanceJob)
+    updateElementsJob = Job.wrapJobFn(updateElements, elements=insertions, partitioning=joinByDistanceJob.rv())
 
     writeGFFJob = Job.wrapJobFn(writeGFF, elements=joinByDistanceJob.rv())
-    joinByDistanceJob.addFollowOn(writeGFFJob)
+
+    job.addChild(getInsertionsJob)
+    getInsertionsJob.addFollowOn(getDistancesJob)
+    getDistancesJob.addFollowOn(joinByDistanceJob)
+    joinByDistanceJob.addFollowOn(updateElementsJob)
+    updateElementsJob.addFollowOn(writeGFFJob)
 
     return writeGFFJob.rv()
 
@@ -109,8 +110,19 @@ def getInsertions(job, halID, args):
                 seqFastaWrite.write("\n".join(fastaLines[1:]))
                 seqFastaWrite.write("\n")
 
+            revCompSeqFile = job.fileStore.getLocalTempFile()
+            with open(revCompSeqFile, 'w') as seqFileWrite:
+                seqFileWrite.write(">%d\n" % i)
+                seqFileWrite.write(reverseComplement("\n".join(fastaLines)))
+                seqFileWrite.write("\n")
 
-            insertions.append(Element(chrom=chrom, start=start, end=end, family=None, subfamily=None, name=str(i), seqID=job.fileStore.writeGlobalFile(seqFasta), revCompSeqID=None, strand="+"))
+            forward = Element(chrom=chrom, start=start, end=end, family=None, name=str(i), seqID=job.fileStore.writeGlobalFile(seqFasta), strand="+")
+            backward = Element(chrom=chrom, start=start, end=end, family=None, name="%d_comp", seqID=job.fileStore.writeGlobalFile(revCompSeqFile), strand="-")
+
+            forward.reverseName = backward.name
+            backward.reverseName = forward.name
+            insertions.append(forward)
+            insertions.append(backward)
 
             i = i + 1
     job.fileStore.logToMaster("Found %d insertions on branch" % len(insertions))
@@ -130,17 +142,12 @@ def joinByDistance(job, distancesID, elements, threshold, args):
     Jaccard distance. TE insertions are transitively joined into 
     the same family if their distance is below the configured threshold.
     """
-
-    def complementName(name):
-        return name + "-"
-
     distances = job.fileStore.readGlobalFile(distancesID)
     nameToElement = {element.name:element for element in elements}
 
     graph = networkx.Graph()
     for element in elements:
         graph.add_node(element.name)
-        graph.add_node(complementName(element.name))
     with open(distances, 'r') as distancesRead:
         for line in distancesRead:
             i, j, dist, strand = line.split()
@@ -149,33 +156,19 @@ def joinByDistance(job, distancesID, elements, threshold, args):
             dist = float(dist)
             assert graph.has_node(i)
             assert graph.has_node(j)
+
+            #don't link element to its reverse complement
+            if nameToElement[i].name == nameToElement[j].revName:
+                continue
             if dist > threshold:
-                graph.add_edge(i, j, weight=dist)
-    i = 0
-    newElements = []
+                graph.add_edge(i, j)
+    partitioning = []
     for component in networkx.connected_components(graph):
         if len(component) < args.minClusterSize:
             continue
-        for elementName in component:
-            if elementName.endswith("-"):
-                elementName = elementName[:-1]
-                strand = "-"
-            else:
-                strand = "+"
+        partitioning.append(frozenset(component))
 
-            oldElement = nameToElement[elementName]
-
-            if by_subfamilies:
-                family = i
-                subfamily = oldElement.subfamily
-            elif not by_subfamilies:
-                family = oldElement.family
-                subfamily = i
-                
-            newElements.append(Element(chrom=oldElement.chrom, start=oldElement.start, end=oldElement.end, family=family, subfamily=subfamily, name=oldElement.name, seqID=oldElement.seqID, revCompSeqID=oldElement.revCompSeqID, strand=strand))
-        i = i + 1
-
-    return newElements
+    return frozenset(partitioning)
 
 def writeGFF(job, elements):
     """Write a set of TE annotations in GFF format.
@@ -183,11 +176,6 @@ def writeGFF(job, elements):
     gff = job.fileStore.getLocalTempFile()
     with open(gff, 'w') as gffWrite:
         for element in elements:
-            if element.subfamily:
-                family = "%s_%s" % (element.family, element.subfamily)
-            else:
-                family = element.family
-
             gffWrite.write("%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n" % (element.chrom, "cactus_repeat_annotation", element.name, element.start, element.end, 0, element.strand, '.', element.family))
     return job.fileStore.writeGlobalFile(gff)
 
@@ -257,7 +245,10 @@ def updateElements(job, elements, partitioning):
     for i, partition in enumerate(partitioning):
         for elementName in partition:
             element = nameToElement[elementName]
-            element.family = element.family + "_%d" % i
+            if element.family is None:
+                element.family = str(i)
+            else:
+                element.family = element.family + "_%d" % i
             updatedElements.append(element)
     return updatedElements
 
