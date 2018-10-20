@@ -13,11 +13,12 @@ class Feature:
         self.family = family
 
 class Element:
-    def __init__(self, name, refName, family, refFamily):
+    def __init__(self, name, refName, family, refFamily, overlap_fraction):
         self.name = name
         self.refName = refName
         self.family = family
         self.refFamily = refFamily
+        self.overlap_fraction = overlap_fraction
 
 def readGff(gff):
     features = {}
@@ -52,22 +53,8 @@ def readRmaskGff(gff):
         features[chrom].append(Feature(chrom=chrom, start=int(start), end=int(end), name=transcriptID, family=geneID))
     return(features)
 
-def overlap(f1, f2):
-    assert f1.start < f1.end
-    assert f2.start < f2.end
-    assert f1.chrom == f2.chrom
 
-    if (f1.start <= f2.end) and (f2.start <= f1.end):
-        #Overlap
-        return 0
-    elif f1.start < f2.start:
-        #No overlap and f1 occurs before f2
-        return -1
-    else:
-        #No overlap and f1 occurs after f2
-        return 1
-
-def findIntersectionEfficient(features, refFeatures):
+def findIntersectionEfficient(features, refFeatures, args):
     elements = []
     for chrom in features:
         if chrom not in refFeatures:
@@ -78,23 +65,35 @@ def findIntersectionEfficient(features, refFeatures):
         refFeatures[chrom].sort(key=lambda x: x.start)
 
         i = 0
-        for feature in features[chrom]:
-            if i >= len(refFeatures[chrom]):
-                break
+        j = 0
+        print("Finding intersection")
+        while i < len(features[chrom]) and j < len(refFeatures[chrom]):
+            f1 = features[chrom][i]
+            f2 = refFeatures[chrom][j]
 
-            while overlap(feature, refFeatures[chrom][i]) > 0:
+            #move to beginning of first overlap
+            while f1.end < f2.start and (i + 1 < len(features[chrom])):
                 i = i + 1
-                if i >= len(refFeatures[chrom]):
-                    break
-            if i >= len(refFeatures[chrom]):
-                break
+                print("Skipping feature %s" % f1.name)
+                f1 = features[chrom][i]
+            while f2.end < f1.start and j + 1 < (len(refFeatures[chrom])):
+                j = j + 1
+                print("Skipping feature %s" % f2.name)
+                f2 = refFeatures[chrom][j]
 
-            if overlap(feature, refFeatures[chrom][i]) == 0:
-                #print "Found overlap betwen " + feature.name + " and " + refFeatures[chrom][i].name
-                elements.append(Element(name=feature.name, refName=refFeatures[chrom][i].name, family=feature.family, refFamily=refFeatures[chrom][i].family))
-                #print("Found overlapping feature %d %d and %s" % (len(elements), i, refFeatures[chrom][i].name))
-                #print("%d %d" % (feature.start, feature.end))
-                #print("%d %d" % (refFeatures[chrom][i].start, refFeatures[chrom][i].end))
+            if (f1.start <= f2.end) and (f2.start <= f1.end):
+                #overlap
+                overlap_fraction = (min(f1.end, f2.end) - max(f1.start, f2.start))/float(f2.end - f2.start)
+                if overlap_fraction > args.minOverlap:
+                    print("Found overlapping features %s %s" % (f1.name, f2.name))
+                    elements.append(Element(name=f1.name, refName=f2.name, family=f1.family, refFamily=f2.family, overlap_fraction = overlap_fraction))
+                    i = i + 1
+                    j = j + 1
+                    continue
+            if f1.start < f2.start:
+                i = i + 1
+            else:
+                j = j + 1
 
     return(elements)
 
@@ -117,7 +116,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--rmask", type=file)
     parser.add_argument("--features", type=file)
-    parser.add_argument("--minOverlap", type=int, default=100)
+    parser.add_argument("--minOverlap", type=int, default=0.6)
     args = parser.parse_args()
 
     
@@ -128,10 +127,10 @@ def main():
     #print("Found %d chromosomes" % len(features))
     #print("Found %d chromosomes in reference" % len(refFeatures))
     
-    elements = findIntersectionEfficient(features, refFeatures)
+    elements = findIntersectionEfficient(features, refFeatures, args)
 
     for element in elements:
-        print("%s\t%s\t%s\t%s\n" % (element.family, element.refFamily, element.refName, element.name))
+        print("%s\t%s\t%s\t%s\t%f\n" % (element.family, element.refFamily, element.refName, element.name, element.overlap_fraction))
 
     #print("Found %d elements" % len(elements))
     #Calculate rand index

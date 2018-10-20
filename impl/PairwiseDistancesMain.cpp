@@ -61,15 +61,7 @@ int main(int argc, char **argv) {
 
 	for (int i = 0; i < sequences->length; i++) {
 		for (int j = 0; j < i; j++) {
-
-			if (distances[i][j] > 0.0) {
-				printf("%s %s %f %c\n", seqNames->list[i], seqNames->list[j], distances[i][j], '+');
-			}
-
-			else {
-				printf("%s %s %f %c\n", seqNames->list[i], seqNames->list[j], -1.0 * distances[i][j], '-');
-			}
-
+			printf("%s %s %f\n", seqNames->list[i], seqNames->list[j], distances[i][j]);
 		}
 	}
 }

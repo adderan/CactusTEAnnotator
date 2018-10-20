@@ -24,26 +24,6 @@ uint32_t hashKmer(char *seq, int length) {
     return *(uint32_t*)data;
 }
 
-char *reverseComplement(char *seq) {
-	char *reverse = (char*) malloc(sizeof(char)*strlen(seq));
-	for (int i = 0; i < strlen(seq); i++) {
-		char base = seq[strlen(seq) - i - 1];
-		if (base == 'A') {
-			reverse[i] = 'T';
-		}
-		else if (base == 'T') {
-			reverse[i] = 'A';
-		}
-		else if (base == 'G') {
-			reverse[i] = 'C';
-		}
-		else if (base == 'C') {
-			reverse[i] = 'G';
-		}
-
-	}
-	return reverse;
-}
 
 uint32_t **precompute_minhash(char **seqs, int numSeqs, int kmerLength, int numHashes, uint32_t *a, uint32_t *b, uint32_t p) {
     uint32_t **minhashValues = (uint32_t**)malloc(sizeof(uint32_t*)*numSeqs);
