@@ -13,12 +13,11 @@ class Feature:
         self.family = family
 
 class Element:
-    def __init__(self, name, refName, family, refFamily, overlap_fraction):
+    def __init__(self, name, refName, family, refFamily):
         self.name = name
         self.refName = refName
         self.family = family
         self.refFamily = refFamily
-        self.overlap_fraction = overlap_fraction
 
 def readGff(gff):
     features = {}
@@ -83,10 +82,11 @@ def findIntersectionEfficient(features, refFeatures, args):
 
             if (f1.start <= f2.end) and (f2.start <= f1.end):
                 #overlap
-                overlap_fraction = (min(f1.end, f2.end) - max(f1.start, f2.start))/float(f2.end - f2.start)
-                if overlap_fraction > args.minOverlap:
+                overlap_fraction_f2 = (min(f1.end, f2.end) - max(f1.start, f2.start))/float(f2.end - f2.start)
+                overlap_fraction_f1 = (min(f1.end, f2.end) - max(f1.start, f2.start))/float(f1.end - f1.start)
+                if overlap_fraction_f1 > args.minOverlap and overlap_fraction_f2 > args.minOverlap:
                     print("Found overlapping features %s %s" % (f1.name, f2.name))
-                    elements.append(Element(name=f1.name, refName=f2.name, family=f1.family, refFamily=f2.family, overlap_fraction = overlap_fraction))
+                    elements.append(Element(name=f1.name, refName=f2.name, family=f1.family, refFamily=f2.family))
                     i = i + 1
                     j = j + 1
                     continue
@@ -130,7 +130,7 @@ def main():
     elements = findIntersectionEfficient(features, refFeatures, args)
 
     for element in elements:
-        print("%s\t%s\t%s\t%s\t%f\n" % (element.family, element.refFamily, element.refName, element.name, element.overlap_fraction))
+        print("%s\t%s\t%s\t%s\n" % (element.family, element.refFamily, element.refName, element.name))
 
     #print("Found %d elements" % len(elements))
     #Calculate rand index

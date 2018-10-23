@@ -17,6 +17,7 @@ int main(int argc, char **argv) {
     char *sequencesFilename = NULL;
     int kmerLength = 10;
     int numHashes = 200;
+    bool exact = false;
 
     /*
      * Parse the options.
@@ -27,6 +28,7 @@ int main(int argc, char **argv) {
             { "sequences", required_argument, 0, 'a' }, 
             { "kmerLength", required_argument, 0, 'b' }, 
             { "numHashes", required_argument, 0, 'c'},
+            { "exact", no_argument, 0, 'd'},
             { 0, 0, 0, 0 } };
 
         int option_index = 0;
@@ -45,6 +47,13 @@ int main(int argc, char **argv) {
                 i = sscanf(optarg, "%d", &kmerLength);
                 assert(i == 1);
                 break;
+            case 'c':
+                i = sscanf(optarg, "%d", &numHashes);
+                assert(i == 1);
+                break;
+            case 'd':
+                exact = true;
+                break;
             default:
                 return 1;
         }
@@ -57,7 +66,13 @@ int main(int argc, char **argv) {
     fastaRead(sequencesFile, sequences, seqLengths, seqNames);
     cerr << "Read " << seqLengths->length << " sequences" << endl;
 
-	double **distances = getDistances((char**)sequences->list, sequences->length, kmerLength, numHashes);
+    double **distances;
+    if (exact) {
+        distances = getDistancesExact((char**)sequences->list, sequences->length, kmerLength);
+    }
+    else {
+	    distances = getDistances((char**)sequences->list, sequences->length, kmerLength, numHashes);
+    }
 
 	for (int i = 0; i < sequences->length; i++) {
 		for (int j = 0; j < i; j++) {

@@ -13,7 +13,70 @@
 
 
 using namespace std;
-//using namespace boost::numeric::ublas;
+
+void toUpperCase(char **seqs, int numSeqs) {
+    for (int i = 0; i < numSeqs; i++) {
+        char *seq = seqs[i];
+        for (int k = 0; k < strlen(seq); k++) {
+            seq[k] = (char)toupper(seq[k]);
+        }
+    }
+}
+
+
+double **getDistancesExact(char **sequences, int numSeqs, int kmerLength) {
+    toUpperCase(sequences, numSeqs);
+    double **distances = (double**) malloc(sizeof(double*) * numSeqs);
+    for (int i = 0; i < numSeqs; i++) {
+        distances[i] = (double*) malloc(sizeof(double) * numSeqs);
+        for (int j = 0; j < i; j++) {
+            distances[i][j] = exactJaccardDistance(sequences[i], sequences[j], kmerLength);
+        }
+    }
+    return distances;
+}
+
+double exactJaccardDistance(char *a, char*b, int kmerLength) {
+    stSet *sharedKmers = stSet_construct();
+    stSet *totalKmers = stSet_construct();
+
+    for (int i = 0; i < strlen(a) - kmerLength; i++) {
+        uint32_t hash = hashKmer(a + i, kmerLength);
+        stSet_insert(totalKmers, (void*)hash);
+    }
+    for (int i = 0; i < strlen(b) - kmerLength; i++) {
+        uint32_t hash = hashKmer(b + i, kmerLength);
+        stSet_insert(totalKmers, (void*)hash);
+    }
+
+    int nSharedKmers = 0;
+    for (int i = 0; i < strlen(a) - kmerLength; i++) {
+        for (int j = 0; j < strlen(b) - kmerLength; j++) {
+            if (strncmp(a + i, b + j, kmerLength) == 0) {
+                /*
+                fprintf(stderr, "A = ");
+                for (int k = 0; k < kmerLength; k++) {
+                    fprintf(stderr, "%c", a[i+k]);
+                }
+                fprintf(stderr, "\n");
+                fprintf(stderr, "B = ");
+                for (int k = 0; k < kmerLength; k++) {
+                    fprintf(stderr, "%c", b[j+k]);
+                }
+                fprintf(stderr, "\n\n");
+                */
+                nSharedKmers += 2;
+                uint32_t hash = hashKmer(a + i, kmerLength);
+                stSet_insert(sharedKmers, (void*)hash);
+                break;
+            }
+        }
+    }
+    fprintf(stderr, "distance = %f\n", nSharedKmers/((double)(strlen(a) - kmerLength) + (double)(strlen(b) - kmerLength)));
+    fprintf(stderr, "Shared kmers %d\n", stSet_size(sharedKmers));
+    fprintf(stderr, "Total kmers %d\n", stSet_size(totalKmers));
+    return 2*stSet_size(sharedKmers)/(double)stSet_size(totalKmers);
+}
 
 uint32_t hashKmer(char *seq, int length) {
     for (int i = 0; i < length; i++) {
@@ -70,14 +133,7 @@ double minhashJaccard(uint32_t *values_a, uint32_t *values_b, int numHashes) {
 
 double **getDistances(char **seqs, int numSeqs, int kmerLength, int numHashes) {
 
-    //convert to uppercase
-    for (int i = 0; i < numSeqs; i++) {
-        char *seq = seqs[i];
-        for (int k = 0; k < strlen(seq); k++) {
-            seq[k] = (char)toupper(seq[k]);
-        }
-    }
-
+    toUpperCase(seqs, numSeqs);
     uint32_t p = (1 << 16) - 1;
     uint32_t *a = (uint32_t*) malloc(sizeof(uint32_t)*numHashes);
     uint32_t *b = (uint32_t*) malloc(sizeof(uint32_t)*numHashes);
