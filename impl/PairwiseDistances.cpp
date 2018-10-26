@@ -6,15 +6,21 @@
 #include <set>
 #include <algorithm>
 
-#include "sonLib.h"
-#include "bioioC.h"
-#include "commonC.h"
 #include "MurmurHash3.h"
+#include <boost/math/distributions/binomial.hpp>
 
 #include "PairwiseDistances.h"
 
+extern "C" {
+#include "sonLib.h"
+#include "bioioC.h"
+#include "commonC.h"
+
+}
+
 
 using namespace std;
+using namespace boost::math;
 
 void toUpperCase(char **seqs, int numSeqs) {
     for (int i = 0; i < numSeqs; i++) {
@@ -34,17 +40,34 @@ uint32_t hashKmer(char *seq, int length) {
     return *(uint32_t*)data;
 }
 
+double jaccardPValue(int sharedKmers, int totalKmers, int a_length, int b_length, int kmerLength) {
+    if (sharedKmers == 0) {
+        return 1.0;
+    }
+    int alphabet_size = 4;
+    double kmerSpace = pow(alphabet_size, kmerLength);
 
-double **getDistancesExact(char **sequences, int numSeqs, int kmerLength) {
+    double px = 1.0 / (1.0 + kmerSpace/a_length);
+    double py = 1.0 / (1.0 + kmerSpace/b_length);
+
+    double r = px * py / (px + py  - px * py);
+    //cerr << "shared kmers = " << sharedKmers << endl;
+    //cerr << "total kmers = " << totalKmers << endl;
+    //cerr << "r = " << r << endl;
+
+    return cdf(complement(binomial(totalKmers, r), sharedKmers - 1));
+}
+
+vector<tuple<int, int, double> > getDistancesExact(char **sequences, int numSeqs, int kmerLength) {
     toUpperCase(sequences, numSeqs);
-    double **distances = (double**) malloc(sizeof(double*) * numSeqs);
+    vector<tuple<int, int, double> > pValues;
     for (int i = 0; i < numSeqs; i++) {
-        distances[i] = (double*) malloc(sizeof(double) * numSeqs);
         for (int j = 0; j < i; j++) {
-            distances[i][j] = exactJaccardDistance(sequences[i], sequences[j], kmerLength);
+            double pValue = exactJaccardDistance(sequences[i], sequences[j], kmerLength);
+            pValues.push_back(make_tuple(i, j, pValue));
         }
     }
-    return distances;
+    return pValues;
 }
 
 double exactJaccardDistance(char *a, char*b, int kmerLength) {
@@ -90,7 +113,7 @@ double exactJaccardDistance(char *a, char*b, int kmerLength) {
 }
 
 
-double minhashJaccard(vector<uint32_t> &a, vector<uint32_t> &b) {
+double minhashJaccard(vector<uint32_t> &a, vector<uint32_t> &b, int length_a, int length_b, int kmerLength) {
     int matches = 0;
     int total = 0;
     int i = 0, j = 0;
@@ -108,11 +131,56 @@ double minhashJaccard(vector<uint32_t> &a, vector<uint32_t> &b) {
         }
         total++;
     }
-
-    return (double) matches/(double) total;
+    return jaccardPValue(matches, total, length_a, length_b, kmerLength);
 }
 
-double **getDistances(char **seqs, int numSeqs, int kmerLength, int numHashes) {
+
+set<set<long> > buildClusters(vector<tuple<int, int, double> > &pValues, int nSeqs, double confidenceLevel) {
+
+    //sort sequence pairs by ascending p-value
+    sort(pValues.begin(), pValues.end(), [](tuple<int, int, double> a, tuple<int, int, double> b) {
+        return (get<2>(a) < get<2>(b));
+    });
+
+    stUnionFind *components = stUnionFind_construct();
+    for (int i = 0; i < nSeqs; i++) {
+        stUnionFind_add(components, (void*)i+1);
+    }
+    for (auto &t: pValues) {
+        int i = get<0>(t);
+        int j = get<1>(t);
+        double pValue = get<2>(t);
+
+        int64_t size_i = stUnionFind_getSize(components, (void*)i+1);
+        int64_t size_j = stUnionFind_getSize(components, (void*)j+1);
+
+        double adjustedThreshold = confidenceLevel/(size_i * size_j);
+        if (pValue < adjustedThreshold) {
+            stUnionFind_union(components, (void*) i+1, (void*) j+1);
+        }
+
+    }
+
+    set<set<long> > partitioning;
+    stUnionFindIt *it = stUnionFind_getIterator(components);
+    stSet *component;
+    while((component = stUnionFindIt_getNext(it)) != NULL) {
+        void *node;
+        stSetIterator *nodeIt = stSet_getIterator(component);
+        set<long> cluster;
+        while((node = stSet_getNext(nodeIt)) 
+                != NULL) {
+            cluster.insert((long)node - 1);
+        }
+        partitioning.insert(cluster);
+        stSet_destructIterator(nodeIt);
+    }
+    stUnionFind_destructIterator(it);
+    stUnionFind_destruct(components);
+    return partitioning;
+}
+
+vector<tuple<int, int, double> > getDistances(char **seqs, int numSeqs, int kmerLength, int numHashes) {
 
     toUpperCase(seqs, numSeqs);
 
@@ -127,16 +195,17 @@ double **getDistances(char **seqs, int numSeqs, int kmerLength, int numHashes) {
 
     }
 
-	double **distances = (double**) malloc(sizeof(double*) * numSeqs);
+    vector<tuple<int, int, double> > pValues;
     for (int i = 0; i < numSeqs; i++) {
-		distances[i] = (double*) malloc(sizeof(double) * numSeqs);
         for (int j = 0; j < i; j++) {
             //cerr << "seq = " << string((char*)sequences->list[i]) << endl;
-            double dist = minhashJaccard(sketches[i], sketches[j]);
+            double p = minhashJaccard(sketches[i], sketches[j], strlen(seqs[i]), strlen(seqs[j]), kmerLength);
 
-			distances[i][j] = dist;
+            pValues.push_back(make_tuple(i, j, p));
         }
     }
-	return distances;
+
+
+    return pValues;
 }
 

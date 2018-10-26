@@ -11,6 +11,8 @@
 
 using namespace std;
 
+/*
+
 void kmerDistanceTest() {
     int kmerLength = 3;
 	int numSeqs = 3;
@@ -43,8 +45,9 @@ void kmerDistanceTest() {
 	//a and c are reverse complements
 	assert(dist[2][0] == -1.0);
 }
+*/
 
 
 int main(int argc, char **argv) {
-    kmerDistanceTest();
+    //kmerDistanceTest();
 }

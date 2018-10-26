@@ -2,12 +2,17 @@
 #include <string>
 #include <stack>
 #include <iostream>
+#include <tuple>
 #include <getopt.h>
+#include <set>
 
+#include "MurmurHash3.h"
+
+extern "C" {
 #include "sonLib.h"
 #include "bioioC.h"
 #include "commonC.h"
-#include "MurmurHash3.h"
+}
 
 #include "PairwiseDistances.h"
 
@@ -18,6 +23,7 @@ int main(int argc, char **argv) {
     int kmerLength = 10;
     int numHashes = 200;
     bool exact = false;
+    double confidenceLevel = 0.05;
 
     /*
      * Parse the options.
@@ -28,12 +34,13 @@ int main(int argc, char **argv) {
             { "sequences", required_argument, 0, 'a' }, 
             { "kmerLength", required_argument, 0, 'b' }, 
             { "numHashes", required_argument, 0, 'c'},
-            { "exact", no_argument, 0, 'd'},
+            { "confidenceLevel", required_argument, 0, 'd'},
+            { "exact", no_argument, 0, 'e'},
             { 0, 0, 0, 0 } };
 
         int option_index = 0;
 
-        int key = getopt_long(argc, argv, "a:b:", long_options, &option_index);
+        int key = getopt_long(argc, argv, "a:b:c:d:e", long_options, &option_index);
 
         if (key == -1) {
             break;
@@ -52,6 +59,10 @@ int main(int argc, char **argv) {
                 assert(i == 1);
                 break;
             case 'd':
+                i = sscanf(optarg, "%lf", &confidenceLevel);
+                assert(i == 1);
+                break;
+            case 'e':
                 exact = true;
                 break;
             default:
@@ -66,17 +77,20 @@ int main(int argc, char **argv) {
     fastaRead(sequencesFile, sequences, seqLengths, seqNames);
     cerr << "Read " << seqLengths->length << " sequences" << endl;
 
-    double **distances;
+    vector<tuple<int, int, double> > pValues;
     if (exact) {
-        distances = getDistancesExact((char**)sequences->list, sequences->length, kmerLength);
+        pValues = getDistancesExact((char**)sequences->list, sequences->length, kmerLength);
     }
     else {
-	    distances = getDistances((char**)sequences->list, sequences->length, kmerLength, numHashes);
+	    pValues = getDistances((char**)sequences->list, sequences->length, kmerLength, numHashes);
     }
 
-	for (int i = 0; i < sequences->length; i++) {
-		for (int j = 0; j < i; j++) {
-			printf("%s %s %f\n", seqNames->list[i], seqNames->list[j], distances[i][j]);
-		}
-	}
+
+    set<set<long> > partitioning = buildClusters(pValues, sequences->length, confidenceLevel);
+    for (auto &cluster: partitioning) {
+        for (auto &seqNum: cluster) {
+            printf("%s ", seqNames->list[seqNum]);
+        }
+        printf("\n");
+    }
 }

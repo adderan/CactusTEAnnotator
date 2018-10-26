@@ -6,10 +6,8 @@ import shutil
 
 from sonLib.bioio import fastaRead, fastaWrite, catFiles, reverseComplement,getTempFile
 from toil.lib.bioio import logger
-import networkx
 
 import CactusTEAnnotator.treeBuilding as treeBuilding
-from sonLib.nxnewick import NXNewick
 
 def catFiles(fileList, target):
     with open(target, 'w') as targetWrite:
@@ -88,51 +86,18 @@ def getInsertions(hal, args):
     logger.info("Found %d insertions on branch" % len(insertions))
     return insertions
 
-def getDistances(elements, args):
+def minhashClustering(elements, args):
     seqs = getTempFile(rootDir = args.workDir)
     with open(seqs, "w") as seqsWrite:
         for element in elements:
             seqsWrite.write(">%s\n" % element.name)
             seqsWrite.write("%s\n" % element.seq)
 
-    distances = getTempFile(rootDir = args.workDir)
-    with open(distances, 'w') as distancesWrite:
-        subprocess.check_call(["pairwise_distances", "--kmerLength", "5", "--sequences", seqs], stdout=distancesWrite)
-    return distances
 
-def joinByDistance(distances, elements, threshold, args):
-    """Join candidate TE insertions into coarse families based on 
-    Jaccard distance. TE insertions are transitively joined into 
-    the same family if their distance is below the configured threshold.
-    """
-    nameToElement = {element.name:element for element in elements}
-
-    graph = networkx.Graph()
-    for element in elements:
-        graph.add_node(element.name)
-    with open(distances, 'r') as distancesRead:
-        for line in distancesRead:
-            i, j, dist = line.split()
-            dist = float(dist)
-            assert graph.has_node(i)
-            assert graph.has_node(j)
-
-            #don't link element to its reverse complement
-            if nameToElement[i].name == nameToElement[j].reverseName:
-                continue
-
-            #don't match two complements together, they will get matched
-            #on the forward strand
-            if nameToElement[i].name.endswith("_comp") and nameToElement[j].name.endswith("_comp"):
-                continue
-            if dist > threshold:
-                graph.add_edge(i, j)
-    partitioning = []
-    for component in networkx.connected_components(graph):
-        if len(component) < args.minClusterSize:
-            continue
-        partitioning.append(frozenset(component))
-
+    partitioning = set()
+    for line in subprocess.check_output(["pairwise_distances", "--kmerLength", "5", "--confidenceLevel", str(args.minhashConfidenceLevel), "--sequences", seqs]).split("\n"):
+        cluster = frozenset(line.split())
+        partitioning.add(cluster)
     return frozenset(partitioning)
 
 def writeGFF(elements, args):
@@ -262,7 +227,7 @@ def addRepeatAnnotatorOptions(parser):
     parser.add_argument("--maxNFraction", type=float, default=0.1)
 
     parser.add_argument("--kmerLength", type=int, default=10)
-    parser.add_argument("--distanceThreshold", type=float, default=0.7)
+    parser.add_argument("--minhashConfidenceLevel", type=float, default=0.05)
     parser.add_argument("--minClusterSize", type=int, default=1)
 
     parser.add_argument("--maxInsertions", type=int, default=0)
@@ -294,14 +259,13 @@ def main():
         os.mkdir(args.workDir)
 
     insertions = getInsertions(hal=args.hal, args=args)
-    distances = getDistances(elements = insertions, args = args)
-    partitioning = joinByDistance(elements = insertions, distances=distances, threshold=args.distanceThreshold, args = args)
+    partitioning = minhashClustering(elements = insertions, args = args)
     elements = updateElements(elements = insertions, partitioning = partitioning)
 
     familiesGFF = writeGFF(elements = elements, args = args)
     shutil.copyfile(familiesGFF, os.path.join(args.workDir, "clusters.gff"))
 
-    elements = buildSubfamilies(elements = elements, args = args)
+    #elements = buildSubfamilies(elements = elements, args = args)
 
     gff = writeGFF(elements = elements, args = args)
     shutil.copyfile(gff, args.outGFF)
