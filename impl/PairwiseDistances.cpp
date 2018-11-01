@@ -109,7 +109,8 @@ double exactJaccardDistance(char *a, char*b, int kmerLength) {
     fprintf(stderr, "distance = %f\n", nSharedKmers/((double)(strlen(a) - kmerLength) + (double)(strlen(b) - kmerLength)));
     fprintf(stderr, "Shared kmers %d\n", stSet_size(sharedKmers));
     fprintf(stderr, "Total kmers %d\n", stSet_size(totalKmers));
-    return stSet_size(sharedKmers)/(double)stSet_size(totalKmers);
+    //return stSet_size(sharedKmers)/(double)stSet_size(totalKmers);
+    return jaccardPValue(stSet_size(sharedKmers), stSet_size(totalKmers), strlen(a), strlen(b), kmerLength);
 }
 
 
@@ -154,8 +155,12 @@ set<set<long> > buildClusters(vector<tuple<int, int, double> > &pValues, int nSe
         int64_t size_i = stUnionFind_getSize(components, (void*)i+1);
         int64_t size_j = stUnionFind_getSize(components, (void*)j+1);
 
-        double adjustedThreshold = confidenceLevel/(size_i * size_j);
-        if (pValue < adjustedThreshold) {
+        //double adjustedThreshold = confidenceLevel/(size_i * size_j);
+        double numJoins = log2(nSeqs);
+        double adjustedThreshold = 1.0 - pow(1.0 - confidenceLevel/(size_i*size_j), 1.0/numJoins);
+        //double adjustedThreshold = confidenceLevel;
+        //cerr << "Adjusted threshold = " << adjustedThreshold << endl;
+        if (pValue <= adjustedThreshold) {
             stUnionFind_union(components, (void*) i+1, (void*) j+1);
         }
 
@@ -180,18 +185,39 @@ set<set<long> > buildClusters(vector<tuple<int, int, double> > &pValues, int nSe
     return partitioning;
 }
 
-vector<tuple<int, int, double> > getDistances(char **seqs, int numSeqs, int kmerLength, int numHashes) {
+/* Filter simple kmers
+ * */
+bool checkKmer(char *kmerStart, int kmerLength) {
+    bool good = false;
+    char prev = kmerStart[0];
+    for (int i = 1; i < kmerLength; i++) {
+        if (kmerStart[i] != prev) {
+            good = true;
+        }
+    }
+    return good;
+}
+
+vector<uint32_t> buildSketch(char *seq, int kmerLength) {
+    vector<uint32_t> sketch;
+    for (int j = 0; j < strlen(seq) - kmerLength; j++) {
+        if (!checkKmer(seq + j, kmerLength)) continue;
+        uint32_t hash = hashKmer(seq + j, kmerLength);
+        sketch.push_back(hash);
+    }
+    sort(sketch.begin(), sketch.end());
+    return sketch;
+}
+
+
+vector<tuple<int, int, double> > getDistances(char **seqs, int numSeqs, int kmerLength) {
 
     toUpperCase(seqs, numSeqs);
 
     //Build minhash sketches
     vector<vector<uint32_t> > sketches(numSeqs);
     for (int i = 0; i < numSeqs; i++) {
-        for (int j = 0; j < strlen(seqs[i]) - kmerLength; j++) {
-            uint32_t hash = hashKmer(seqs[i] + j, kmerLength);
-            sketches[i].push_back(hash);
-        }
-        sort(sketches[i].begin(), sketches[i].end());
+        sketches[i] = buildSketch(seqs[i], kmerLength);
 
     }
 

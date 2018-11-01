@@ -33,14 +33,13 @@ int main(int argc, char **argv) {
         static struct option long_options[] = { 
             { "sequences", required_argument, 0, 'a' }, 
             { "kmerLength", required_argument, 0, 'b' }, 
-            { "numHashes", required_argument, 0, 'c'},
-            { "confidenceLevel", required_argument, 0, 'd'},
-            { "exact", no_argument, 0, 'e'},
+            { "confidenceLevel", required_argument, 0, 'c'},
+            { "exact", no_argument, 0, 'd'},
             { 0, 0, 0, 0 } };
 
         int option_index = 0;
 
-        int key = getopt_long(argc, argv, "a:b:c:d:e", long_options, &option_index);
+        int key = getopt_long(argc, argv, "a:b:c:d", long_options, &option_index);
 
         if (key == -1) {
             break;
@@ -55,14 +54,10 @@ int main(int argc, char **argv) {
                 assert(i == 1);
                 break;
             case 'c':
-                i = sscanf(optarg, "%d", &numHashes);
-                assert(i == 1);
-                break;
-            case 'd':
                 i = sscanf(optarg, "%lf", &confidenceLevel);
                 assert(i == 1);
                 break;
-            case 'e':
+            case 'd':
                 exact = true;
                 break;
             default:
@@ -82,9 +77,8 @@ int main(int argc, char **argv) {
         pValues = getDistancesExact((char**)sequences->list, sequences->length, kmerLength);
     }
     else {
-	    pValues = getDistances((char**)sequences->list, sequences->length, kmerLength, numHashes);
+	    pValues = getDistances((char**)sequences->list, sequences->length, kmerLength);
     }
-
 
     set<set<long> > partitioning = buildClusters(pValues, sequences->length, confidenceLevel);
     for (auto &cluster: partitioning) {
@@ -93,4 +87,5 @@ int main(int argc, char **argv) {
         }
         printf("\n");
     }
+    cerr << "Found " << partitioning.size() << " clusters" << endl;
 }

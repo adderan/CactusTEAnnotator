@@ -16,3 +16,6 @@
 [submodule "cPecan"]
 	path = cPecan
 	url = https://github.com/adderan/cPecan
+[submodule "RepeatScout"]
+	path = RepeatScout
+	url = https://github.com/mmcco/RepeatScout

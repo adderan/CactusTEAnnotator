@@ -11,10 +11,8 @@
 
 using namespace std;
 
-/*
-
 void kmerDistanceTest() {
-    int kmerLength = 3;
+    int kmerLength = 5;
 	int numSeqs = 3;
     char *a = (char*)malloc(1000*sizeof(char));
     char *b = (char*)malloc(1000*sizeof(char));
@@ -26,28 +24,21 @@ void kmerDistanceTest() {
 	//reverse complement of a
 	strcpy(c, "GCATCGATCAGCTAGCTAGCTAGCATCAGCATCACATCGACATACACATAGTCACATGCTCT");
 
-    char **seqs = (char**)malloc(numSeqs*sizeof(char*));
-    seqs[0] = a;
-    seqs[1] = b;
-	seqs[2] = c;
 
-    int numHashes = 20000;
+    vector<uint32_t> a_sketch = buildSketch(a, kmerLength);
+    vector<uint32_t> b_sketch = buildSketch(b, kmerLength);
 
-    double **dist = getDistances(seqs, numSeqs, kmerLength, numHashes);
+    double minhashDist = minhashJaccard(a_sketch, b_sketch, strlen(a), strlen(b), kmerLength);
 
     double exactDist = exactJaccardDistance(a, b, kmerLength);
 
     cerr << "Length = " << strlen(a) << endl;
-    cerr << "dist = " << dist[1][0] << endl;
-	cerr << "dist a c = " << dist[2][0] << endl;
+    cerr << "dist a b = " << minhashDist << endl;
     cerr << "exact dist = " << exactDist << endl;
 
-	//a and c are reverse complements
-	assert(dist[2][0] == -1.0);
 }
-*/
 
 
 int main(int argc, char **argv) {
-    //kmerDistanceTest();
+    kmerDistanceTest();
 }
