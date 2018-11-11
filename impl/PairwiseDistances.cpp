@@ -60,14 +60,14 @@ double jaccardPValue(int sharedKmers, int totalKmers, int a_length, int b_length
 
 vector<tuple<int, int, double> > getDistancesExact(char **sequences, int numSeqs, int kmerLength) {
     toUpperCase(sequences, numSeqs);
-    vector<tuple<int, int, double> > pValues;
+    vector<tuple<int, int, double> > distances;
     for (int i = 0; i < numSeqs; i++) {
         for (int j = 0; j < i; j++) {
-            double pValue = exactJaccardDistance(sequences[i], sequences[j], kmerLength);
-            pValues.push_back(make_tuple(i, j, pValue));
+            double distance = exactJaccardDistance(sequences[i], sequences[j], kmerLength);
+            distances.push_back(make_tuple(i, j, distance));
         }
     }
-    return pValues;
+    return distances;
 }
 
 double exactJaccardDistance(char *a, char*b, int kmerLength) {
@@ -110,19 +110,19 @@ double exactJaccardDistance(char *a, char*b, int kmerLength) {
     fprintf(stderr, "Shared kmers %d\n", stSet_size(sharedKmers));
     fprintf(stderr, "Total kmers %d\n", stSet_size(totalKmers));
     //return stSet_size(sharedKmers)/(double)stSet_size(totalKmers);
-    return jaccardPValue(stSet_size(sharedKmers), stSet_size(totalKmers), strlen(a), strlen(b), kmerLength);
+    return (double)stSet_size(sharedKmers)/stSet_size(totalKmers);
 }
 
 
 double minhashJaccard(vector<uint32_t> &a, vector<uint32_t> &b, int length_a, int length_b, int kmerLength) {
-    int matches = 0;
-    int total = 0;
+    double matches = 0.0;
+    double total = 0.0;
     int i = 0, j = 0;
     while (i < a.size() && j < b.size()) {
         if (a.at(i) == b.at(j)) {
             i++;
             j++;
-            matches++;
+            matches += 1.0;
         }
         else if (a.at(i) < b.at(j)) {
             i++;
@@ -130,16 +130,22 @@ double minhashJaccard(vector<uint32_t> &a, vector<uint32_t> &b, int length_a, in
         else if (a.at(i) > b.at(j)) {
             j++;
         }
-        total++;
+        total += 1.0;
     }
-    return jaccardPValue(matches, total, length_a, length_b, kmerLength);
+	double n = ((double)(length_a + length_b))/2;
+	double J = matches/(2*n - matches);
+	if (J == 0.0) {
+		return 10000.0;
+	}
+	double d = (-1.0/kmerLength)*log(2*J/(1 + J));
+	return d;
 }
 
 
-set<set<long> > buildClusters(vector<tuple<int, int, double> > &pValues, int nSeqs, double confidenceLevel) {
+set<set<long> > buildClusters(vector<tuple<int, int, double> > &distances, int nSeqs, double distanceThreshold) {
 
-    //sort sequence pairs by ascending p-value
-    sort(pValues.begin(), pValues.end(), [](tuple<int, int, double> a, tuple<int, int, double> b) {
+    //sort sequence pairs by ascending distance
+    sort(distances.begin(), distances.end(), [](tuple<int, int, double> a, tuple<int, int, double> b) {
         return (get<2>(a) < get<2>(b));
     });
 
@@ -147,20 +153,16 @@ set<set<long> > buildClusters(vector<tuple<int, int, double> > &pValues, int nSe
     for (int i = 0; i < nSeqs; i++) {
         stUnionFind_add(components, (void*)i+1);
     }
-    for (auto &t: pValues) {
+    for (auto &t: distances) {
         int i = get<0>(t);
         int j = get<1>(t);
-        double pValue = get<2>(t);
+        double distance = get<2>(t);
 
-        int64_t size_i = stUnionFind_getSize(components, (void*)i+1);
-        int64_t size_j = stUnionFind_getSize(components, (void*)j+1);
+        //int64_t size_i = stUnionFind_getSize(components, (void*)i+1);
+        //int64_t size_j = stUnionFind_getSize(components, (void*)j+1);
 
-        //double adjustedThreshold = confidenceLevel/(size_i * size_j);
         double numJoins = log2(nSeqs);
-        double adjustedThreshold = 1.0 - pow(1.0 - confidenceLevel/(size_i*size_j), 1.0/numJoins);
-        //double adjustedThreshold = confidenceLevel;
-        //cerr << "Adjusted threshold = " << adjustedThreshold << endl;
-        if (pValue <= adjustedThreshold) {
+        if (distance <= distanceThreshold) {
             stUnionFind_union(components, (void*) i+1, (void*) j+1);
         }
 
@@ -221,17 +223,17 @@ vector<tuple<int, int, double> > getDistances(char **seqs, int numSeqs, int kmer
 
     }
 
-    vector<tuple<int, int, double> > pValues;
+    vector<tuple<int, int, double> > distances;
     for (int i = 0; i < numSeqs; i++) {
         for (int j = 0; j < i; j++) {
             //cerr << "seq = " << string((char*)sequences->list[i]) << endl;
-            double p = minhashJaccard(sketches[i], sketches[j], strlen(seqs[i]), strlen(seqs[j]), kmerLength);
+            double d = minhashJaccard(sketches[i], sketches[j], strlen(seqs[i]), strlen(seqs[j]), kmerLength);
 
-            pValues.push_back(make_tuple(i, j, p));
+            distances.push_back(make_tuple(i, j, d));
         }
     }
 
 
-    return pValues;
+    return distances;
 }
 

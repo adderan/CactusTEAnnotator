@@ -23,7 +23,8 @@ int main(int argc, char **argv) {
     int kmerLength = 10;
     int numHashes = 200;
     bool exact = false;
-    double confidenceLevel = 0.05;
+    double distanceThreshold = 0.1;
+	bool distancesOnly = false;
 
     /*
      * Parse the options.
@@ -33,8 +34,9 @@ int main(int argc, char **argv) {
         static struct option long_options[] = { 
             { "sequences", required_argument, 0, 'a' }, 
             { "kmerLength", required_argument, 0, 'b' }, 
-            { "confidenceLevel", required_argument, 0, 'c'},
+            { "distanceThreshold", required_argument, 0, 'c'},
             { "exact", no_argument, 0, 'd'},
+			{ "distancesOnly", no_argument, 0, 'e'},
             { 0, 0, 0, 0 } };
 
         int option_index = 0;
@@ -54,12 +56,15 @@ int main(int argc, char **argv) {
                 assert(i == 1);
                 break;
             case 'c':
-                i = sscanf(optarg, "%lf", &confidenceLevel);
+                i = sscanf(optarg, "%lf", &distanceThreshold);
                 assert(i == 1);
                 break;
             case 'd':
                 exact = true;
                 break;
+			case 'e':
+				distancesOnly = true;
+				break;
             default:
                 return 1;
         }
@@ -72,20 +77,26 @@ int main(int argc, char **argv) {
     fastaRead(sequencesFile, sequences, seqLengths, seqNames);
     cerr << "Read " << seqLengths->length << " sequences" << endl;
 
-    vector<tuple<int, int, double> > pValues;
+    vector<tuple<int, int, double> > distances;
     if (exact) {
-        pValues = getDistancesExact((char**)sequences->list, sequences->length, kmerLength);
+        distances = getDistancesExact((char**)sequences->list, sequences->length, kmerLength);
     }
     else {
-	    pValues = getDistances((char**)sequences->list, sequences->length, kmerLength);
+	    distances = getDistances((char**)sequences->list, sequences->length, kmerLength);
     }
 
-    set<set<long> > partitioning = buildClusters(pValues, sequences->length, confidenceLevel);
+	if (distancesOnly) {
+		for (auto &t: distances) {
+			printf("%s %s %f\n", seqNames->list[get<0>(t)], seqNames->list[get<1>(t)], get<2>(t));
+		}
+		exit(0);
+	}
+    set<set<long> > partitioning = buildClusters(distances, sequences->length, distanceThreshold);
     for (auto &cluster: partitioning) {
         for (auto &seqNum: cluster) {
             printf("%s ", seqNames->list[seqNum]);
         }
-        printf("\n");
+        printf("\n\n");
     }
     cerr << "Found " << partitioning.size() << " clusters" << endl;
 }

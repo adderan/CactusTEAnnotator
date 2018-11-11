@@ -19,3 +19,6 @@
 [submodule "RepeatScout"]
 	path = RepeatScout
 	url = https://github.com/mmcco/RepeatScout
+[submodule "mash"]
+	path = mash
+	url = https://github.com/marbl/mash

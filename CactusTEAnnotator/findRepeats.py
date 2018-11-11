@@ -30,9 +30,10 @@ class Element:
 def makeURL(path):
     return "file://" + path
 
-def getFastaSequence(hal, chrom, start, end, args):
+def getSequence(hal, chrom, start, end, args):
     fastaLines = subprocess.check_output(["hal2fasta", hal, args.reference, "--sequence", chrom, "--start", str(start), "--length", str(end - start)]).strip().split("\n")
-    return fastaLines
+    sequence = fastaLines[1:]
+    return "\n".join(sequence)
 
 def getRootPath():
     import CactusTEAnnotator
@@ -64,18 +65,15 @@ def getInsertions(hal, args):
             continue
         if end - start < args.minInsertionSize:
             continue
-        fastaLines = getFastaSequence(hal, chrom, start, end, args)
-        assert len(fastaLines) > 0
-        assert len(fastaLines[0]) > 0
+        sequence = getSequence(hal, chrom, start, end, args)
+        assert len(sequence) > 0
 
-        if highNFraction(fastaLines[1:]):
+        if highNFraction(sequence):
             continue
         if args.maxInsertions > 0 and i > args.maxInsertions:
             break
-
-        seq = "\n".join(fastaLines[1:])
-        forward = Element(chrom=chrom, start=start, end=end, family=None, name=str(i), seq=seq, strand="+")
-        backward = Element(chrom=chrom, start=start, end=end, family=None, name="%d_comp" % i, seq=reverseComplement(seq), strand="-")
+        forward = Element(chrom=chrom, start=start, end=end, family=None, name=str(i), seq=sequence, strand="+")
+        backward = Element(chrom=chrom, start=start, end=end, family=None, name="%d_comp" % i, seq=reverseComplement(sequence), strand="-")
 
         forward.reverseName = backward.name
         backward.reverseName = forward.name
@@ -95,10 +93,21 @@ def minhashClustering(elements, args):
 
 
     partitioning = set()
-    for line in subprocess.check_output(["pairwise_distances", "--kmerLength", "5", "--confidenceLevel", str(args.minhashConfidenceLevel), "--sequences", seqs]).split("\n"):
+    for line in subprocess.check_output(["pairwise_distances", "--kmerLength", "5", "--distanceThreshold", str(args.minhashDistanceThreshold), "--sequences", seqs]).split("\n"):
+        if line == "":
+            continue
         cluster = frozenset(line.split())
         partitioning.add(cluster)
     return frozenset(partitioning)
+
+def readGFF(gff, args):
+    elements = []
+    with open(gff, 'r') as gffRead:
+        for line in gffRead:
+            chrom, annotationType, name, start, end, score, strand, group = line.split()
+            sequence = getSequence(hal, chrom, int(start), int(end), args)
+            elements.append(Element(chrom = chrom, start = int(start), end = int(end), family = group, name = name, seq = sequence, strand = strand))
+    return elements
 
 def writeGFF(elements, args):
     """Write a set of TE annotations in GFF format.
@@ -163,12 +172,11 @@ def runTreeBuilding(graphFile, args):
 
     return partitioning
     
-def getAlignmentDistances(graph, args):
-    distances = getTempFile(rootDir = args.workDir)
-    with open(distances, 'w') as distancesWrite:
-        subprocess.check_call(["getAlignmentDistances", graph], stdout=distancesWrite)
-    return distances
-
+def clusterByAlignmentDistances(graph, args):
+    clusters = set()
+    for line in subprocess.check_output(["getAlignmentDistances", graph]):
+        clusters.add(frozenset(line.split()))
+    return frozenset(clusters)
 
 def runNeighborJoining(elements, graph, args):
     if len(elements) < 3:
@@ -211,8 +219,7 @@ def buildSubfamilies(elements, args):
         elementsInFamily = families[family]
         graph = runPoa(elements=elementsInFamily, heaviestBundle=False, familyNumber=family, args=args)
 
-        alignmentDistances= getAlignmentDistances(graph=graph, args=args)
-        partitioning = joinByDistance(distances=alignmentDistances, elements=elementsInFamily, threshold=args.alignmentDistanceThreshold, args=args)
+        partitioning = getAlignmentDistances(graph=graph, args=args)
         elementsInFamily = updateElements(elements = elementsInFamily, partitioning = partitioning)
 
 
@@ -227,7 +234,7 @@ def addRepeatAnnotatorOptions(parser):
     parser.add_argument("--maxNFraction", type=float, default=0.1)
 
     parser.add_argument("--kmerLength", type=int, default=10)
-    parser.add_argument("--minhashConfidenceLevel", type=float, default=0.05)
+    parser.add_argument("--minhashDistanceThreshold", type=float, default=0.3)
     parser.add_argument("--minClusterSize", type=int, default=1)
 
     parser.add_argument("--maxInsertions", type=int, default=0)
@@ -258,14 +265,19 @@ def main():
     else:
         os.mkdir(args.workDir)
 
-    insertions = getInsertions(hal=args.hal, args=args)
-    partitioning = minhashClustering(elements = insertions, args = args)
-    elements = updateElements(elements = insertions, partitioning = partitioning)
+    if not args.inGFF:
+        insertions = getInsertions(hal=args.hal, args=args)
+        partitioning = minhashClustering(elements = insertions, args = args)
+        elements = updateElements(elements = insertions, partitioning = partitioning)
+    else:
+        elements = readGFF(gff = args.inGFF, args = args)
 
     familiesGFF = writeGFF(elements = elements, args = args)
     shutil.copyfile(familiesGFF, os.path.join(args.workDir, "clusters.gff"))
 
-    #elements = buildSubfamilies(elements = elements, args = args)
+    if not args.skipSubfamilies:
+        elements = buildSubfamilies(elements = elements, args = args)
+        elements = updateElements(elements = elements, partitioning = partitioning, args = args)
 
     gff = writeGFF(elements = elements, args = args)
     shutil.copyfile(gff, args.outGFF)
