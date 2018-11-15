@@ -129,8 +129,13 @@ def runPoa(elements, heaviestBundle, familyNumber, args):
             seqsWrite.write(">%s\n" % element.name)
             seqsWrite.write("%s\n" % element.seq)
 
+    distances = os.path.join(args.workDir, "%d.distances.fa" % int(familyNumber))
+    #get the pairwise distances for progressive POA
+    with open(distances, "w") as distancesWrite:
+        subprocess.check_call(["pairwise_distances", "--distancesOnly", "--sequences", seqs, "--kmerLength", str(args.kmerLength)], stdout=distancesWrite)
+
     graph = os.path.join(args.workDir, "%d.po" % int(familyNumber))
-    cmd = ["poa", "-read_fasta", seqs, "-po", graph, args.substMatrix]
+    cmd = ["poa", "-read_fasta", seqs, "-po", graph, "-do_progressive", "-read_pairscores", distances, args.substMatrix]
     if heaviestBundle:
         cmd.extend(["-hb", "-hbmin", str(args.heaviestBundlingThreshold)])
     subprocess.check_call(cmd)

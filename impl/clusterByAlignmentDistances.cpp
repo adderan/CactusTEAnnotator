@@ -69,12 +69,22 @@ int main(int argc, char **argv) {
             distances.push_back(make_tuple(i, j, d));
 		}
 	}
-    set<set<long> > clusters = buildClusters(distances, graph->nsource_seq, distanceThreshold);
+    if (buildClusters) {
+        set<set<long> > clusters = buildClusters(distances, graph->nsource_seq, distanceThreshold);
 
-    for (auto &t: clusters) {
-        for (auto &seqNum: t) {
-            printf("%s ", graph->source_seq[seqNum].name);
+        for (auto &t: clusters) {
+            for (auto &seqNum: t) {
+                printf("%s ", graph->source_seq[seqNum].name);
+            }
+            printf("\n\n");
         }
-        printf("\n\n");
+    }
+    else {
+        for (auto &t: distances) {
+            int i = get<0>(t);
+            int j = get<1>(t);
+            double d = get<2>(t);
+            printf("%s\t%s\t%lf\n", graph->source_seq[i].name, graph->source_seq[j].name, d);
+        }
     }
 }
