@@ -100,11 +100,11 @@ def minhashClustering(elements, args):
         partitioning.add(cluster)
     return frozenset(partitioning)
 
-def readGFF(gff, args):
+def readGFF(gff, hal, args):
     elements = []
     with open(gff, 'r') as gffRead:
         for line in gffRead:
-            chrom, annotationType, name, start, end, score, strand, group = line.split()
+            chrom, annotationType, name, start, end, score, strand, a, group = line.split()
             sequence = getSequence(hal, chrom, int(start), int(end), args)
             elements.append(Element(chrom = chrom, start = int(start), end = int(end), family = group, name = name, seq = sequence, strand = strand))
     return elements
@@ -140,8 +140,8 @@ def runPoa(elements, heaviestBundle, familyNumber, args):
 def updateElements(elements, partitioning):
     nameToElement = {element.name:element for element in elements}
     updatedElements = []
-    logger.info("Partitioning = %s" % partitioning)
-    logger.info("element names = %s" % nameToElement.keys())
+    print("Partitioning = %s" % partitioning)
+    print("element names = %s" % nameToElement.keys())
     assert(sum([len(partition) for partition in partitioning]) == len(nameToElement))
     for i, partition in enumerate(partitioning):
         for elementName in partition:
@@ -174,7 +174,10 @@ def runTreeBuilding(graphFile, args):
     
 def clusterByAlignmentDistances(graph, args):
     clusters = set()
-    for line in subprocess.check_output(["getAlignmentDistances", graph]):
+    for line in subprocess.check_output(["clusterByAlignmentDistances", graph, str(args.alignmentDistanceThreshold)]).split("\n"):
+        line = line.strip().rstrip()
+        if line == "":
+            continue
         clusters.add(frozenset(line.split()))
     return frozenset(clusters)
 
@@ -219,7 +222,7 @@ def buildSubfamilies(elements, args):
         elementsInFamily = families[family]
         graph = runPoa(elements=elementsInFamily, heaviestBundle=False, familyNumber=family, args=args)
 
-        partitioning = getAlignmentDistances(graph=graph, args=args)
+        partitioning = clusterByAlignmentDistances(graph=graph, args=args)
         elementsInFamily = updateElements(elements = elementsInFamily, partitioning = partitioning)
 
 
@@ -247,8 +250,10 @@ def addRepeatAnnotatorOptions(parser):
     #POA default is 0.9, which leaves most sequences un-bundled
     parser.add_argument("--heaviestBundlingThreshold", type=float, default=0.5)
 
-    parser.add_argument("--alignmentDistanceThreshold", type=float, default=0.7)
+    parser.add_argument("--alignmentDistanceThreshold", type=float, default=0.1)
     parser.add_argument("--substMatrix", type=str, default = os.path.join(getRootPath(), "blosum80.mat"))
+    parser.add_argument("--inGFF", type=str, default = None)
+    parser.add_argument("--skipSubfamilies", action = "store_true")
 
 def main():
     parser = argparse.ArgumentParser()
@@ -270,14 +275,13 @@ def main():
         partitioning = minhashClustering(elements = insertions, args = args)
         elements = updateElements(elements = insertions, partitioning = partitioning)
     else:
-        elements = readGFF(gff = args.inGFF, args = args)
+        elements = readGFF(gff = args.inGFF, hal = args.hal, args = args)
 
     familiesGFF = writeGFF(elements = elements, args = args)
     shutil.copyfile(familiesGFF, os.path.join(args.workDir, "clusters.gff"))
 
     if not args.skipSubfamilies:
         elements = buildSubfamilies(elements = elements, args = args)
-        elements = updateElements(elements = elements, partitioning = partitioning, args = args)
 
     gff = writeGFF(elements = elements, args = args)
     shutil.copyfile(gff, args.outGFF)

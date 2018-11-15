@@ -1,12 +1,27 @@
-#include <stdio.h>
+#include <vector>
+#include <tuple>
+#include <set>
+#include <stdlib.h>
+#include <iostream>
+#include "PairwiseDistances.h"
 
+extern "C" {
+#include "sonLib.h"
+#include "bioioC.h"
+#include "commonC.h"
 #include "lpo.h"
 #include "seq_util.h"
+}
+
+using namespace std;
 
 int main(int argc, char **argv) {
 	FILE *lpoFile = fopen(argv[1], "r");
 	LPOSequence_T *graph = read_lpo(lpoFile);
 	fclose(lpoFile);
+
+    double distanceThreshold;
+    sscanf(argv[2], "%lf", &distanceThreshold);
 
 
 	LPOLetter_T *seq = graph->letter;
@@ -32,7 +47,7 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	//output all pairwise jukes cantor distances
+    vector<tuple<int, int, double> > distances;
 	for (int i = 0; i < graph->nsource_seq; i++) {
 		for (int j = 0; j < i; j++) {
 			int N = nAligned[i][j];
@@ -40,8 +55,26 @@ int main(int argc, char **argv) {
 			int len_j = graph->source_seq[j].length;
 			double p = 2*N/(double)(len_i + len_j);
 
-			printf("%s %s %f\n", graph->source_seq[i].name, graph->source_seq[j].name, p);
+            //jukes-cantor distance
+            cerr << "p = " << p << endl;
+            double d;
+            if (p <= 0.25) {
+                d = 1000.0;
+            }
+            else {
+                d = (-3.0/4.0)*log(1.0 - (4.0/3.0)*(1.0 - p));
+            }
+            cerr << "Found jukes cantor distance " << d << endl;
+
+            distances.push_back(make_tuple(i, j, d));
 		}
 	}
+    set<set<long> > clusters = buildClusters(distances, graph->nsource_seq, distanceThreshold);
 
+    for (auto &t: clusters) {
+        for (auto &seqNum: t) {
+            printf("%s ", graph->source_seq[seqNum].name);
+        }
+        printf("\n\n");
+    }
 }

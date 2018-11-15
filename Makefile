@@ -9,7 +9,7 @@ cpp=g++
 objs=PairwiseDistances.o
 sources=impl/PairwiseDistances.cpp
 
-all: ./bin/pairwise_distances ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/maximizeOverlaps ./bin/getAlignmentDistances ./bin/getThreadPartitions ./bin/tests ./bin/poToGraphViz
+all: ./bin/pairwise_distances ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/maximizeOverlaps ./bin/clusterByAlignmentDistances ./bin/getThreadPartitions ./bin/tests ./bin/poToGraphViz
 
 ${objs}: ${sources} sonLib/lib/sonLib.a
 	g++ -I sonLib/lib -I smhasher/src -c ${sources}
@@ -30,8 +30,8 @@ ${objs}: ${sources} sonLib/lib/sonLib.a
 ./bin/maximizeOverlaps: impl/maximizeOverlaps.c ${PWD}/sonLib/lib/sonLib.a
 	gcc -g -o bin/maximizeOverlaps -I sonLib/lib -I poaV2/ impl/maximizeOverlaps.c ${PWD}/sonLib/lib/sonLib.a ${PWD}/poaV2/liblpo.a -lm
 
-./bin/getAlignmentDistances: impl/getAlignmentDistances.c ${PWD}/sonLib/lib/sonLib.a
-	gcc -g -o bin/getAlignmentDistances -I sonLib/lib -I poaV2/ impl/getAlignmentDistances.c ${PWD}/sonLib/lib/sonLib.a ${PWD}/poaV2/liblpo.a -lm
+./bin/clusterByAlignmentDistances: impl/clusterByAlignmentDistances.cpp ${PWD}/sonLib/lib/sonLib.a ${PWD}/poaV2/liblpo.a ${objs}
+	g++ -g -o bin/clusterByAlignmentDistances -I sonLib/lib -I poaV2/ impl/clusterByAlignmentDistances.cpp ${objs} ${PWD}/sonLib/lib/sonLib.a ${murmurHashSources} ${PWD}/poaV2/liblpo.a -lm
 
 ./bin/getThreadPartitions: impl/getThreadPartitions.c poaV2/liblpo.a
 	gcc -g -o bin/getThreadPartitions -I poaV2/ impl/getThreadPartitions.c ${PWD}/poaV2/liblpo.a -lm

@@ -5,11 +5,12 @@ import argparse
 """
 
 class Feature:
-    def __init__(self, chrom, start, end, name, family):
+    def __init__(self, chrom, start, end, name, strand, family):
         self.chrom = chrom
         self.start = start
         self.end = end
         self.name = name
+        self.strand = strand
         self.family = family
 
 class Element:
@@ -30,7 +31,7 @@ def readGff(gff):
             continue          
         if not chrom in features:
             features[chrom] = []
-        features[chrom].append(Feature(chrom=chrom, start=int(start), end=int(end), name=name, family=family))
+        features[chrom].append(Feature(chrom=chrom, start=int(start), end=int(end), name=name, strand=strand, family=family))
     return(features)
 
 def readRmaskGff(gff):
@@ -49,7 +50,7 @@ def readRmaskGff(gff):
             features[chrom] = []
 
         #print("family = %s" % family)
-        features[chrom].append(Feature(chrom=chrom, start=int(start), end=int(end), name=transcriptID, family=geneID))
+        features[chrom].append(Feature(chrom=chrom, start=int(start), end=int(end), name=transcriptID, strand=strand, family=geneID))
     return(features)
 
 
@@ -80,7 +81,7 @@ def findIntersectionEfficient(features, refFeatures, args):
                 print("Skipping feature %s" % f2.name)
                 f2 = refFeatures[chrom][j]
 
-            if (f1.start <= f2.end) and (f2.start <= f1.end):
+            if (f1.start <= f2.end) and (f2.start <= f1.end) and f1.strand == f2.strand:
                 #overlap
                 overlap_fraction_f2 = (min(f1.end, f2.end) - max(f1.start, f2.start))/float(f2.end - f2.start)
                 overlap_fraction_f1 = (min(f1.end, f2.end) - max(f1.start, f2.start))/float(f1.end - f1.start)
