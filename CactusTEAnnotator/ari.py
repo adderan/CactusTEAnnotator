@@ -171,6 +171,7 @@ def main():
     print("Rand index = %f" % r)
     print("Overcollapsed = %f" % overCollapsed)
     print("Undercollapsed = %f" % underCollapsed)
+    print("Fraction correctly collapsed: %f" % float(a/(a + d)))
 
 
 if __name__ == "__main__":

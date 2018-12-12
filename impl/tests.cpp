@@ -6,7 +6,7 @@
 #include <iostream>
 #include <climits>
 
-#include "PairwiseDistances.h"
+#include "Minhash.h"
 #include "sonLib.h"
 
 using namespace std;

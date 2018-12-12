@@ -39,7 +39,12 @@ int main(int argc, char **argv) {
     LPOLetter_T *seq = graph->letter;
 
     int *path = malloc(sizeof(int)*graph->length);
-    int *score = malloc(sizeof(int)*graph->length);
+
+
+    int **score = malloc(graph->length, sizeof(int*));
+    for (int i = 0; i < graph->length; i++) {
+        score[i] = calloc(graph->length, sizeof(int));
+    }
 
 
     int bestScore = -999999;

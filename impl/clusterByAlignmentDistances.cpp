@@ -3,7 +3,7 @@
 #include <set>
 #include <stdlib.h>
 #include <iostream>
-#include "PairwiseDistances.h"
+#include "Minhash.h"
 
 extern "C" {
 #include "sonLib.h"
@@ -22,6 +22,8 @@ int main(int argc, char **argv) {
 
     double distanceThreshold;
     sscanf(argv[2], "%lf", &distanceThreshold);
+
+	bool doBuildClusters = true;
 
 
 	LPOLetter_T *seq = graph->letter;
@@ -69,7 +71,7 @@ int main(int argc, char **argv) {
             distances.push_back(make_tuple(i, j, d));
 		}
 	}
-    if (buildClusters) {
+    if (doBuildClusters) {
         set<set<long> > clusters = buildClusters(distances, graph->nsource_seq, distanceThreshold);
 
         for (auto &t: clusters) {

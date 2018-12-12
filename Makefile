@@ -6,10 +6,10 @@ murmurHashSources=${PWD}/smhasher/src/MurmurHash3.cpp
 
 cpp=g++
 
-objs=PairwiseDistances.o
-sources=impl/PairwiseDistances.cpp
+objs=Minhash.o
+sources=impl/Minhash.cpp
 
-all: ./bin/pairwise_distances ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/maximizeOverlaps ./bin/clusterByAlignmentDistances ./bin/getThreadPartitions ./bin/tests ./bin/poToGraphViz
+all: ./bin/minhash ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/maximizeOverlaps ./bin/clusterByAlignmentDistances ./bin/getThreadPartitions ./bin/tests ./bin/poToGraphViz ./bin/getHeaviestBundles
 
 ${objs}: ${sources} sonLib/lib/sonLib.a
 	g++ -I sonLib/lib -I smhasher/src -c ${sources}
@@ -17,8 +17,8 @@ ${objs}: ${sources} sonLib/lib/sonLib.a
 ./bin/tests: impl/tests.cpp ${PWD}/sonLib/lib/sonLib.a ${objs}
 	g++ -g -o bin/tests -I sonLib/lib impl/tests.cpp ${murmurHashSources} ${objs} ${PWD}/sonLib/lib/sonLib.a -lm
 
-./bin/pairwise_distances: impl/PairwiseDistancesMain.cpp ${PWD}/sonLib/lib/sonLib.a ${objs}
-	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -I smhasher/src -I hal/lib -I sonLib/lib -o ./bin/pairwise_distances impl/PairwiseDistancesMain.cpp ${murmurHashSources} ${objs} sonLib/lib/sonLib.a
+./bin/minhash: impl/MinhashMain.cpp ${PWD}/sonLib/lib/sonLib.a ${objs}
+	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -I smhasher/src -I hal/lib -I sonLib/lib -o ./bin/minhash impl/MinhashMain.cpp ${murmurHashSources} ${objs} sonLib/lib/sonLib.a
 
 ./bin/poToGraphViz: impl/poToGraphViz.c ${PWD}/poaV2/liblpo.a ${PWD}/sonLib/lib/sonLib.a
 	gcc -g -o bin/poToGraphViz -I poaV2/ -I sonLib/lib impl/poToGraphViz.c ${PWD}/poaV2/liblpo.a ${PWD}/sonLib/lib/sonLib.a -lm
@@ -35,6 +35,9 @@ ${objs}: ${sources} sonLib/lib/sonLib.a
 
 ./bin/getThreadPartitions: impl/getThreadPartitions.c poaV2/liblpo.a
 	gcc -g -o bin/getThreadPartitions -I poaV2/ impl/getThreadPartitions.c ${PWD}/poaV2/liblpo.a -lm
+
+./bin/getHeaviestBundles: impl/getHeaviestBundles.cpp poaV2/liblpo.a
+	g++ -g -o bin/getHeaviestBundles -I poaV2/ impl/getHeaviestBundles.cpp ${PWD}/poaV2/liblpo.a -lm
 
 ${PWD}/sonLib/lib/sonLib.a:
 	cd ${PWD}/sonLib/ && make

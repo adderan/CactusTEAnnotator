@@ -3,6 +3,7 @@ import argparse
 import random
 import os
 import shutil
+import networkx
 
 from sonLib.bioio import fastaRead, fastaWrite, catFiles, reverseComplement,getTempFile
 from toil.lib.bioio import logger
@@ -17,18 +18,14 @@ def catFiles(fileList, target):
                 targetWrite.write("".join(lines))
                 targetWrite.write("\n")
 
-class Element:
+class RepeatInstance:
     def __init__(self, chrom, start, end, family, name, seq, strand):
         self.chrom = chrom
         self.start = start
         self.end = end
-        self.family = family
         self.name = name
         self.seq = seq
         self.strand = strand
-
-def makeURL(path):
-    return "file://" + path
 
 def getSequence(hal, chrom, start, end, args):
     fastaLines = subprocess.check_output(["hal2fasta", hal, args.reference, "--sequence", chrom, "--start", str(start), "--length", str(end - start)]).strip().split("\n")
@@ -72,8 +69,8 @@ def getInsertions(hal, args):
             continue
         if args.maxInsertions > 0 and i > args.maxInsertions:
             break
-        forward = Element(chrom=chrom, start=start, end=end, family=None, name=str(i), seq=sequence, strand="+")
-        backward = Element(chrom=chrom, start=start, end=end, family=None, name="%d_comp" % i, seq=reverseComplement(sequence), strand="-")
+        forward = RepeatInstance(chrom=chrom, start=start, end=end, family=None, name=str(i), seq=sequence, strand="+")
+        backward = RepeatInstance(chrom=chrom, start=start, end=end, family=None, name="%d_comp" % i, seq=reverseComplement(sequence), strand="-")
 
         forward.reverseName = backward.name
         backward.reverseName = forward.name
@@ -85,20 +82,21 @@ def getInsertions(hal, args):
     return insertions
 
 def minhashClustering(elements, args):
-    seqs = getTempFile(rootDir = args.workDir)
+    seqs = getTempFile(rootDir = args.outDir)
     with open(seqs, "w") as seqsWrite:
         for element in elements:
             seqsWrite.write(">%s\n" % element.name)
             seqsWrite.write("%s\n" % element.seq)
 
-
-    partitioning = set()
-    for line in subprocess.check_output(["pairwise_distances", "--kmerLength", "5", "--distanceThreshold", str(args.minhashDistanceThreshold), "--sequences", seqs]).split("\n"):
+    families = []
+    nameToElement = {element.name:element for element in elements}
+    for line in subprocess.check_output(["minhash", "--kmerLength", str(args.kmerLength), "--distanceThreshold", str(args.minhashDistanceThreshold), "--sequences", seqs]).split("\n"):
         if line == "":
             continue
-        cluster = frozenset(line.split())
-        partitioning.add(cluster)
-    return frozenset(partitioning)
+        family = line.split()
+        family = [nameToElement[name] for name in family]
+        families.append(family)
+    return families
 
 def readGFF(gff, hal, args):
     elements = []
@@ -106,190 +104,160 @@ def readGFF(gff, hal, args):
         for line in gffRead:
             chrom, annotationType, name, start, end, score, strand, a, group = line.split()
             sequence = getSequence(hal, chrom, int(start), int(end), args)
-            elements.append(Element(chrom = chrom, start = int(start), end = int(end), family = group, name = name, seq = sequence, strand = strand))
+            elements.append(RepeatInstance(chrom = chrom, start = int(start), end = int(end), family = group, name = name, seq = sequence, strand = strand))
     return elements
 
-def writeGFF(elements, args):
+def writeGFF(families, args):
     """Write a set of TE annotations in GFF format.
     """
-    gff = getTempFile(rootDir = args.workDir)
+    gff = getTempFile(rootDir = args.outDir)
     with open(gff, 'w') as gffWrite:
-        for element in elements:
-            gffWrite.write("%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n" % (element.chrom, "cactus_repeat_annotation", element.name, element.start, element.end, 0, element.strand, '.', element.family))
+        for i, family in enumerate(families):
+            for element in family:
+                gffWrite.write("%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n" % (element.chrom, "cactus_repeat_annotation", element.name, element.start, element.end, 0, element.strand, '.', i))
     return gff
 
 ####Partial order alignment###########
 
-def runPoa(elements, heaviestBundle, familyNumber, args):
-    logger.info("Aligning family with %d elements" % len(elements))
-    logger.info("Elements: %s" % [element.name for element in elements])
-    seqs = os.path.join(args.workDir, "%d.fa" % int(familyNumber))
+def writeSequencesToFile(repeatInstances, seqsFile):
+    with open(seqsFile, "w") as seqsWrite:
+        for repeatCopy in repeatInstances:
+            seqsWrite.write(">%s\n" % repeatCopy.name)
+            seqsWrite.write("%s\n" % repeatCopy.seq)
+
+def runPoa(repeatCopies, heaviestBundle, familyNumber, args):
+    seqs = os.path.join(args.outDir, "%d.fa" % int(familyNumber))
     with open(seqs, "w") as seqsWrite:
-        for element in elements:
-            seqsWrite.write(">%s\n" % element.name)
-            seqsWrite.write("%s\n" % element.seq)
+        for repeatCopy in repeatCopies:
+            seqsWrite.write(">%s\n" % repeatCopy.name)
+            seqsWrite.write("%s\n" % repeatCopy.seq)
 
-    distances = os.path.join(args.workDir, "%d.distances.fa" % int(familyNumber))
-    #get the pairwise distances for progressive POA
-    with open(distances, "w") as distancesWrite:
-        subprocess.check_call(["pairwise_distances", "--distancesOnly", "--sequences", seqs, "--kmerLength", str(args.kmerLength)], stdout=distancesWrite)
-
-    graph = os.path.join(args.workDir, "%d.po" % int(familyNumber))
-    cmd = ["poa", "-read_fasta", seqs, "-po", graph, "-do_progressive", "-read_pairscores", distances, args.substMatrix]
+    graph = getTempFile(rootDir = args.outDir)
+    cmd = ["poa", "-read_fasta", seqs, "-po", graph, args.substMatrix]
     if heaviestBundle:
         cmd.extend(["-hb", "-hbmin", str(args.heaviestBundlingThreshold)])
     subprocess.check_call(cmd)
 
     return graph
 
-def updateElements(elements, partitioning):
-    nameToElement = {element.name:element for element in elements}
-    updatedElements = []
-    print("Partitioning = %s" % partitioning)
-    print("element names = %s" % nameToElement.keys())
-    assert(sum([len(partition) for partition in partitioning]) == len(nameToElement))
-    for i, partition in enumerate(partitioning):
-        for elementName in partition:
-            element = nameToElement[elementName]
-            if element.family is None:
-                element.family = str(i)
-            else:
-                element.family = element.family + "_%d" % i
-            updatedElements.append(element)
-    return updatedElements
+def clusterByHeaviestBundling(repeatCopies, familyNumber, args):
+    graph = runPoa(repeatCopies, True, familyNumber, args)
 
-def flatten(listOfLists):
-    flattenedList = []
-    for l in listOfLists:
-        flattenedList.extend(l)
-    return flattenedList
+    nameToRepeatInstance = {repeatInstance.name:repeatInstance for repeatInstance in repeatCopies}
+    subfamilies = []
+    for line in subprocess.check_output(["getHeaviestBundles", graph]).split("\n"):
+        if line == "":
+            continue
+        seqsInBundle = [nameToRepeatInstance[name] for name in line.split() if name in nameToRepeatInstance]
+        subfamilies.append(seqsInBundle)
 
-def runTreeBuilding(graphFile, args):
-    """Runs the partitioning tree building method on a sequence graph in 
-    PO format.
-    """
-    graph = treeBuilding.POGraph(graphFile)
-    partitions = graph.getPartitions()
-    logger.info("Parsed partitions %s" % partitions)
-    logger.info("tmp file: %s" % os.path.dirname(graphFile))
-    tree = treeBuilding.buildTree(graph.threads, partitions)
-    partitioning = treeBuilding.getLeafPartitioning(tree)
+    return subfamilies
 
-    return partitioning
-    
-def clusterByAlignmentDistances(graph, args):
-    clusters = set()
+def clusterByAlignmentDistances(repeatCopies, familyNumber, args):
+    graph = runPoa(repeatCopies, False, familyNumber, args)
+    subfamilies = []
+    nameToRepeatCopy = {repeatCopy.name:repeatCopy for repeatCopy in repeatCopies}
     for line in subprocess.check_output(["clusterByAlignmentDistances", graph, str(args.alignmentDistanceThreshold)]).split("\n"):
         line = line.strip().rstrip()
         if line == "":
             continue
-        clusters.add(frozenset(line.split()))
-    return frozenset(clusters)
+        subfamilyNames = line.split()
+        subfamilies.append([nameToRepeatCopy[repeatCopyName] for repeatCopyName in subfamilyNames])
+        
+    return subfamilies
 
-def runNeighborJoining(elements, graph, args):
-    if len(elements) < 3:
-        return frozenset([frozenset([element.name for element in elements])])
+def joinSubfamiliesByMinhashDistance(repeatFamilies, args):
+    graph = networkx.Graph()
+    
+    seqFileNames = []
+    for i in range(len(repeatFamilies)):
+        graph.add_node(i)
+        seqFile = getTempFile(rootDir=args.outDir)
+        writeSequencesToFile(repeatFamilies[i], seqFile)
+        seqFileNames.append(seqFile)
 
-    seqs = job.fileStore.getLocalTempFile()
-    seqFiles = [job.fileStore.readGlobalFile(element.seqID) for element in elements]
-    graph = getTempFile(rootDir = args.workDir)
-    distances = job.fileStore.getLocalTempFile()
-    with open(distances, 'w') as distancesWrite:
-        subprocess.check_call(["getAlignmentDistances", graph], stdout=distancesWrite)
+        for j in range(i):
+            if len(repeatFamilies[i]) <= 1 or len(repeatFamilies[j]) <= 1:
+                continue
+            dist = float(subprocess.check_output(["minhash", "--kmerLength", str(args.minhashClusterDistKmerLength), "--clusterA", seqFileNames[i], "--clusterB", seqFileNames[j]]))
+            print("Found distance %f between clusters %d and %d of size %d and %d" % (dist, i, j, len(repeatFamilies[i]), len(repeatFamilies[j])))
+            if dist < args.minhashClusterDistanceThreshold:
+                assert graph.has_node(i)
+                assert graph.has_node(j)
+                graph.add_edge(i, j)
 
-    partitioning = {}
-    for line in subprocess.check_output(["neighborJoining", distances, str(len(elements))]).split("\n"):
-        if line == "":
-            continue
-        nodeNum, family = line.split()
-        family = int(family)
-        nodeNum = int(nodeNum)
-        if not family in partitioning:
-            partitioning[family] = set()
-        partitioning[family].add(elements[nodeNum].name)
-
-
-    partitioning = frozenset([frozenset(partition) for partition in partitioning.values()])
-    job.fileStore.logToMaster("Partitioning = %s" % partitioning)
-    job.fileStore.logToMaster("work dir = %s" % os.path.dirname(seqs))
-
-    return partitioning
-
-def buildSubfamilies(elements, args):
-    families = {}
-    for element in elements:
-        if element.family not in families:
-            families[element.family] = []
-        families[element.family].append(element)
-
-    updatedElements = []
-    for family in families:
-        elementsInFamily = families[family]
-        graph = runPoa(elements=elementsInFamily, heaviestBundle=False, familyNumber=family, args=args)
-
-        partitioning = clusterByAlignmentDistances(graph=graph, args=args)
-        elementsInFamily = updateElements(elements = elementsInFamily, partitioning = partitioning)
+    newClusters = []
+    for component in networkx.connected_components(graph):
+        newCluster = []
+        for node in component:
+            newCluster.extend(repeatFamilies[node])
+        newClusters.append(newCluster)
+    return newClusters
 
 
-        updatedElements.extend(elementsInFamily)
-
-    return updatedElements
-
-def addRepeatAnnotatorOptions(parser):
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("hal", type=str)
     parser.add_argument("reference", type=str)
+    parser.add_argument("outDir", type=str)
+
     parser.add_argument("--minInsertionSize", type=int, default=100)
     parser.add_argument("--maxInsertionSize", type=int, default=50000)
     parser.add_argument("--maxNFraction", type=float, default=0.1)
 
-    parser.add_argument("--kmerLength", type=int, default=10)
+    parser.add_argument("--kmerLength", type=int, default=5)
+    parser.add_argument("--minhashClusterDistKmerLength", type=int, default=15)
     parser.add_argument("--minhashDistanceThreshold", type=float, default=0.3)
     parser.add_argument("--minClusterSize", type=int, default=1)
 
     parser.add_argument("--maxInsertions", type=int, default=0)
 
     #Methods for splitting families of insertions
-    parser.add_argument("--heaviestBundling", action="store_true")
-    parser.add_argument("--partialOrderTreeBuilding", action="store_true")
-    parser.add_argument("--neighborJoining", action="store_true")
-    parser.add_argument("--alignmentDistance", action="store_true")
     #POA default is 0.9, which leaves most sequences un-bundled
-    parser.add_argument("--heaviestBundlingThreshold", type=float, default=0.5)
+    parser.add_argument("--subfamilySplitMethod", type=str, default="alignmentDistance")
+    parser.add_argument("--heaviestBundlingThreshold", type=float, default=0.9)
 
     parser.add_argument("--alignmentDistanceThreshold", type=float, default=0.1)
     parser.add_argument("--substMatrix", type=str, default = os.path.join(getRootPath(), "blosum80.mat"))
     parser.add_argument("--inGFF", type=str, default = None)
     parser.add_argument("--skipSubfamilies", action = "store_true")
-
-def main():
-    parser = argparse.ArgumentParser()
-    addRepeatAnnotatorOptions(parser)
-    parser.add_argument("hal", type=str)
-    parser.add_argument("outGFF", type=str)
-    parser.add_argument("workDir", type=str)
+    parser.add_argument("--minhashClusterDistanceThreshold", type=float, default=0.1)
 
     args = parser.parse_args()
 
-    if os.path.exists(args.workDir):
+    if os.path.exists(args.outDir):
         print("Work dir already exists, exiting")
         exit()
     else:
-        os.mkdir(args.workDir)
+        os.mkdir(args.outDir)
 
-    if not args.inGFF:
-        insertions = getInsertions(hal=args.hal, args=args)
-        partitioning = minhashClustering(elements = insertions, args = args)
-        elements = updateElements(elements = insertions, partitioning = partitioning)
-    else:
-        elements = readGFF(gff = args.inGFF, hal = args.hal, args = args)
 
-    familiesGFF = writeGFF(elements = elements, args = args)
-    shutil.copyfile(familiesGFF, os.path.join(args.workDir, "clusters.gff"))
+    subfamilySplitFn = None
+    if args.subfamilySplitMethod == "alignmentDistance":
+        subfamilySplitFn = clusterByAlignmentDistance
+    elif args.subfamilySplitMethod == "heaviestBundling":
+        subfamilySplitFn = clusterByHeaviestBundling
 
-    if not args.skipSubfamilies:
-        elements = buildSubfamilies(elements = elements, args = args)
+    insertions = getInsertions(hal=args.hal, args=args)
+    coarseFamilies = minhashClustering(elements = insertions, args = args)
 
-    gff = writeGFF(elements = elements, args = args)
-    shutil.copyfile(gff, args.outGFF)
+
+    #Store an initial GFF from the families created by minhash clustering
+    #coarseFamiliesDict = {str(i):family for i, family in enumerate(coarseFamilies)}
+    familiesGff = writeGFF(families = coarseFamilies, args = args)
+    shutil.copyfile(familiesGff, os.path.join(args.outDir, "families.gff"))
+
+    families = []
+    for i, family in enumerate(coarseFamilies):
+        subfamilies = subfamilySplitFn(repeatCopies = family, familyNumber = i, args = args)
+        families.extend(subfamilies)
+    subfamiliesGFF = writeGFF(families = families, args = args)
+    shutil.copyfile(subfamiliesGFF, os.path.join(args.outDir, "subfamilies.gff"))
+
+    families = joinSubfamiliesByMinhashDistance(families, args)
+
+    gff = writeGFF(families = families, args = args)
+    shutil.copyfile(gff, os.path.join(args.outDir, "final.gff"))
 
 if __name__ == "__main__":
     main()

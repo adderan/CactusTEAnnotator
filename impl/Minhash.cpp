@@ -9,7 +9,7 @@
 #include "MurmurHash3.h"
 #include <boost/math/distributions/binomial.hpp>
 
-#include "PairwiseDistances.h"
+#include "Minhash.h"
 
 extern "C" {
 #include "sonLib.h"
@@ -209,6 +209,20 @@ vector<uint32_t> buildSketch(char *seq, int kmerLength) {
     }
     sort(sketch.begin(), sketch.end());
     return sketch;
+}
+
+double getDistanceBetweenFamilies(char **seqs1, char **seqs2, int numSeqs1, int numSeqs2, int kmerLength) {
+    vector<uint32_t> sketch_a, sketch_b;
+    for (int i = 0; i < numSeqs1; i++) {
+        vector<uint32_t> sketch_i = buildSketch(seqs1[i], kmerLength);
+        copy(sketch_i.begin(), sketch_i.end(), back_inserter(sketch_a));
+    }
+    for (int i = 0; i < numSeqs2; i++) {
+        vector<uint32_t> sketch_i = buildSketch(seqs2[i], kmerLength);
+        copy(sketch_i.begin(), sketch_i.end(), back_inserter(sketch_b));
+    }
+
+    return minhashJaccard(sketch_a, sketch_b, sketch_a.size(), sketch_b.size(), kmerLength);
 }
 
 
