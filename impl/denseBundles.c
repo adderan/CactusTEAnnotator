@@ -75,10 +75,31 @@ int main(int argc, char **argv) {
 	//traceback the best path
 	int *bestPath = (int*) calloc(sizeof(int), graph->length);
 
-	//start from the highest scoring node in the graph
-	int i = bestNode;
+
+	int bestStart = 0;
+	int bestEnd = 0;
+	double highestDensity = 0.0;
+	for (int start = 0; start < graph->length; start++) {
+		int currentNode = path[start];
+		for (int end = start; end < graph->length; end = path[currentNode++]) {
+			double density = (score[start] - score[end])/((double)(end - start));
+			printf("score start = %d\n", score[start]);
+			printf("score end = %d\n", score[end]);
+			printf("Density = %f\n", density);
+			if (density > highestDensity) {
+				highestDensity = density;
+				bestStart = start;
+				bestEnd = end;
+			}
+		}
+	}
+	printf("Start = %d\n", bestStart);
+	printf("End = %d\n", bestEnd);
+	printf("Highest density = %f\n", highestDensity);
+
+	int i = bestStart;
 	int pathLength = 0;
-	while(i >= 0) {
+	while(i >= 0 && i != bestEnd) {
 		bestPath[pathLength++] = i;
 		i = path[i];
 	}
