@@ -9,7 +9,7 @@ cpp=g++
 objs=Minhash.o
 sources=impl/Minhash.cpp
 
-all: ./bin/poa ./bin/minhash ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/denseBundles ./bin/clusterByAlignmentDistances ./bin/getThreadPartitions ./bin/tests ./bin/poToGraphViz ./bin/getHeaviestBundles
+all: ./bin/poa ./bin/minhash ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/denseBundles ./bin/clusterByAlignmentDistances ./bin/getThreadPartitions ./bin/tests ./bin/getHeaviestBundles
 
 ${objs}: ${sources} sonLib/lib/sonLib.a
 	g++ -I sonLib/lib -I smhasher/src -c ${sources}
@@ -36,8 +36,8 @@ ${objs}: ${sources} sonLib/lib/sonLib.a
 ./bin/getThreadPartitions: impl/getThreadPartitions.c poaV2/liblpo.a
 	gcc -g -o bin/getThreadPartitions -I poaV2/ impl/getThreadPartitions.c ${PWD}/poaV2/liblpo.a -lm
 
-./bin/getHeaviestBundles: impl/getHeaviestBundles.cpp poaV2/liblpo.a
-	g++ -g -o bin/getHeaviestBundles -I poaV2/ impl/getHeaviestBundles.cpp ${PWD}/poaV2/liblpo.a -lm
+./bin/getHeaviestBundles: impl/getHeaviestBundles.c poaV2/liblpo.a
+	gcc -g -o bin/getHeaviestBundles -I poaV2/ impl/getHeaviestBundles.c ${PWD}/poaV2/liblpo.a -lm
 
 ${PWD}/sonLib/lib/sonLib.a:
 	cd ${PWD}/sonLib/ && make
