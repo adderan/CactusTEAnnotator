@@ -1,7 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "lpo.h"
+#include <map>
+#include <vector>
+#include <iostream>
 
+extern "C" {
+#include "lpo.h"
+}
+
+using namespace std;
 
 int is_consensus(char *seqName) {
 	return !strncmp(seqName, "CONSENS", 6);
@@ -15,12 +22,17 @@ int main(int argc, char **argv) {
 
 	LPOLetter_T *seq = graph->letter;
 
+	map<int, vector<string> > families;
 	for (int i = 0; i < graph->nsource_seq; i++) {
 		if (!is_consensus(graph->source_seq[i].name)) {
-			printf("%s %d\n", graph->source_seq[i].name, graph->source_seq[i].bundle_id);
+			families[graph->source_seq[i].bundle_id].push_back(graph->source_seq[i].name);
 		}
-		else {
-			printf("%s %d\n", graph->source_seq[i].name, graph->source_seq[i].length);
+	}
+
+	for (map<int, vector<string> >::iterator it = families.begin(); it != families.end(); ++it) {
+		for (auto &seq: it->second) {
+			cout << seq << " ";
 		}
+		cout << endl;
 	}
 }

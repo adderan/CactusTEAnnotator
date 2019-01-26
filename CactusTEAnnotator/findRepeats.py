@@ -6,7 +6,6 @@ import shutil
 import networkx
 
 from sonLib.bioio import fastaRead, fastaWrite, catFiles, reverseComplement,getTempFile
-from toil.lib.bioio import logger
 
 import CactusTEAnnotator.treeBuilding as treeBuilding
 
@@ -213,8 +212,9 @@ def main():
     parser.add_argument("--maxInsertions", type=int, default=0)
 
     #Methods for splitting families of insertions
-    #POA default is 0.9, which leaves most sequences un-bundled
     parser.add_argument("--subfamilySplitMethod", type=str, default="alignmentDistance")
+
+    #POA default is 0.9, which leaves most sequences un-bundled
     parser.add_argument("--heaviestBundlingThreshold", type=float, default=0.9)
 
     parser.add_argument("--alignmentDistanceThreshold", type=float, default=0.1)
