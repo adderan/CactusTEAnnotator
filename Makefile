@@ -9,7 +9,7 @@ cpp=g++
 objs=Minhash.o
 sources=impl/Minhash.cpp
 
-all: ./bin/poa ./bin/minhash ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/denseBundles ./bin/clusterByAlignmentDistances ./bin/getThreadPartitions ./bin/tests ./bin/getHeaviestBundles
+all: ./bin/poa ./bin/minhash ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/denseBundles ./bin/clusterByAlignmentDistances ./bin/getThreadPartitions ./bin/tests ./bin/getHeaviestBundles ./bin/scoreGFF
 
 ${objs}: ${sources} sonLib/lib/sonLib.a
 	g++ -I sonLib/lib -I smhasher/src -c ${sources}
@@ -38,6 +38,9 @@ ${objs}: ${sources} sonLib/lib/sonLib.a
 
 ./bin/getHeaviestBundles: impl/getHeaviestBundles.cpp poaV2/liblpo.a
 	g++ -g -o bin/getHeaviestBundles -I poaV2/ impl/getHeaviestBundles.cpp ${PWD}/poaV2/liblpo.a -lm
+
+./bin/scoreGFF: impl/scoreGFF.cpp sonLib/lib/sonLib.a
+	g++ -g -o bin/scoreGFF -I sonLib/lib impl/scoreGFF.cpp ${PWD}/sonLib/lib/sonLib.a
 
 ${PWD}/sonLib/lib/sonLib.a:
 	cd ${PWD}/sonLib/ && make

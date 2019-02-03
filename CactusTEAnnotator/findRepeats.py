@@ -4,6 +4,7 @@ import random
 import os
 import shutil
 import networkx
+import sys
 
 from sonLib.bioio import fastaRead, fastaWrite, catFiles, reverseComplement,getTempFile
 
@@ -77,7 +78,7 @@ def getInsertions(hal, args):
         insertions.append(backward)
 
         i = i + 1
-    logger.info("Found %d insertions on branch" % len(insertions))
+    print(sys.stderr, "Found %d insertions on branch" % len(insertions))
     return insertions
 
 def minhashClustering(elements, args):
