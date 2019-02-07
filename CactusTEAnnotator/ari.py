@@ -34,67 +34,60 @@ def readGff(gff):
         features[chrom].append(Feature(chrom=chrom, start=int(start), end=int(end), name=name, strand=strand, family=family))
     return(features)
 
-def readRmaskGff(gff):
-    features = {}
-    for line in gff:
+def readRmaskGff(gffFile, targetChrom):
+    features = []
+    for line in gffFile:
         info = line.split()
         if len(info) != 16:
             continue
         chrom, source, annotationType, start, end, score, strand, a, b, geneID, c, transcriptID, e, familyID, g, h = info
+        if not chrom == targetChrom:
+            continue
         geneID = geneID[1:len(geneID) - 2]
         familyID = familyID[1:len(familyID) - 2]
         transcriptID = transcriptID[1:len(transcriptID) - 2]
         if start > end:
             continue
-        if not chrom in features:
-            features[chrom] = []
 
         #print("family = %s" % family)
-        features[chrom].append(Feature(chrom=chrom, start=int(start), end=int(end), name=transcriptID, strand=strand, family=geneID))
+        features.append(Feature(chrom=chrom, start=int(start), end=int(end), name=transcriptID, strand=strand, family=geneID))
     return(features)
 
 
 def findIntersectionEfficient(features, refFeatures, args):
     elements = []
-    for chrom in features:
-        if chrom not in refFeatures:
-            #print("Skipping chromosome %s" % chrom)
-            continue
-        #sort by start position
-        features[chrom].sort(key=lambda x: x.start)
-        refFeatures[chrom].sort(key=lambda x: x.start)
+    features.sort(key=lambda x: x.start)
+    refFeatures.sort(key=lambda x: x.start)
 
-        i = 0
-        j = 0
-        print("Finding intersection")
-        while i < len(features[chrom]) and j < len(refFeatures[chrom]):
-            f1 = features[chrom][i]
-            f2 = refFeatures[chrom][j]
+    i = 0
+    j = 0
+    print("Finding intersection")
+    while i < len(features) and j < len(refFeatures):
+        f1 = features[i]
+        f2 = refFeatures[j]
 
-            #move to beginning of first overlap
-            while f1.end < f2.start and (i + 1 < len(features[chrom])):
+        #move to beginning of first overlap
+        while f1.end < f2.start and (i + 1 < len(features)):
+            i = i + 1
+            f1 = features[i]
+        while f2.end < f1.start and j + 1 < (len(refFeatures)):
+            j = j + 1
+            f2 = refFeatures[j]
+
+        if (f1.start <= f2.end) and (f2.start <= f1.end) and f1.strand == f2.strand:
+            #overlap
+            overlap_fraction_f2 = (min(f1.end, f2.end) - max(f1.start, f2.start))/float(f2.end - f2.start)
+            overlap_fraction_f1 = (min(f1.end, f2.end) - max(f1.start, f2.start))/float(f1.end - f1.start)
+            if overlap_fraction_f1 > args.minOverlap and overlap_fraction_f2 > args.minOverlap:
+                print("Found overlapping features %s %s" % (f1.name, f2.name))
+                elements.append(Element(name=f1.name, refName=f2.name, family=f1.family, refFamily=f2.family))
                 i = i + 1
-                print("Skipping feature %s" % f1.name)
-                f1 = features[chrom][i]
-            while f2.end < f1.start and j + 1 < (len(refFeatures[chrom])):
                 j = j + 1
-                print("Skipping feature %s" % f2.name)
-                f2 = refFeatures[chrom][j]
-
-            if (f1.start <= f2.end) and (f2.start <= f1.end) and f1.strand == f2.strand:
-                #overlap
-                overlap_fraction_f2 = (min(f1.end, f2.end) - max(f1.start, f2.start))/float(f2.end - f2.start)
-                overlap_fraction_f1 = (min(f1.end, f2.end) - max(f1.start, f2.start))/float(f1.end - f1.start)
-                if overlap_fraction_f1 > args.minOverlap and overlap_fraction_f2 > args.minOverlap:
-                    print("Found overlapping features %s %s" % (f1.name, f2.name))
-                    elements.append(Element(name=f1.name, refName=f2.name, family=f1.family, refFamily=f2.family))
-                    i = i + 1
-                    j = j + 1
-                    continue
-            if f1.start < f2.start:
-                i = i + 1
-            else:
-                j = j + 1
+                continue
+        if f1.start < f2.start:
+            i = i + 1
+        else:
+            j = j + 1
 
     return(elements)
 
@@ -121,14 +114,17 @@ def main():
     args = parser.parse_args()
 
     
+    elements = []
     features = readGff(args.features)
 
-    refFeatures = readRmaskGff(args.rmask)
+    for chrom in features:
+        print("Reading reference features for chromosome %s" % chrom)
+        refFeatures_chrom = readRmaskGff(gffFile=args.rmask, targetChrom=chrom)
+        elements.extend(findIntersectionEfficient(features[chrom], refFeatures_chrom, args))
     
     #print("Found %d chromosomes" % len(features))
     #print("Found %d chromosomes in reference" % len(refFeatures))
     
-    elements = findIntersectionEfficient(features, refFeatures, args)
 
     for element in elements:
         print("%s\t%s\t%s\t%s\n" % (element.family, element.refFamily, element.refName, element.name))
