@@ -39,6 +39,7 @@ int main(int argc, char **argv) {
 	bool distancesOnly = false;
     char *clusterAFilename = NULL;
     char *clusterBFilename = NULL;
+	int sketchSize = 100;
 
     /*
      * Parse the options.
@@ -53,6 +54,7 @@ int main(int argc, char **argv) {
 			{ "distancesOnly", no_argument, 0, 'e'},
             { "clusterA", required_argument, 0, 'f'},
             { "clusterB", required_argument, 0, 'g'},
+			{ "sketchSize", required_argument, 0, 'h'},
             { 0, 0, 0, 0 } };
 
         int option_index = 0;
@@ -87,6 +89,9 @@ int main(int argc, char **argv) {
             case 'g':
                 clusterBFilename = stString_copy(optarg);
                 break;
+			case 'h':
+				i = sscanf(optarg, "%d", &sketchSize);
+				break;
             default:
                 return 1;
         }
@@ -103,7 +108,7 @@ int main(int argc, char **argv) {
             distances = getDistancesExact(sequences, numSequences, kmerLength);
         }
         else {
-            distances = getDistances(sequences, numSequences, kmerLength);
+            distances = getDistances(sequences, numSequences, kmerLength, sketchSize);
         }
 
         if (distancesOnly) {
@@ -131,7 +136,7 @@ int main(int argc, char **argv) {
         int clusterBNumSeqs;
         char **clusterBSequences = readSequences(clusterBFilename, &clusterBSeqNames, &clusterBNumSeqs);
 
-        double distance = getDistanceBetweenFamilies(clusterASequences, clusterBSequences, clusterANumSeqs, clusterBNumSeqs, kmerLength);
+        double distance = getDistanceBetweenFamilies(clusterASequences, clusterBSequences, clusterANumSeqs, clusterBNumSeqs, kmerLength, sketchSize);
 
         cout << distance << endl;
 

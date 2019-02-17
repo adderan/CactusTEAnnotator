@@ -34,23 +34,24 @@ def readGff(gff):
         features[chrom].append(Feature(chrom=chrom, start=int(start), end=int(end), name=name, strand=strand, family=family))
     return(features)
 
-def readRmaskGff(gffFile, targetChrom):
+def readRmaskGff(gffFilename, targetChrom):
     features = []
-    for line in gffFile:
-        info = line.split()
-        if len(info) != 16:
-            continue
-        chrom, source, annotationType, start, end, score, strand, a, b, geneID, c, transcriptID, e, familyID, g, h = info
-        if not chrom == targetChrom:
-            continue
-        geneID = geneID[1:len(geneID) - 2]
-        familyID = familyID[1:len(familyID) - 2]
-        transcriptID = transcriptID[1:len(transcriptID) - 2]
-        if start > end:
-            continue
+    with open(gffFilename, 'r') as gffFile:
+        for line in gffFile:
+            info = line.split()
+            if len(info) != 16:
+                continue
+            chrom, source, annotationType, start, end, score, strand, a, b, geneID, c, transcriptID, e, familyID, g, h = info
+            if not chrom == targetChrom:
+                continue
+            geneID = geneID[1:len(geneID) - 2]
+            familyID = familyID[1:len(familyID) - 2]
+            transcriptID = transcriptID[1:len(transcriptID) - 2]
+            if start > end:
+                continue
 
-        #print("family = %s" % family)
-        features.append(Feature(chrom=chrom, start=int(start), end=int(end), name=transcriptID, strand=strand, family=geneID))
+            #print("family = %s" % family)
+            features.append(Feature(chrom=chrom, start=int(start), end=int(end), name=transcriptID, strand=strand, family=geneID))
     return(features)
 
 
@@ -108,7 +109,7 @@ def findIntersectionSlow(features, refFeatures):
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--rmask", type=file)
+    parser.add_argument("--rmask", type=str)
     parser.add_argument("--features", type=file)
     parser.add_argument("--minOverlap", type=int, default=0.6)
     args = parser.parse_args()
@@ -119,7 +120,7 @@ def main():
 
     for chrom in features:
         print("Reading reference features for chromosome %s" % chrom)
-        refFeatures_chrom = readRmaskGff(gffFile=args.rmask, targetChrom=chrom)
+        refFeatures_chrom = readRmaskGff(gffFilename=args.rmask, targetChrom=chrom)
         elements.extend(findIntersectionEfficient(features[chrom], refFeatures_chrom, args))
     
     #print("Found %d chromosomes" % len(features))
@@ -167,7 +168,8 @@ def main():
     print("Rand index = %f" % r)
     print("Overcollapsed = %f" % overCollapsed)
     print("Undercollapsed = %f" % underCollapsed)
-    print("Fraction correctly collapsed: %f" % float(a/(a + d)))
+    print("Fraction of true matchings found: %f" % float(a/(a + d)))
+    print("Fraction false matchings: %f" % float(c/(a + c)))
 
 
 if __name__ == "__main__":

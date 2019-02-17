@@ -114,11 +114,11 @@ double exactJaccardDistance(char *a, char*b, int kmerLength) {
 }
 
 
-double minhashJaccard(vector<uint32_t> &a, vector<uint32_t> &b, int length_a, int length_b, int kmerLength) {
+double minhashJaccard(vector<uint32_t> &a, vector<uint32_t> &b, int length_a, int length_b, int kmerLength, int sketchSize) {
     double matches = 0.0;
     double total = 0.0;
     int i = 0, j = 0;
-    while (i < a.size() && j < b.size()) {
+    while (((int)total < sketchSize) && i < a.size() && j < b.size()) {
         if (a.at(i) == b.at(j)) {
             i++;
             j++;
@@ -132,8 +132,7 @@ double minhashJaccard(vector<uint32_t> &a, vector<uint32_t> &b, int length_a, in
         }
         total += 1.0;
     }
-	double n = ((double)(length_a + length_b))/2;
-	double J = matches/(2*n - matches);
+	double J = matches/total;
 	if (J == 0.0) {
 		return 10000.0;
 	}
@@ -211,7 +210,7 @@ vector<uint32_t> buildSketch(char *seq, int kmerLength) {
     return sketch;
 }
 
-double getDistanceBetweenFamilies(char **seqs1, char **seqs2, int numSeqs1, int numSeqs2, int kmerLength) {
+double getDistanceBetweenFamilies(char **seqs1, char **seqs2, int numSeqs1, int numSeqs2, int kmerLength, int sketchSize) {
     vector<uint32_t> sketch_a, sketch_b;
     for (int i = 0; i < numSeqs1; i++) {
         vector<uint32_t> sketch_i = buildSketch(seqs1[i], kmerLength);
@@ -222,11 +221,11 @@ double getDistanceBetweenFamilies(char **seqs1, char **seqs2, int numSeqs1, int 
         copy(sketch_i.begin(), sketch_i.end(), back_inserter(sketch_b));
     }
 
-    return minhashJaccard(sketch_a, sketch_b, sketch_a.size(), sketch_b.size(), kmerLength);
+    return minhashJaccard(sketch_a, sketch_b, sketch_a.size(), sketch_b.size(), kmerLength, sketchSize);
 }
 
 
-vector<tuple<int, int, double> > getDistances(char **seqs, int numSeqs, int kmerLength) {
+vector<tuple<int, int, double> > getDistances(char **seqs, int numSeqs, int kmerLength, int sketchSize) {
 
     toUpperCase(seqs, numSeqs);
 
@@ -241,7 +240,7 @@ vector<tuple<int, int, double> > getDistances(char **seqs, int numSeqs, int kmer
     for (int i = 0; i < numSeqs; i++) {
         for (int j = 0; j < i; j++) {
             //cerr << "seq = " << string((char*)sequences->list[i]) << endl;
-            double d = minhashJaccard(sketches[i], sketches[j], strlen(seqs[i]), strlen(seqs[j]), kmerLength);
+            double d = minhashJaccard(sketches[i], sketches[j], strlen(seqs[i]), strlen(seqs[j]), kmerLength, sketchSize);
 
             distances.push_back(make_tuple(i, j, d));
         }

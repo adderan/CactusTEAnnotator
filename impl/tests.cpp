@@ -28,7 +28,7 @@ void kmerDistanceTest() {
     vector<uint32_t> a_sketch = buildSketch(a, kmerLength);
     vector<uint32_t> b_sketch = buildSketch(b, kmerLength);
 
-    double minhashDist = minhashJaccard(a_sketch, b_sketch, strlen(a), strlen(b), kmerLength);
+    double minhashDist = minhashJaccard(a_sketch, b_sketch, strlen(a), strlen(b), kmerLength, 100);
 
     double exactDist = exactJaccardDistance(a, b, kmerLength);
 
