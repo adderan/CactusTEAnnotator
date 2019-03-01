@@ -18,7 +18,7 @@ def catFiles(fileList, target):
                 targetWrite.write("".join(lines))
                 targetWrite.write("\n")
 
-class RepeatInstance:
+class RepeatCandidate:
     def __init__(self, chrom, start, end, family, name, seq, strand):
         self.chrom = chrom
         self.start = start
@@ -69,8 +69,8 @@ def getInsertions(hal, args):
             continue
         if args.maxInsertions > 0 and i > args.maxInsertions:
             break
-        forward = RepeatInstance(chrom=chrom, start=start, end=end, family=None, name=str(i), seq=sequence, strand="+")
-        backward = RepeatInstance(chrom=chrom, start=start, end=end, family=None, name="%d_comp" % i, seq=reverseComplement(sequence), strand="-")
+        forward = RepeatCandidate(chrom=chrom, start=start, end=end, family=None, name=str(i), seq=sequence, strand="+")
+        backward = RepeatCandidate(chrom=chrom, start=start, end=end, family=None, name="%d_comp" % i, seq=reverseComplement(sequence), strand="-")
 
         forward.reverseName = backward.name
         backward.reverseName = forward.name
@@ -81,20 +81,38 @@ def getInsertions(hal, args):
     print(sys.stderr, "Found %d insertions on branch" % len(insertions))
     return insertions
 
-def minhashClustering(elements, args):
+def runRepeatScout(repeatCandidates, args):
+    seqs = getTempFile(rootDir = args.outDir)
+    writeSequencesToFile(repeatCandidates, seqs)
+
+    repeatScoutFreqs = os.path.join(args.outDir, "repeat_scout.freq")
+    subprocess.check_call(["build_lmer_table", "-sequence", seqs])
+
+    repeatScoutLibrary = os.path.join(args.outDir, "repeat_scout_library.fa")
+    subprocess.check_call(["RepeatScout", "-sequence", seqs, "-out", repeatScoutLibrary, "-freq", repeatScoutFreqs])
+
+def runRepeatMasker(repeatLibrary, args):
+    repeatMaskirOutput = os.path.join(args.outDir, "RepeatMaskerOutput")
+    shutil.mkdir(repeatMaskerOutput)
+    subprocess.check_call(["RepeatMasker", "-e", "ncbi", "-p", "4", "-dir", repeatMaskerOutput, "-lib", repeatLibrary, args.referenceSeq])
+    outputGFF = "%s.out" % args.referenceSeq
+
+    return outputGFF
+
+def minhashClustering(repeatCandidates, args):
     seqs = getTempFile(rootDir = args.outDir)
     with open(seqs, "w") as seqsWrite:
-        for element in elements:
-            seqsWrite.write(">%s\n" % element.name)
-            seqsWrite.write("%s\n" % element.seq)
+        for seq in repeatCandidates:
+            seqsWrite.write(">%s\n" % seq.name)
+            seqsWrite.write("%s\n" % seq.seq)
 
     families = []
-    nameToElement = {element.name:element for element in elements}
+    nameToRepeatCandidate = {element.name:element for element in elements}
     for line in subprocess.check_output(["minhash", "--kmerLength", str(args.kmerLength), "--distanceThreshold", str(args.minhashDistanceThreshold), "--sequences", seqs]).split("\n"):
         if line == "":
             continue
         family = line.split()
-        family = [nameToElement[name] for name in family]
+        family = [nameToRepeatCandidate[name] for name in family]
         families.append(family)
     return families
 
@@ -104,7 +122,7 @@ def readGFF(gff, hal, args):
         for line in gffRead:
             chrom, annotationType, name, start, end, score, strand, a, group = line.split()
             sequence = getSequence(hal, chrom, int(start), int(end), args)
-            elements.append(RepeatInstance(chrom = chrom, start = int(start), end = int(end), family = group, name = name, seq = sequence, strand = strand))
+            elements.append(RepeatCandidate(chrom = chrom, start = int(start), end = int(end), family = group, name = name, seq = sequence, strand = strand))
     return elements
 
 def writeGFF(families, args):
@@ -119,11 +137,11 @@ def writeGFF(families, args):
 
 ####Partial order alignment###########
 
-def writeSequencesToFile(repeatInstances, seqsFile):
+def writeSequencesToFile(repeatCandidates, seqsFile):
     with open(seqsFile, "w") as seqsWrite:
-        for repeatCopy in repeatInstances:
-            seqsWrite.write(">%s\n" % repeatCopy.name)
-            seqsWrite.write("%s\n" % repeatCopy.seq)
+        for repeatCandidate in repeatCandidates:
+            seqsWrite.write(">%s\n" % repeatCandidate.name)
+            seqsWrite.write("%s\n" % repeatCandidate.seq)
 
 def runPoa(repeatCopies, heaviestBundle, familyNumber, args):
     seqs = os.path.join(args.outDir, "%d.fa" % int(familyNumber))
@@ -140,29 +158,29 @@ def runPoa(repeatCopies, heaviestBundle, familyNumber, args):
 
     return graph
 
-def clusterByHeaviestBundling(repeatCopies, familyNumber, args):
-    graph = runPoa(repeatCopies, True, familyNumber, args)
+def clusterByHeaviestBundling(repeatCandidates, familyNumber, args):
+    graph = runPoa(repeatCandidates, True, familyNumber, args)
 
-    nameToRepeatInstance = {repeatInstance.name:repeatInstance for repeatInstance in repeatCopies}
+    nameToRepeatCandidate = {repeatCandidate.name:repeatCandidate for repeatCandidate in repeatCopies}
     subfamilies = []
     for line in subprocess.check_output(["getHeaviestBundles", graph]).split("\n"):
         if line == "":
             continue
-        seqsInBundle = [nameToRepeatInstance[name] for name in line.split() if name in nameToRepeatInstance]
+        seqsInBundle = [nameToRepeatCandidate[name] for name in line.split() if name in nameToRepeatCandidate]
         subfamilies.append(seqsInBundle)
 
     return subfamilies
 
-def clusterByAlignmentDistances(repeatCopies, familyNumber, args):
+def clusterByAlignmentDistances(repeatCandidates, familyNumber, args):
     graph = runPoa(repeatCopies, False, familyNumber, args)
     subfamilies = []
-    nameToRepeatCopy = {repeatCopy.name:repeatCopy for repeatCopy in repeatCopies}
+    nameToRepeatCandidate = {repeatCopy.name:repeatCandidate for repeatCandidate in repeatCandidates}
     for line in subprocess.check_output(["clusterByAlignmentDistances", graph, str(args.alignmentDistanceThreshold)]).split("\n"):
         line = line.strip().rstrip()
         if line == "":
             continue
         subfamilyNames = line.split()
-        subfamilies.append([nameToRepeatCopy[repeatCopyName] for repeatCopyName in subfamilyNames])
+        subfamilies.append([nameToRepeatCandidate[repeatCandidateName] for repeatCandidateName in subfamilyNames])
         
     return subfamilies
 
@@ -201,6 +219,8 @@ def main():
     parser.add_argument("reference", type=str)
     parser.add_argument("outDir", type=str)
 
+    parser.add_argument("--referenceSeq", type=str, help="Fasta file containing the reference sequence, to skip extracting it from the HAL file.")
+
     parser.add_argument("--minInsertionSize", type=int, default=100)
     parser.add_argument("--maxInsertionSize", type=int, default=50000)
     parser.add_argument("--maxNFraction", type=float, default=0.1)
@@ -231,7 +251,6 @@ def main():
         exit()
     else:
         os.mkdir(args.outDir)
-
 
     subfamilySplitFn = None
     if args.subfamilySplitMethod == "alignmentDistance":
