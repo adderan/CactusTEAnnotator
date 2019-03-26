@@ -86,18 +86,32 @@ def runRepeatScout(repeatCandidates, args):
     writeSequencesToFile(repeatCandidates, seqs)
 
     repeatScoutFreqs = os.path.join(args.outDir, "repeat_scout.freq")
-    subprocess.check_call(["build_lmer_table", "-sequence", seqs])
+    subprocess.check_call(["build_lmer_table", "-sequence", seqs, "-freq", repeatScoutFreqs])
 
     repeatScoutLibrary = os.path.join(args.outDir, "repeat_scout_library.fa")
-    subprocess.check_call(["RepeatScout", "-sequence", seqs, "-out", repeatScoutLibrary, "-freq", repeatScoutFreqs])
+    subprocess.check_call(["RepeatScout", "-sequence", seqs, "-output", repeatScoutLibrary, "-freq", repeatScoutFreqs])
+    return repeatScoutLibrary
 
-def runRepeatMasker(repeatLibrary, args):
-    repeatMaskirOutput = os.path.join(args.outDir, "RepeatMaskerOutput")
-    shutil.mkdir(repeatMaskerOutput)
-    subprocess.check_call(["RepeatMasker", "-e", "ncbi", "-p", "4", "-dir", repeatMaskerOutput, "-lib", repeatLibrary, args.referenceSeq])
-    outputGFF = "%s.out" % args.referenceSeq
+def runRepeatMasker(repeatLibrary, genome, args):
+    repeatMaskerOutput = os.path.join(args.outDir, "RepeatMaskerOutput")
+    os.makedirs(repeatMaskerOutput)
+    subprocess.check_call(["RepeatMasker", "-nolow", "-dir", repeatMaskerOutput, "-lib", repeatLibrary, genome])
+    outputGFF = "%s.out" % genome
 
-    return outputGFF
+    #Parse the GFF so it can be converted to a more standard format
+    repeatFamilies = {}
+    with open(outputGFF, 'r') as outputGFFRead:
+        for i, line in enumerate(outputGFFRead):
+            try:
+                score, div, deletions, insertions, chrom, start, end, left, strand, family, repeatType, a, b, c, d = line.split()
+                repeatCandidate = RepeatCandidate(start = int(start), end = int(end), chrom = chrom, strand = strand, family = family, name = str(i), seq = None)
+                if not family in repeatFamilies:
+                    repeatFamilies[family] = []
+                repeatFamilies[family].append(repeatCandidate)
+            except ValueError:
+                continue
+
+    return repeatFamilies
 
 def minhashClustering(repeatCandidates, args):
     seqs = getTempFile(rootDir = args.outDir)
@@ -125,13 +139,13 @@ def readGFF(gff, hal, args):
             elements.append(RepeatCandidate(chrom = chrom, start = int(start), end = int(end), family = group, name = name, seq = sequence, strand = strand))
     return elements
 
-def writeGFF(families, args):
+def writeGFF(repeatFamilies, args):
     """Write a set of TE annotations in GFF format.
     """
     gff = getTempFile(rootDir = args.outDir)
     with open(gff, 'w') as gffWrite:
-        for i, family in enumerate(families):
-            for element in family:
+        for i, family in enumerate(repeatFamilies):
+            for element in repeatFamilies[family]:
                 gffWrite.write("%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n" % (element.chrom, "cactus_repeat_annotation", element.name, element.start, element.end, 0, element.strand, '.', i))
     return gff
 
@@ -212,7 +226,6 @@ def joinSubfamiliesByMinhashDistance(repeatFamilies, args):
         newClusters.append(newCluster)
     return newClusters
 
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("hal", type=str)
@@ -225,24 +238,8 @@ def main():
     parser.add_argument("--maxInsertionSize", type=int, default=50000)
     parser.add_argument("--maxNFraction", type=float, default=0.1)
 
-    parser.add_argument("--kmerLength", type=int, default=5)
-    parser.add_argument("--minhashClusterDistKmerLength", type=int, default=15)
-    parser.add_argument("--minhashDistanceThreshold", type=float, default=0.3)
-    parser.add_argument("--minClusterSize", type=int, default=1)
-
     parser.add_argument("--maxInsertions", type=int, default=0)
 
-    #Methods for splitting families of insertions
-    parser.add_argument("--subfamilySplitMethod", type=str, default="alignmentDistance")
-
-    #POA default is 0.9, which leaves most sequences un-bundled
-    parser.add_argument("--heaviestBundlingThreshold", type=float, default=0.9)
-
-    parser.add_argument("--alignmentDistanceThreshold", type=float, default=0.1)
-    parser.add_argument("--substMatrix", type=str, default = os.path.join(getRootPath(), "blosum80.mat"))
-    parser.add_argument("--inGFF", type=str, default = None)
-    parser.add_argument("--skipSubfamilies", action = "store_true")
-    parser.add_argument("--minhashClusterDistanceThreshold", type=float, default=0.1)
 
     args = parser.parse_args()
 
@@ -252,31 +249,13 @@ def main():
     else:
         os.mkdir(args.outDir)
 
-    subfamilySplitFn = None
-    if args.subfamilySplitMethod == "alignmentDistance":
-        subfamilySplitFn = clusterByAlignmentDistance
-    elif args.subfamilySplitMethod == "heaviestBundling":
-        subfamilySplitFn = clusterByHeaviestBundling
-
     insertions = getInsertions(hal=args.hal, args=args)
-    coarseFamilies = minhashClustering(elements = insertions, args = args)
 
+    repeatLibrary = runRepeatScout(repeatCandidates = insertions, args = args)
 
-    #Store an initial GFF from the families created by minhash clustering
-    #coarseFamiliesDict = {str(i):family for i, family in enumerate(coarseFamilies)}
-    familiesGff = writeGFF(families = coarseFamilies, args = args)
-    shutil.copyfile(familiesGff, os.path.join(args.outDir, "families.gff"))
+    repeatFamilies = runRepeatMasker(repeatLibrary = repeatLibrary, genome = args.referenceSeq, args = args)
+    gff = writeGFF(repeatFamilies = repeatFamilies, args = args)
 
-    families = []
-    for i, family in enumerate(coarseFamilies):
-        subfamilies = subfamilySplitFn(repeatCopies = family, familyNumber = i, args = args)
-        families.extend(subfamilies)
-    subfamiliesGFF = writeGFF(families = families, args = args)
-    shutil.copyfile(subfamiliesGFF, os.path.join(args.outDir, "subfamilies.gff"))
-
-    families = joinSubfamiliesByMinhashDistance(families, args)
-
-    gff = writeGFF(families = families, args = args)
     shutil.copyfile(gff, os.path.join(args.outDir, "final.gff"))
 
 if __name__ == "__main__":
