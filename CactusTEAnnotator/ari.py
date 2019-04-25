@@ -170,6 +170,8 @@ def main():
     print("Undercollapsed = %f" % underCollapsed)
     print("Fraction of true matchings found: %f" % float(a/(a + d)))
     print("Fraction false matchings: %f" % float(c/(a + c)))
+    print("Total matchings: %f" % (a + c))
+    print("Total matchings found by reference: %f" % (a + d))
 
 
 if __name__ == "__main__":

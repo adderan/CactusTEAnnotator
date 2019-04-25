@@ -143,7 +143,7 @@ def runRepeatMasker(job, repeatLibraryID, seqID, args):
     repeatLibrary = job.fileStore.readGlobalFile(repeatLibraryID)
     seq = job.fileStore.readGlobalFile(seqID)
     repeatMaskerOutput = job.fileStore.getLocalTempDir()
-    subprocess.check_call(["RepeatMasker", "-nolow", "-dir", repeatMaskerOutput, "-lib", repeatLibrary, seq])
+    subprocess.check_call(["RepeatMasker", "-nolow", "-cutoff", "650", "-dir", repeatMaskerOutput, "-lib", repeatLibrary, seq])
     outputGff = "%s/%s.out" % (repeatMaskerOutput, os.path.basename(seq))
     job.fileStore.logToMaster("directory contents: %s" % os.listdir(repeatMaskerOutput))
     outputGffID = job.fileStore.writeGlobalFile(outputGff)
@@ -213,7 +213,7 @@ def clusterByAlignmentDistances(repeatCandidates, familyNumber, args):
             continue
         subfamilyNames = line.split()
         subfamilies.append([nameToRepeatCandidate[repeatCandidateName] for repeatCandidateName in subfamilyNames])
-        
+
     return subfamilies
 
 def joinSubfamiliesByMinhashDistance(repeatFamilies, args):
@@ -258,7 +258,7 @@ def repeatScoutRepeatMasker(job, halID, args):
     getInsertionsJob.addFollowOn(repeatScoutJob)
     repeatScoutJob.addFollowOn(repeatMaskerJob)
 
-    return repeatMaskerJob.rv()
+    return {'finalGFF':repeatMaskerJob.rv(), 'library':repeatScoutJob.rv()}
 
 
 def main():
@@ -277,6 +277,8 @@ def main():
     parser.add_argument("--start", type=int, default=None)
     parser.add_argument("--end", type=int, default=None)
 
+    parser.add_argument("--repeatLibrary", type=str, default=None)
+
     Job.Runner.addToilOptions(parser)
 
     args = parser.parse_args()
@@ -285,8 +287,10 @@ def main():
         halID = toil.importFile(makeURL(args.hal))
 
         repeatScoutRepeatMaskerJob = Job.wrapJobFn(repeatScoutRepeatMasker, halID = halID, args = args)
-        gffID = toil.start(repeatScoutRepeatMaskerJob)
-        toil.exportFile(gffID, makeURL(args.outGff))
+        results = toil.start(repeatScoutRepeatMaskerJob)
+        toil.exportFile(results['finalGFF'], makeURL(args.outGff))
+        if args.repeatLibrary:
+            toil.exportFile(results['library'], makeURL(args.repeatLibrary))
 
 if __name__ == "__main__":
     main()
