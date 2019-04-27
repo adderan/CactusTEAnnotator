@@ -12,7 +12,7 @@ setup(
     # We use the __file__ attribute so this package isn't zip_safe.
     zip_safe=False,
 
-    install_requires=['networkx', 'multiset'],
+    install_requires=['actualSonLib', 'networkx', 'multiset'],
     
     entry_points={
-        'console_scripts': ['CactusTEAnnotator = CactusTEAnnotator.findRepeats:main', 'buildSubfamilies = CactusTEAnnotator.buildSubfamilies:main', 'treeBuilding = CactusTEAnnotator.treeBuilding:main', 'scoreGFF = CactusTEAnnotator.ari:main']})
+        'console_scripts': ['CactusTEAnnotator = CactusTEAnnotator.findRepeats:main', 'scoreGFF = CactusTEAnnotator.ari:main']})

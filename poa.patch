@@ -1,0 +1,11 @@
+--- black_flag.h	2004-03-11 21:28:10.000000000 -0800
++++ black_flag_old.h	2019-04-26 20:03:04.286864617 -0700
+@@ -236,8 +236,6 @@
+ 	       int sourceline,
+ 	       char sourcefile_revision[]);
+ 
+-char *Program_name;
+-char *Program_version;
+ 
+ void black_flag_init(char progname[],char progversion[]);
+ void black_flag_init_args(int narg,char *arg[],char progversion[]);

@@ -20,7 +20,7 @@ ${objs}: ${sources} sonLib/lib/sonLib.a
 ./bin/minhash: impl/MinhashMain.cpp ${PWD}/sonLib/lib/sonLib.a ${objs}
 	PATH=${PWD}/hdf5/bin:${PATH} ${cpp} ${cppflags} -I smhasher/src -I hal/lib -I sonLib/lib -o ./bin/minhash impl/MinhashMain.cpp ${murmurHashSources} ${objs} sonLib/lib/sonLib.a
 
-./bin/poToGraphViz: impl/poToGraphViz.c ${PWD}/poaV2/liblpo.a ${PWD}/sonLib/lib/sonLib.a
+./bin/poToGraphViz: impl/poToGraphViz.c poaV2/liblpo.a ${PWD}/sonLib/lib/sonLib.a
 	gcc -g -o bin/poToGraphViz -I poaV2/ -I sonLib/lib impl/poToGraphViz.c ${PWD}/poaV2/liblpo.a ${PWD}/sonLib/lib/sonLib.a -lm
 
 
@@ -30,7 +30,7 @@ ${objs}: ${sources} sonLib/lib/sonLib.a
 ./bin/denseBundles: impl/denseBundles.c ${PWD}/sonLib/lib/sonLib.a
 	gcc -g -o bin/denseBundles -I sonLib/lib -I poaV2/ impl/denseBundles.c ${PWD}/sonLib/lib/sonLib.a ${PWD}/poaV2/liblpo.a -lm
 
-./bin/clusterByAlignmentDistances: impl/clusterByAlignmentDistances.cpp ${PWD}/sonLib/lib/sonLib.a ${PWD}/poaV2/liblpo.a ${objs}
+./bin/clusterByAlignmentDistances: impl/clusterByAlignmentDistances.cpp ${PWD}/sonLib/lib/sonLib.a poaV2/liblpo.a ${objs}
 	g++ -g -o bin/clusterByAlignmentDistances -I sonLib/lib -I poaV2/ impl/clusterByAlignmentDistances.cpp ${objs} ${PWD}/sonLib/lib/sonLib.a ${murmurHashSources} ${PWD}/poaV2/liblpo.a -lm
 
 ./bin/getThreadPartitions: impl/getThreadPartitions.c poaV2/liblpo.a
@@ -49,9 +49,11 @@ ${PWD}/hal/lib/halLib.a: ${PWD}/hdf5/bin/h5c++ ${PWD}/sonLib/lib/sonLib.a
 	cd ${PWD}/hal && PATH=${PWD}/hdf5/bin:${PATH} make
 	cp ${PWD}/hal/bin/* ./bin
 
-poaV2/liblpo.a: ./bin/poa
-
-./bin/poa:
+poaV2/liblpo.a:
+	wget https://downloads.sourceforge.net/project/poamsa/poamsa/2.0/poaV2.tar.gz
+	tar -xvf poaV2.tar.gz poaV2/
+	rm poaV2.tar.gz
+	patch poaV2/black_flag.h poa.patch
 	cd ${PWD}/poaV2 && make poa
 	cp ${PWD}/poaV2/poa ./bin
 

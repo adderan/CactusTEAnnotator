@@ -22,3 +22,6 @@
 [submodule "mash"]
 	path = mash
 	url = https://github.com/marbl/mash
+[submodule "RepeatMasker"]
+	path = RepeatMasker
+	url = https://github.com/rmhubley/RepeatMasker
