@@ -7,21 +7,12 @@
 [submodule "smhasher"]
 	path = smhasher
 	url = https://github.com/aappleby/smhasher
-[submodule "boost"]
-	path = boost
-	url = https://github.com/boostorg/boost
 [submodule "hdf5"]
 	path = hdf5
 	url = https://github.com/UCSCReconGroup/hdf5
-[submodule "cPecan"]
-	path = cPecan
-	url = https://github.com/adderan/cPecan
 [submodule "RepeatScout"]
 	path = RepeatScout
 	url = https://github.com/mmcco/RepeatScout
 [submodule "mash"]
 	path = mash
 	url = https://github.com/marbl/mash
-[submodule "RepeatMasker"]
-	path = RepeatMasker
-	url = https://github.com/rmhubley/RepeatMasker

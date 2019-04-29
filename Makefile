@@ -9,7 +9,17 @@ cpp=g++
 objs=Minhash.o
 sources=impl/Minhash.cpp
 
-all: ./bin/poa ./bin/minhash ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/denseBundles ./bin/clusterByAlignmentDistances ./bin/getThreadPartitions ./bin/tests ./bin/getHeaviestBundles
+all: hal cactusTEAnnotator RepeatScout RepeatMasker
+
+cactusTEAnnotator: bin/poa ./bin/minhash ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/denseBundles ./bin/clusterByAlignmentDistances ./bin/getThreadPartitions ./bin/tests ./bin/getHeaviestBundles
+
+hal: ./hal/lib/halLib.a
+	cp hal/bin/* bin
+
+bin/poa: poa
+
+
+RepeatScout: bin/RepeatScout
 
 ${objs}: ${sources} sonLib/lib/sonLib.a
 	g++ -I sonLib/lib -I smhasher/src -c ${sources}
@@ -36,20 +46,19 @@ ${objs}: ${sources} sonLib/lib/sonLib.a
 ./bin/getThreadPartitions: impl/getThreadPartitions.c poaV2/liblpo.a
 	gcc -g -o bin/getThreadPartitions -I poaV2/ impl/getThreadPartitions.c ${PWD}/poaV2/liblpo.a -lm
 
-./bin/getHeaviestBundles: impl/getHeaviestBundles.cpp poaV2/liblpo.a
+bin/getHeaviestBundles: impl/getHeaviestBundles.cpp poaV2/liblpo.a
 	g++ -g -o bin/getHeaviestBundles -I poaV2/ impl/getHeaviestBundles.cpp ${PWD}/poaV2/liblpo.a -lm
 
-${PWD}/sonLib/lib/sonLib.a:
+sonLib/lib/sonLib.a:
 	cd ${PWD}/sonLib/ && make
 
-${PWD}/hdf5/bin/h5c++:
+hdf5/bin/h5c++:
 	cd ${PWD}/hdf5 && ./configure --enable-shared --enable-cxx --prefix=${PWD}/hdf5 && CFLAGS=-std=c99 make -j4 -e && make install
 
-${PWD}/hal/lib/halLib.a: ${PWD}/hdf5/bin/h5c++ ${PWD}/sonLib/lib/sonLib.a
+./hal/lib/halLib.a: ${PWD}/hdf5/bin/h5c++ ${PWD}/sonLib/lib/sonLib.a
 	cd ${PWD}/hal && PATH=${PWD}/hdf5/bin:${PATH} make
-	cp ${PWD}/hal/bin/* ./bin
 
-poaV2/liblpo.a:
+poa:
 	wget https://downloads.sourceforge.net/project/poamsa/poamsa/2.0/poaV2.tar.gz
 	tar -xvf poaV2.tar.gz poaV2/
 	rm poaV2.tar.gz
@@ -57,5 +66,26 @@ poaV2/liblpo.a:
 	cd ${PWD}/poaV2 && make poa
 	cp ${PWD}/poaV2/poa ./bin
 
+bin/RepeatScout:
+	cd RepeatScout && make
+	mv RepeatScout/RepeatScout bin/RepeatScout
+
+./RepeatMasker/Libraries/Dfam.hmm:
+	wget http://www.dfam.org/releases/Dfam_3.0/families/Dfam.hmm.gz
+	gunzip Dfam.hmm.gz
+	mv Dfam.hmm ./RepeatMasker/Libraries
+
+./RepeatMasker/Libraries/Dfam.embl:
+	wget http://www.dfam.org/releases/Dfam_3.0/families/Dfam.embl.gz
+	gunzip Dfam.embl.gz
+	mv Dfam.embl ./RepeatMasker/Libraries
+
+
+RepeatMasker: ./RepeatMasker/Libraries/Dfam.hmm ./RepeatMasker/Libraries/Dfam.embl
+	wget http://tandem.bu.edu/trf/downloads/trf407b.linux64
+	mv trf407b.linux64 ./bin/trf
+	chmod +x ./bin/trf
+	cd RepeatMasker && ./configure -trfbin=${PWD}/bin/trf --hmmerbin=/usr/bin/ -defaultengine=hmmer
+	
 clean:
 	rm -f repeats.a cactusRepeatAnnotator repeatAnnotatorTests *.o
