@@ -9,9 +9,9 @@ cpp=g++
 objs=Minhash.o
 sources=impl/Minhash.cpp
 
-all: hal cactusTEAnnotator RepeatScout RepeatMasker
+all: cactusTEAnnotator RepeatScout RepeatMasker
 
-cactusTEAnnotator: bin/poa ./bin/minhash ${PWD}/hal/lib/halLib.a ./bin/neighborJoining ./bin/denseBundles ./bin/clusterByAlignmentDistances ./bin/getThreadPartitions ./bin/tests ./bin/getHeaviestBundles
+cactusTEAnnotator: bin/poa hal/lib/halLib.a bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles
 
 hal: ./hal/lib/halLib.a
 	cp hal/bin/* bin
@@ -55,7 +55,7 @@ sonLib/lib/sonLib.a:
 hdf5/bin/h5c++:
 	cd ${PWD}/hdf5 && ./configure --enable-shared --enable-cxx --prefix=${PWD}/hdf5 && CFLAGS=-std=c99 make -j4 -e && make install
 
-./hal/lib/halLib.a: ${PWD}/hdf5/bin/h5c++ ${PWD}/sonLib/lib/sonLib.a
+hal/lib/halLib.a: ${PWD}/hdf5/bin/h5c++ ${PWD}/sonLib/lib/sonLib.a
 	cd ${PWD}/hal && PATH=${PWD}/hdf5/bin:${PATH} make
 
 poa:

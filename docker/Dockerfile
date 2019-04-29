@@ -7,7 +7,7 @@ RUN cd /home/CactusTEAnnotator/ && make hal cactusTEAnnotator RepeatScout
 
 
 FROM ubuntu:18.04
-RUN apt-get update && apt-get install -y hmmer wget
+RUN apt-get update && apt-get install -y hmmer wget libtext-soundex-perl
 
 ADD wrapper.sh /opt/wrapper.sh
 COPY --from=builder /home/CactusTEAnnotator/bin/* /usr/local/bin
