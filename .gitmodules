@@ -1,18 +1,15 @@
-[submodule "hal"]
-	path = hal
-	url = https://github.com/ComparativeGenomicsToolkit/hal
 [submodule "sonLib"]
 	path = sonLib
 	url = https://github.com/ComparativeGenomicsToolkit/sonLib
 [submodule "smhasher"]
 	path = smhasher
 	url = https://github.com/aappleby/smhasher
-[submodule "hdf5"]
-	path = hdf5
-	url = https://github.com/UCSCReconGroup/hdf5
 [submodule "RepeatScout"]
 	path = RepeatScout
 	url = https://github.com/mmcco/RepeatScout
 [submodule "mash"]
 	path = mash
 	url = https://github.com/marbl/mash
+[submodule "cactus"]
+	path = cactus
+	url = https://github.com/ComparativeGenomicsToolkit/cactus

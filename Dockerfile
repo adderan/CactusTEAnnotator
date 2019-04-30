@@ -1,9 +1,10 @@
 FROM ubuntu:18.04 AS builder
-RUN apt-get update && apt-get install -y git build-essential zlib1g-dev libboost-dev
+RUN apt-get update && apt-get install -y git build-essential zlib1g-dev libboost-dev wget
 
-RUN git clone https://github.com/adderan/CactusTEAnnotator /home/CactusTEAnnotator
+RUN mkdir /home/CactusTEAnnotator
+COPY . /home/CactusTEAnnotator/
 
-RUN cd /home/CactusTEAnnotator/ && make hal cactusTEAnnotator RepeatScout
+RUN cd /home/CactusTEAnnotator/ && make clean && make docker
 
 
 FROM ubuntu:18.04
