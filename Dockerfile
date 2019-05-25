@@ -8,7 +8,7 @@ RUN cd /home/CactusTEAnnotator/ && make
 
 ADD wrapper.sh /opt/wrapper.sh
 
-ENV PATH /home/CactusTEAnnotator/RepeatMasker/:/home/CactusTEAnnotator/RepeatScout/:/home/CactusTEAnnotator/bin/:$PATH
+ENV PATH /home/CactusTEAnnotator/RepeatMasker/:/home/CactusTEAnnotator/RepeatScout/:/home/CactusTEAnnotator/bin/:/home/CactusTEAnnotator/cactus/bin/:$PATH
 RUN mkdir /data
 WORKDIR /data
 

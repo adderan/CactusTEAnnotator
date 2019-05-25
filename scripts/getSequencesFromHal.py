@@ -14,9 +14,7 @@ def main():
             start = info[3]
             end = info[4]
             chrom = info[0]
-            name = info[11]
-            name = name[1:]
-            name = name[:-2]
+            name = info[2]
 
             seq = subprocess.check_output(["hal2fasta", args.hal, args.genome, "--sequence", chrom, "--start", start, "--length", str(int(end) - int(start))])
             seq = seq.split("\n")

@@ -1,6 +1,7 @@
 murmurHashSources=smhasher/src/MurmurHash3.cpp
 
 cpp=g++
+cflags=-g -O7 -Wall -Werror
 
 objs=Minhash.o
 sources=impl/Minhash.cpp
@@ -13,7 +14,7 @@ liblpo = poaV2/liblpo.a
 all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries cte
 
 
-cte: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles
+cte: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/build_families bin/minhash
 
 halBinaries:
 	cd cactus && make
@@ -31,6 +32,7 @@ ${liblpo}:
 	cp poaV2/poa ./bin
 
 poa: ${liblpo}
+	cp poaV2/poa bin/
 
 
 ${objs}: ${sources} ${libSonLib}
@@ -41,6 +43,9 @@ bin/tests: impl/tests.cpp ${libSonLib} ${objs}
 
 bin/minhash: impl/MinhashMain.cpp ${libSonLib} ${objs}
 	${cpp} ${cppflags} -I smhasher/src -I ${sonLibInc} -o ./bin/minhash impl/MinhashMain.cpp ${murmurHashSources} ${objs} ${libSonLib}
+
+bin/build_families: impl/build_families.c ${libSonLib}
+	gcc ${cflags} -I ${sonLibInc} -o bin/build_families impl/build_families.c ${libSonLib} -lm
 
 bin/poToGraphViz: impl/poToGraphViz.c ${liblpo} ${libSonLib}
 	gcc -g -o bin/poToGraphViz -I poaV2/ -I cactus/sonLib/lib impl/poToGraphViz.c poaV2/liblpo.a cactus/sonLib/lib/sonLib.a -lm

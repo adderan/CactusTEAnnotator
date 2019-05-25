@@ -29,7 +29,6 @@ int edgeWeight(LPOSequence_T *graph, LPOLetter_T *left, LPOLetter_T *right) {
 	return weight;
 }
 
-
 /*                  A
  *   A               \
  *    \               C-----G----A---C
@@ -46,13 +45,7 @@ int edgeWeight(LPOSequence_T *graph, LPOLetter_T *left, LPOLetter_T *right) {
  *
  */
 
-
-int main(int argc, char **argv) {
-
-	FILE *lpoFile = fopen(argv[1], "r");
-	LPOSequence_T *graph = read_lpo(lpoFile);
-	fclose(lpoFile);
-
+char *getDensestBundle(LPOSequence_T *graph, int *pathLength) {
 	LPOLetter_T *seq = graph->letter;
 
 	int *path = malloc(sizeof(int)*graph->length);
@@ -139,15 +132,27 @@ int main(int argc, char **argv) {
 	printf("Highest density = %f\n", highestDensity);
 
 	int i = bestStart;
-	int pathLength = 0;
 	while(i >= 0 && i != bestEnd) {
-		bestPath[pathLength++] = i;
+		bestPath[*pathLength++] = i;
 		i = path[i];
 	}
+	return bestPath;
 
+}
+
+
+int main(int argc, char **argv) {
+
+	FILE *lpoFile = fopen(argv[1], "r");
+	LPOSequence_T *graph = read_lpo(lpoFile);
+	fclose(lpoFile);
+
+	int pathLength;
+	char *bestPath = getDensestBundle(graph, &pathLength);
+	
 	for (int i = 0; i < pathLength; i++) {
-		printf("%c", seq[bestPath[i]].letter);
+		printf("%c", graph->letter[bestPath[i]].letter);
 	}
 	printf("\n");
-
+	free(bestPath);
 }
