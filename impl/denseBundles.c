@@ -7,28 +7,6 @@
 #include "seq_util.h"
 
 
-int edgeWeight(LPOSequence_T *graph, LPOLetter_T *left, LPOLetter_T *right) {
-	int weight = 0;
-	int *containsPosition = (int*) calloc(sizeof(int), graph->nsource_seq);
-
-	LPOLetterSource_T *leftSource = &left->source;
-	LPOLetterSource_T *rightSource = &right->source;
-	do {
-		containsPosition[leftSource->iseq] = leftSource->ipos+1;
-	}
-	while (leftSource = leftSource->more);
-
-	do {
-		if (containsPosition[rightSource->iseq] == rightSource->ipos) {
-			weight++;
-		}
-	}
-	while (rightSource = rightSource->more);
-
-	free(containsPosition);
-	return weight;
-}
-
 /*                  A
  *   A               \
  *    \               C-----G----A---C
@@ -45,99 +23,84 @@ int edgeWeight(LPOSequence_T *graph, LPOLetter_T *left, LPOLetter_T *right) {
  *
  */
 
-char *getDensestBundle(LPOSequence_T *graph, int *pathLength) {
+int *getDenseBundle(LPOSequence_T *graph, int *pathLength) {
+
+	int *containsPosition = calloc(sizeof(int), graph->nsource_seq);
+	int *paths = calloc(sizeof(int), graph->length);
+	int *score = calloc(sizeof(int), graph->length);
+	LPOLetterSource_T *source;
+
 	LPOLetter_T *seq = graph->letter;
-
-	int *path = malloc(sizeof(int)*graph->length);
-
-
-	int *score = (int*)calloc(graph->length, sizeof(int));
-
-	int *nThreads = (int*)calloc(graph->length, sizeof(int));
-
-	int **seenThreads = (int**)calloc(graph->length, sizeof(int*));
-	for (int i = 0; i < graph->length; i++) {
-		seenThreads[i] = (int*)calloc(graph->nsource_seq, sizeof(int));
-	}
-
-	int bestScore = -999999;
-	int bestNode = -1;
-
-	fprintf(stderr, "Graph length = %d\n", graph->length);
+	int ibest = -1;
+	int best_score = -1;
 
 	for (int i = graph->length - 1; i >= 0; i--) {
-		int maxWeight = 0;
-		int bestEdge = -1;
-		int rightScore = 0;
-		for (int j = 0; j < graph->nsource_seq; j++) {
-			if (i+1 < graph->length) {
-				seenThreads[i][j] = seenThreads[i+1][j];
+		source = &seq[i].source;
+		memset(containsPosition, 0, graph->nsource_seq * sizeof(int));
+		do {
+			if (graph->source_seq[source->iseq].weight > 0) {
+				containsPosition[source->iseq] = source->ipos;
 			}
 		}
-		for (LPOLetterSource_T *source = &seq[i].source; source != NULL; source = source->more) {
-			seenThreads[i][source->iseq] = 1;
-		}
-		for (int j = 0; j < graph->nsource_seq; j++) {
-			nThreads[i] += seenThreads[i][j];
-		}
-		fprintf(stderr, "Seen %d threads\n", nThreads[i]);
-		for (LPOLetterLink_T *right = &seq[i].right; right && right->ipos>=0; 
-				right=right->more) {
+		while ((source = source->more));
 
-			int weight = edgeWeight(graph, &seq[i], &seq[right->ipos]);
-			if ((weight > maxWeight) || ((weight == maxWeight) && (score[right->ipos] > rightScore))) {
-				maxWeight = weight;
-				bestEdge = right->ipos;
-				rightScore = score[right->ipos];
+		int right_score = 0;
+		int right_overlap = 0;
+		int best_right = -1;
+
+		LPOLetterLink_T *right = NULL;
+		for (right = &seq[i].right; (right) && (right->ipos >= 0); right= right->more) {
+			int overlap = 0;
+			source = &seq[right->ipos].source;
+			do {
+				if (containsPosition[source->iseq] + 1 == source->ipos) {
+					overlap += graph->source_seq[source->iseq].weight;
+				}
 			}
+			while ((source = source->more));
 
+			if ((overlap > right_overlap) ||
+					(overlap == right_overlap && score[right->ipos] > right_score)) {
+				right_overlap = overlap;
+				right_score = score[right->ipos];
+				best_right = right->ipos;
+			}
 		}
-		path[i] = bestEdge;
-		score[i] = rightScore + maxWeight;
-		if (score[i] > bestScore) {
-			bestScore = score[i];
-			bestNode = i;
+		paths[i] = best_right;
+		score[i] = right_score + right_overlap;
+		if (score[i] > best_score) {
+			ibest = i;
+			best_score = score[i];
 		}
-		printf("Score of node %d: %d\n", i, score[i]);
+
+	}
+	if (best_score <= 0) {
+		return NULL;
 	}
 
-	//traceback the best path
-	int *bestPath = (int*) calloc(sizeof(int), graph->length);
-
-	int bestStart = 0;
-	int bestEnd = 0;
-	double highestDensity = 0.0;
-	for (int start = 0; start < graph->length; start++) {
-		int currentNode = path[start];
-		for (int end = start; end < graph->length; end = path[currentNode++]) {
-			int newThreads = nThreads[end] - nThreads[start];
-			if (newThreads == 0) {
-				newThreads = 1;
-			}
-			double density = (double)(score[start] - score[end])/newThreads;
-			//printf("score start = %d\n", score[start]);
-			//printf("score end = %d\n", score[end]);
-			//printf("seen threads start = %d\n", nThreads[start]);
-			//printf("seen threads end = %d\n", nThreads[end]);
-			//printf("Density = %f\n", density);
-			if (density > highestDensity) {
-				highestDensity = density;
-				bestStart = start;
-				bestEnd = end;
-			}
-		}
+	int *bestPath = calloc(sizeof(int), graph->length);
+	while (ibest >= 0) {
+		bestPath[*pathLength] = ibest;
+		*pathLength = *pathLength + 1;
+		ibest = paths[ibest];
 	}
-	printf("Start = %d\n", bestStart);
-	printf("End = %d\n", bestEnd);
-	printf("Highest density = %f\n", highestDensity);
+	free(paths);
+	free(score);
+	free(containsPosition);
 
-	int i = bestStart;
-	while(i >= 0 && i != bestEnd) {
-		bestPath[*pathLength++] = i;
-		i = path[i];
-	}
 	return bestPath;
 
+}
+
+void zeroPath(LPOSequence_T *graph, int *path, int pathLength) {
+	LPOLetterSource_T *source;
+	for (int i = 0; i < pathLength; i++) {
+		source = &graph->letter[path[i]].source;
+		do {
+			graph->source_seq[source->iseq].weight = 0;
+		}
+		while ((source = source->more));
+	}
 }
 
 
@@ -147,12 +110,22 @@ int main(int argc, char **argv) {
 	LPOSequence_T *graph = read_lpo(lpoFile);
 	fclose(lpoFile);
 
-	int pathLength;
-	char *bestPath = getDensestBundle(graph, &pathLength);
-	
-	for (int i = 0; i < pathLength; i++) {
-		printf("%c", graph->letter[bestPath[i]].letter);
+	int pathLength = 0;
+	int *bestPath;
+	int consensusNum = 0;
+	while (true) {
+		//Keep extracting paths and zeroing out the weights
+		//of all sequences in the best path until none are left
+		bestPath = getDenseBundle(graph, &pathLength);
+		if (!bestPath) break;
+		printf(">consensus_%d\n", consensusNum);
+		for (int i = 0; i < pathLength; i++) {
+			printf("%c", graph->letter[bestPath[i]].letter);
+		}
+		printf("\n");
+		consensusNum++;
+		zeroPath(graph, bestPath, pathLength);
 	}
-	printf("\n");
+	
 	free(bestPath);
 }

@@ -70,12 +70,11 @@ def getSequence(job, hal, genome, chrom, strand, start, end, args):
     return sequence
 
 
-def getFasta(job, hal, genome, chrom, start, end, args, fastaFile=None):
+def getFasta(job, hal, genome, chrom, start, end, args):
     hal2fastaCmd = ["hal2fasta", os.path.basename(hal), genome]
     if end and start and chrom:
         hal2fastaCmd.extend(["--sequence", chrom, "--start", str(start), "--length", str(end - start)])
-    if not fastaFile:
-        fastaFile = job.fileStore.getLocalTempFile()
+    fastaFile = job.fileStore.getLocalTempFile()
     with open(fastaFile, 'a') as fh:
         runCmd(parameters=hal2fastaCmd, streamfile=fh, args=args)
     return fastaFile
@@ -170,7 +169,7 @@ def parseRepeatMaskerGFF(job, gffID, args):
     return job.fileStore.writeGlobalFile(gffFile)
 
 
-def runRepeatMasker(job, repeatLibraryID, genomeID, args):
+def runRepeatMasker(job, repeatLibraryID, seqID, args):
     repeatLibrary = job.fileStore.readGlobalFile(repeatLibraryID)
     seq = job.fileStore.readGlobalFile(seqID)
     repeatMaskerOutput = job.fileStore.getLocalTempDir()
@@ -316,15 +315,18 @@ def poaPipeline(job, halID, genome, args):
     #consensus repeat sequences from each graph
     buildLibraryJob = Job.wrapJobFn(buildLibrary_poa, halID=halID, genome=args.genome, gffIDs = initialClusteringJob.rv(), args=args)
 
-    genomeFile = getFasta(job=job, hal=hal, genome=args.genome, chrom=args.chrom, start=args.start, end=args.end)
+
+    hal = job.fileStore.readGlobalFile(halID)
+    genomeFile = getFasta(job=job, hal=hal, genome=args.genome, chrom=args.chrom, start=args.start, end=args.end, args=args)
     genomeID = job.fileStore.writeGlobalFile(genomeFile)
 
-    repeatMaskerJob = Job.wrapJobFn(runRepeatMasker, repeatLibraryID=buildLibraryJob.rv(), genomeID=genomeID, args=args)
+    repeatMaskerJob = Job.wrapJobFn(runRepeatMasker, repeatLibraryID=buildLibraryJob.rv(), seqID=genomeID, args=args)
 
 
     job.addChild(getInsertionsJob)
     getInsertionsJob.addFollowOn(initialClusteringJob)
     initialClusteringJob.addFollowOn(buildLibraryJob)
+    buildLibraryJob.addFollowOn(repeatMaskerJob)
 
     #concatenate the gffs for each cluster and return them
     #for debugging
@@ -336,12 +338,12 @@ def poaPipeline(job, halID, genome, args):
 def repeatScoutPipeline(job, halID, args):
     hal = job.fileStore.readGlobalFile(halID)
 
-    genomeFile = getFasta(job=job, hal=hal, genome=args.genome, chrom=args.chrom, start=args.start, end=args.end)
+    genomeFile = getFasta(job=job, hal=hal, genome=args.genome, chrom=args.chrom, start=args.start, end=args.end, args=args)
     genomeID = job.fileStore.writeGlobalFile(genomeFile)
     getInsertionsJob = Job.wrapJobFn(getInsertionsOnBranch, halID=halID, genome=args.genome, args=args)
 
     repeatScoutJob = Job.wrapJobFn(runRepeatScout, genome=args.genome, halID=halID, gffID = getInsertionsJob.rv(), seqID=seqID)
-    repeatMaskerJob = Job.wrapJobFn(runRepeatMasker, repeatLibraryID=repeatScoutJob.rv(), genomeID=genomeID, args=args)
+    repeatMaskerJob = Job.wrapJobFn(runRepeatMasker, repeatLibraryID=repeatScoutJob.rv(), seqID=genomeID, args=args)
 
     job.addChild(getInsertionsJob)
     getInsertionsJob.addFollowOn(repeatScoutJob)

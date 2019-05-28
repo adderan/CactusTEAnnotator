@@ -1,7 +1,7 @@
 murmurHashSources=smhasher/src/MurmurHash3.cpp
 
 cpp=g++
-cflags=-g -O7 -Wall -Werror
+cflags=-g -O0 -Wall -Werror
 
 objs=Minhash.o
 sources=impl/Minhash.cpp
@@ -55,7 +55,7 @@ bin/neighborJoining: impl/neighborJoining.c ${libSonLib}
 	gcc -g -o bin/neighborJoining -I ${sonLibInc} impl/neighborJoining.c ${libSonLib} -lm
 
 bin/denseBundles: impl/denseBundles.c ${libSonLib}
-	gcc -g -o bin/denseBundles -I ${sonLibInc} -I poaV2/ impl/denseBundles.c ${libSonLib} ${liblpo} -lm
+	gcc ${cflags} -o bin/denseBundles -I ${sonLibInc} -I poaV2/ impl/denseBundles.c ${libSonLib} ${liblpo} -lm
 
 bin/clusterByAlignmentDistances: impl/clusterByAlignmentDistances.cpp ${libSonLib} ${liblpo} ${objs}
 	g++ -g -o bin/clusterByAlignmentDistances -I ${sonLibInc} -I poaV2/ impl/clusterByAlignmentDistances.cpp ${objs} ${libSonLib} ${murmurHashSources} ${liblpo} -lm
