@@ -30,7 +30,7 @@
  *
  */
 
-int *dense_bundle(LPOSequence_T *graph, int *pathLength) {
+int *dense_bundle(LPOSequence_T *graph, int *pathLength, double c) {
 
 	int *containsPosition = calloc(sizeof(int), graph->nsource_seq);
 	int *paths = calloc(sizeof(int), graph->length);
@@ -62,7 +62,6 @@ int *dense_bundle(LPOSequence_T *graph, int *pathLength) {
 				//are directly adjacent in this sequence
 				if (containsPosition[source->iseq] + 1 == source->ipos) {
 					overlap += graph->source_seq[source->iseq].weight;
-					printf("weight = %d\n", graph->source_seq[source->iseq].weight);
 				}
 			}
 			while ((source = source->more));
@@ -77,11 +76,12 @@ int *dense_bundle(LPOSequence_T *graph, int *pathLength) {
 		paths[i] = best_right;
 		score[i] = right_score + right_overlap;
 
+		//printf("score = %d\n", score[i]);
+
 	}
 
 	double bestScore = 0.0;
 	int bestStart, bestEnd, bestLength = 0;
-	double c = 0.9;
 	for (int start = 0; start < graph->length; start++) {
 		int len = 0;
 		for (int end = start; end >= 0; end = paths[end]) {
@@ -92,7 +92,7 @@ int *dense_bundle(LPOSequence_T *graph, int *pathLength) {
 			//printf("Weight = %d\n", weight);
 			//printf("density = %d\n", density);
 			//printf("score at end = %d\n", score[end]);
-			if (weight > bestScore) {
+			if (density > bestScore) {
 				bestScore = density;
 				bestStart = start;
 				bestEnd = end;
@@ -103,13 +103,10 @@ int *dense_bundle(LPOSequence_T *graph, int *pathLength) {
 	if (bestScore <= 0) {
 		return NULL;
 	}
-	printf("Start = %d\n", bestStart);
-	printf("End = %d\n", bestEnd);
 
 	int *bestPath = calloc(sizeof(int), bestLength);
 	int pos = bestStart;
 	for (int i = 0; i < bestLength; i++) {
-		printf("pos = %d\n", pos);
 		bestPath[i] = pos;
 		if (pos == bestEnd) break;
 		pos = paths[pos];
@@ -138,15 +135,17 @@ void zeroPath(LPOSequence_T *graph, int *path, int pathLength) {
 int main(int argc, char **argv) {
 	char *lpoFilename = NULL;
 	bool iterate = false;
+	double c = 1.1;
     while (1) {
         static struct option long_options[] = {
             { "lpo", required_argument, 0, 'a' }, 
 			{ "iterate", no_argument, 0, 'b'},
+			{ "lengthPenalty", required_argument, 0, 'c'},
             { 0, 0, 0, 0 } };
 
         int option_index = 0;
 
-        int key = getopt_long(argc, argv, "a:b:", long_options, &option_index);
+        int key = getopt_long(argc, argv, "a:b:c:", long_options, &option_index);
 
         if (key == -1) {
             break;
@@ -159,6 +158,10 @@ int main(int argc, char **argv) {
             case 'b':
 				iterate = true;
                 break;
+
+			case 'c':
+				sscanf(optarg, "%lf\n", &c);
+				break;
             default:
                 return 1;
         }
@@ -175,7 +178,7 @@ int main(int argc, char **argv) {
 		while (true) {
 			//Keep extracting paths and zeroing out the weights
 			//of all sequences in the best path until none are left
-			bestPath = dense_bundle(graph, &pathLength);
+			bestPath = dense_bundle(graph, &pathLength, c);
 			if (!bestPath) break;
 			printf(">consensus_%d\n", consensusNum);
 			for (int i = 0; i < pathLength; i++) {
@@ -187,7 +190,7 @@ int main(int argc, char **argv) {
 		}
 	}
 	else {
-		bestPath = dense_bundle(graph, &pathLength);
+		bestPath = dense_bundle(graph, &pathLength, c);
 		for (int i = 0; i < pathLength; i++) {
 			printf("%c", graph->letter[bestPath[i]].letter);
 		}
