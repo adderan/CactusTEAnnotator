@@ -14,7 +14,7 @@ liblpo = poaV2/liblpo.a
 all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries cte
 
 
-cte: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/build_families bin/minhash
+cte: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/build_families bin/minhash bin/poToGraphViz
 
 halBinaries:
 	cd cactus && make
@@ -48,7 +48,7 @@ bin/build_families: impl/build_families.c ${libSonLib}
 	gcc ${cflags} -I ${sonLibInc} -o bin/build_families impl/build_families.c ${libSonLib} -lm
 
 bin/poToGraphViz: impl/poToGraphViz.c ${liblpo} ${libSonLib}
-	gcc -g -o bin/poToGraphViz -I poaV2/ -I cactus/sonLib/lib impl/poToGraphViz.c poaV2/liblpo.a cactus/sonLib/lib/sonLib.a -lm
+	gcc ${cflags} -o bin/poToGraphViz -I poaV2/ -I ${sonLibInc} impl/poToGraphViz.c ${liblpo} ${libSonLib} -lm
 
 
 bin/neighborJoining: impl/neighborJoining.c ${libSonLib}
