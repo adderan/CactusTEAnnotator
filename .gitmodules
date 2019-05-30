@@ -6,4 +6,4 @@
 	url = https://github.com/ComparativeGenomicsToolkit/cactus
 [submodule "smhasher"]
 	path = smhasher
-	url = https://github.com/aapleby/smhasher
+	url = https://github.com/aappleby/smhasher
