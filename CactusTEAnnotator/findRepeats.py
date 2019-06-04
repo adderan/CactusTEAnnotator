@@ -30,14 +30,6 @@ def runCmd(parameters, args, streamfile=None):
         output = subprocess.check_output(cmd)
         return output
 
-#def catFiles(fileList, target):
-#    with open(target, 'w') as targetWrite:
-#        for f in fileList:
-#            with open(f, 'r') as read:
-#                lines = read.readlines()
-#                targetWrite.write("".join(lines))
-#                targetWrite.write("\n")
-
 def catFilesJobFn(job, fileIDs):
     fileList = [job.fileStore.readGlobalFile(fileID) for fileID in fileIDs]
     combinedFile = job.fileStore.getLocalTempFile()
@@ -260,7 +252,7 @@ def getRepeatElementsFromGraph(job, graphID, clusterName, args):
     graph = job.fileStore.readGlobalFile(graphID)
     consensusSequences = job.fileStore.getLocalTempFile()
     with open(consensusSequences, "w") as fh:
-        runCmd(parameters=["getHeaviestBundles", "--lpo", os.path.basename(graph), "--printElements"], streamfile=fh, args=args)
+        runCmd(parameters=["getHeaviestBundles", "--lpo", os.path.basename(graph)], streamfile=fh, args=args)
 
     #Give the sequences unique names
     repeatLibrary = job.fileStore.getLocalTempFile()
@@ -330,9 +322,11 @@ def poaPipeline(job, halID, genome, args):
 
     #concatenate the gffs for each cluster and return them
     #for debugging
-    clustersGffID = job.addFollowOnJobFn(catFilesJobFn, fileIDs=initialClusteringJob.rv()).rv()
+    catFilesJob = Job.wrapJobFn(catFilesJobFn, fileIDs=initialClusteringJob.rv())
+    job.addChild(catFilesJob)
+    initialClusteringJob.addFollowOn(catFilesJob)
 
-    return {'final.gff': repeatMaskerJob.rv(), 'library.fa': buildLibraryJob.rv(), 'clusters.gff': clustersGffID}
+    return {'final.gff': repeatMaskerJob.rv(), 'library.fa': buildLibraryJob.rv(), 'clusters.gff': catFilesJob.rv()}
 
 
 def repeatScoutPipeline(job, halID, args):
@@ -360,7 +354,7 @@ def main():
 
 
     parser.add_argument("--minInsertionSize", type=int, default=100)
-    parser.add_argument("--maxInsertionSize", type=int, default=50000)
+    parser.add_argument("--maxInsertionSize", type=int, default=10000)
     parser.add_argument("--maxNFraction", type=float, default=0.1)
     parser.add_argument("--maxInsertions", type=int, default=None)
 

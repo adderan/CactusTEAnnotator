@@ -88,10 +88,6 @@ int *dense_bundle(LPOSequence_T *graph, int *pathLength, double c) {
 			len++;
 			int weight = score[start] - score[end];
 			double density = weight - c*len;
-			//printf("length = %d\n", len);
-			//printf("Weight = %d\n", weight);
-			//printf("density = %d\n", density);
-			//printf("score at end = %d\n", score[end]);
 			if (density > bestScore) {
 				bestScore = density;
 				bestStart = start;

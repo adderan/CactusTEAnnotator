@@ -9,12 +9,15 @@ sources=impl/Minhash.cpp
 libSonLib = cactus/submodules/sonLib/lib/sonLib.a
 sonLibInc = cactus/submodules/sonLib/lib/
 
+libHal = cactus/submodules/hal/lib/halLib.a
+halInc = cactus/submodules/hal/lib/
+
 liblpo = poaV2/liblpo.a
 
 all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries cte
 
 
-cte: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/build_families bin/minhash bin/poToGraphViz
+cte: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/match_repeats
 
 halBinaries:
 	cd cactus && make
@@ -44,12 +47,11 @@ bin/tests: impl/tests.cpp ${libSonLib} ${objs}
 bin/minhash: impl/MinhashMain.cpp ${libSonLib} ${objs}
 	${cpp} ${cppflags} -I smhasher/src -I ${sonLibInc} -o ./bin/minhash impl/MinhashMain.cpp ${murmurHashSources} ${objs} ${libSonLib}
 
-bin/build_families: impl/build_families.c ${libSonLib}
-	gcc ${cflags} -I ${sonLibInc} -o bin/build_families impl/build_families.c ${libSonLib} -lm
-
 bin/poToGraphViz: impl/poToGraphViz.c ${liblpo} ${libSonLib}
 	gcc ${cflags} -o bin/poToGraphViz -I poaV2/ -I ${sonLibInc} impl/poToGraphViz.c ${liblpo} ${libSonLib} -lm
 
+bin/match_repeats: impl/match_repeats.cpp ${libHal} ${libSonLib}
+	PATH=${PWD}/cactus/submodules/hdf5/bin:${PATH} h5c++ -o bin/match_repeats -I ${halInc} -I ${sonLibInc} impl/match_repeats.cpp ${libHal} ${libSonLib}
 
 bin/neighborJoining: impl/neighborJoining.c ${libSonLib}
 	gcc -g -o bin/neighborJoining -I ${sonLibInc} impl/neighborJoining.c ${libSonLib} -lm
@@ -63,8 +65,8 @@ bin/clusterByAlignmentDistances: impl/clusterByAlignmentDistances.cpp ${libSonLi
 bin/getThreadPartitions: impl/getThreadPartitions.c ${liblpo}
 	gcc -g -o bin/getThreadPartitions -I poaV2/ impl/getThreadPartitions.c ${liblpo} -lm
 
-bin/getHeaviestBundles: impl/getHeaviestBundles.cpp poaV2/liblpo.a
-	g++ -g -o bin/getHeaviestBundles -I poaV2/ impl/getHeaviestBundles.cpp ${liblpo} -lm
+bin/getHeaviestBundles: impl/getHeaviestBundles.c poaV2/liblpo.a
+	jcc ${cflags} -o bin/getHeaviestBundles -I poaV2/ impl/getHeaviestBundles.c ${liblpo} -lm
 
 bin/RepeatScout:
 	cd RepeatScout && make
@@ -92,6 +94,8 @@ RepeatMasker:
 
 rmblast-2.9.0:
 	wget http://www.repeatmasker.org/rmblast-2.9.0+-x64-linux.tar.gz
+	tar -xvf rmblast-2.9.0+-x64-linux.tar.gz
+	rm rmblast-2.9.0+-x64-linux.tar.gz
 
 RepeatMaskerRule: RepeatMasker rmblast-2.9.0 bin/trf
 	cd RepeatMasker && sed \
