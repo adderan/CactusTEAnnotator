@@ -2,7 +2,6 @@ import argparse
 import random
 import os
 import shutil
-import networkx
 import sys
 import subprocess
 
@@ -14,8 +13,6 @@ from sonLib.bioio import fastaRead, fastaWrite, catFiles, reverseComplement
 def makeURL(path):
     return "file://%s" % path
 
-import CactusTEAnnotator.treeBuilding as treeBuilding
-
 dockerImage = "cactus-te-annotator:latest"
 
 def runCmd(parameters, args, streamfile=None):
@@ -25,7 +22,8 @@ def runCmd(parameters, args, streamfile=None):
         cmd = ["docker", "run", "-it", "--rm", "-v", "%s:/data" % os.getcwd(), dockerImage] + parameters
        
     if streamfile:
-        subprocess.check_call(cmd, stdout=streamfile)
+        with open(streamfile, "w") as streamfileWrite:
+            subprocess.check_call(cmd, stdout=streamfileWrite)
     else:
         output = subprocess.check_output(cmd)
         return output
@@ -57,14 +55,12 @@ def getFasta(job, hal, genome, chrom, start, end, args):
     if end and start and chrom:
         hal2fastaCmd.extend(["--sequence", chrom, "--start", str(start), "--length", str(end - start)])
     fastaFile = job.fileStore.getLocalTempFile()
-    with open(fastaFile, 'a') as fh:
-        runCmd(parameters=hal2fastaCmd, streamfile=fh, args=args)
+    runCmd(parameters=hal2fastaCmd, streamfile=fastaFile, args=args)
     return fastaFile
 
 def gffToFasta(job, hal, genome, gff, args):
     fasta = job.fileStore.getLocalTempFile()
-    with open(fasta, "w") as fastaWrite:
-        runCmd(parameters=["getSequencesFromHAL", hal, gff, genome], streamfile=fastaWrite, args=args)
+    runCmd(parameters=["getSequencesFromHAL", hal, gff, genome], streamfile=fasta, args=args)
     return fasta
    
 def getRootPath():
@@ -142,27 +138,14 @@ def minhashClustering(job, fastaID, args):
     with minhash.
     """
     fasta = job.fileStore.readGlobalFile(fastaID)
+    distances = job.fileStore.getLocalTempFile()
 
-    graph = networkx.Graph()
-    for line in runCmd(parameters=["minhash", "--kmerLength", str(args.kmerLength), "--sequences", os.path.basename(fasta), "--distancesOnly"], args=args).split("\n"):
-        if line == "":
-            continue
-        i, j, distance = line.split()
-        if not graph.has_node(i):
-            graph.add_node(i)
-        if not graph.has_node(j):
-            graph.add_node(j)
-        if float(distance) < args.distanceThreshold:
-            graph.add_edge(i, j)
+    runCmd(parameters=["minhash", "--kmerLength", str(args.kmerLength), "--sequences", os.path.basename(fasta), "--distancesOnly"], streamfile=distances, args=args)
 
-    clustersFile = job.fileStore.getLocalTempFile()
-    with open(clustersFile, "w") as clustersWrite:
-        for component in networkx.connected_components(graph):
-            if len(component) < 2:
-                continue
-            clustersWrite.write(" ".join(component))
-            clustersWrite.write("\n")
-    return job.fileStore.writeGlobalFile(clustersFile)
+    clusters = job.fileStore.getLocalTempFile()
+    runCmd(parameters=["build_clusters", os.path.basename(distances), "--distanceThreshold", str(args.distanceThreshold)], streamfile=clusters, args=args)
+
+    return job.fileStore.writeGlobalFile(clusters)
 
 
 def writeSequencesToFile(gff, seqsFile):
@@ -185,8 +168,7 @@ def buildLibrary_poa(job, fastaID, clustersID, args):
     elementsJobs = []
     for i, seqList in enumerate(clusters):
         cluster_i_fasta = job.fileStore.getLocalTempFile()
-        with open(cluster_i_fasta, "w") as fastaWrite:
-            runCmd(parameters=["samtools", "faidx", os.path.basename(fasta)] + seqList, streamfile=fastaWrite, args=args)
+        runCmd(parameters=["samtools", "faidx", os.path.basename(fasta)] + seqList, streamfile=cluster_i_fasta, args=args)
 
         cluster_i_fastaID = job.fileStore.writeGlobalFile(cluster_i_fasta)
         poaJob = Job.wrapJobFn(runPoa, fastaID=cluster_i_fastaID, args=args)
@@ -214,8 +196,7 @@ def runPoa(job, fastaID, args, heaviestBundle=True):
 def getRepeatElementsFromGraph(job, graphID, clusterName, args):
     graph = job.fileStore.readGlobalFile(graphID)
     consensusSequences = job.fileStore.getLocalTempFile()
-    with open(consensusSequences, "w") as fh:
-        runCmd(parameters=["getHeaviestBundles", "--lpo", os.path.basename(graph)], streamfile=fh, args=args)
+    runCmd(parameters=["getHeaviestBundles", "--lpo", os.path.basename(graph)], streamfile=consensusSequences, args=args)
 
     #Give the sequences unique names
     repeatLibrary = job.fileStore.getLocalTempFile()

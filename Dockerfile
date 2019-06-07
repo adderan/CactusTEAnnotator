@@ -1,5 +1,5 @@
 FROM ubuntu:18.04
-RUN apt-get update && apt-get install -y git build-essential zlib1g-dev libboost-dev wget libtext-soundex-perl hmmer
+RUN apt-get update && apt-get install -y git build-essential zlib1g-dev libboost-dev wget libtext-soundex-perl hmmer python-networkx
 
 RUN mkdir /home/CactusTEAnnotator
 COPY . /home/CactusTEAnnotator/

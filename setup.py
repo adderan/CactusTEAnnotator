@@ -12,7 +12,7 @@ setup(
 
     zip_safe=False,
 
-    install_requires=['actualSonLib', 'networkx', 'multiset'],
+    install_requires=['actualSonLib'],
     
     entry_points={
         'console_scripts': ['CactusTEAnnotator = CactusTEAnnotator.findRepeats:main', 'scoreGFF = CactusTEAnnotator.scoreGFF:main']})
