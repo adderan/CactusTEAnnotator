@@ -71,7 +71,7 @@ bin/getThreadPartitions: impl/getThreadPartitions.c ${liblpo}
 	gcc -g -o bin/getThreadPartitions -I poaV2/ impl/getThreadPartitions.c ${liblpo} -lm
 
 bin/getHeaviestBundles: impl/getHeaviestBundles.c poaV2/liblpo.a
-	jcc ${cflags} -o bin/getHeaviestBundles -I poaV2/ impl/getHeaviestBundles.c ${liblpo} -lm
+	gcc ${cflags} -o bin/getHeaviestBundles -I poaV2/ impl/getHeaviestBundles.c ${liblpo} -lm
 
 bin/RepeatScout:
 	cd RepeatScout && make
