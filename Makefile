@@ -2,6 +2,7 @@ murmurHashSources=smhasher/src/MurmurHash3.cpp
 
 cpp=g++
 cflags=-g -O0 -Wall -Werror
+cppflags=-g -O0 -Wall
 
 objs=Minhash.o
 sources=impl/Minhash.cpp
@@ -17,7 +18,7 @@ liblpo = poaV2/liblpo.a
 all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries cte
 
 
-cte: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/match_repeats
+cte: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL
 
 halBinaries:
 	cd cactus && make
@@ -50,8 +51,12 @@ bin/minhash: impl/MinhashMain.cpp ${libSonLib} ${objs}
 bin/poToGraphViz: impl/poToGraphViz.c ${liblpo} ${libSonLib}
 	gcc ${cflags} -o bin/poToGraphViz -I poaV2/ -I ${sonLibInc} impl/poToGraphViz.c ${liblpo} ${libSonLib} -lm
 
-bin/match_repeats: impl/match_repeats.cpp ${libHal} ${libSonLib}
-	PATH=${PWD}/cactus/submodules/hdf5/bin:${PATH} h5c++ -o bin/match_repeats -I ${halInc} -I ${sonLibInc} impl/match_repeats.cpp ${libHal} ${libSonLib}
+bin/getTECandidates: impl/getTECandidates.cpp ${libHal} ${libSonLib}
+	PATH=${PWD}/cactus/submodules/hdf5/bin:${PATH} h5c++ ${cppflags} -o bin/getTECandidates -I ${halInc} -I ${sonLibInc} impl/getTECandidates.cpp ${libHal} ${libSonLib} -lm
+
+bin/getSequencesFromHAL: impl/getSequencesFromHAL.cpp ${libHal} ${libSonLib}
+	PATH=${PWD}/cactus/submodules/hdf5/bin:${PATH} h5c++ ${cppflags} -o bin/getSequencesFromHAL -I ${halInc} -I ${sonLibInc} impl/getSequencesFromHAL.cpp ${libHal} ${libSonLib} -lm
+
 
 bin/neighborJoining: impl/neighborJoining.c ${libSonLib}
 	gcc -g -o bin/neighborJoining -I ${sonLibInc} impl/neighborJoining.c ${libSonLib} -lm

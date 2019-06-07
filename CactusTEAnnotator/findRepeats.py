@@ -52,16 +52,6 @@ class GffInfo:
 def getGffLine(chrom, name, strand, start, end, family):
     return "%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n" % (chrom, "cactus_repeat_annotation", name, start, end, 0, strand, '.', family)
 
-
-def getSequence(job, hal, genome, chrom, strand, start, end, args):
-    hal2fastaCmd = ["hal2fasta", os.path.basename(hal), genome, "--sequence", chrom, "--start", str(start), "--length", str(end - start)]
-    fastaLines = runCmd(parameters=hal2fastaCmd, args=args).strip().split("\n")
-    sequence = "\n".join(fastaLines[1:])
-    if strand == "-":
-        sequence = reverseComplement(sequence)
-    return sequence
-
-
 def getFasta(job, hal, genome, chrom, start, end, args):
     hal2fastaCmd = ["hal2fasta", os.path.basename(hal), genome]
     if end and start and chrom:
@@ -73,61 +63,37 @@ def getFasta(job, hal, genome, chrom, start, end, args):
 
 def gffToFasta(job, hal, genome, gff, args):
     fasta = job.fileStore.getLocalTempFile()
-    with open(gff, "r") as gffRead:
-        with open(fasta, "w") as fastaWrite:
-            for line in gffRead:
-                gffInfo = GffInfo(line)
-                sequence = getSequence(job=job, hal=hal, genome=genome, chrom=gffInfo.chrom, strand=gffInfo.strand, start=gffInfo.start, end=gffInfo.end, args=args)
-                fastaWrite.write(">%s\n" % gffInfo.name)
-                fastaWrite.write("%s\n" % sequence)
+    with open(fasta, "w") as fastaWrite:
+        runCmd(parameters=["getSequencesFromHAL", hal, gff, genome], streamfile=fastaWrite, args=args)
     return fasta
-
+   
 def getRootPath():
     import CactusTEAnnotator
     i = os.path.abspath(CactusTEAnnotator.__file__)
     return os.path.split(i)[0]
 
-def highNFraction(seqs):
-    for i in range(100):
-        seq = random.choice(seqs)
-        if seq == '':
-            continue
-        base = random.choice(seq)
-        if base == 'N' or base == 'n':
-            return True
-    return False
-
-def getInsertionsOnBranch(job, halID, genome, args):
-    """Extract candidate TE insertions from the Cactus alignment.
+def getTECandidatesOnBranch(job, halID, genome, args):
+    """Use the HAL graph of the alignment to search for candidate TE insertions in this  \
+    genome relative to its parent.
         """
     hal = job.fileStore.readGlobalFile(halID)
     gff = job.fileStore.getLocalTempFile()
-    i = 0
-    with open(gff, 'w') as gffWrite:
-        for bedLine in runCmd(parameters=["halAlignedExtract", "--complement", os.path.basename(hal), genome], args=args).split("\n"):
-            if len(bedLine.split()) != 3:
-                continue
-            chrom, start, end = bedLine.split()
-            start = int(start)
-            end = int(end)
-            if end - start > args.maxInsertionSize:
-                continue
-            if end - start < args.minInsertionSize:
-                continue
-            sequence = getSequence(job=job, hal=hal, genome=genome, chrom=chrom, strand="+", start=start, end=end, args=args)
-            assert len(sequence) > 0
+    fasta = job.fileStore.getLocalTempFile()
 
-            if highNFraction(sequence):
-                continue
-            if args.maxInsertions > 0 and i >= args.maxInsertions:
-                break
-            gffWrite.write(getGffLine(chrom=chrom, start=start, end=end, name=str(i), strand="+", family=str(i)))
-            gffWrite.write(getGffLine(chrom=chrom, start=start, end=end, name=str(i), strand="-", family=str(i)))
-            i = i + 1
-
-    print(sys.stderr, "Found %d insertions on branch" % i)
+    runCmd(parameters=["getTECandidates", os.path.basename(hal), genome, "--minLength", str(args.minTESize), "--maxLength", str(args.maxTESize), "--outGFF", os.path.basename(gff), "--outFasta", os.path.basename(fasta), "--maxSequences", str(args.maxInsertions)], args=args)
 
     return job.fileStore.writeGlobalFile(gff)
+
+def runTRF(job, halID, gffID, genome, args):
+    gff = job.fileStore.readGlobalFile(gffID)
+    hal = job.fileStore.readGlobalFile(halID)
+    fasta = gffToFasta(job=job, hal=hal, genome=genome, gff=gff, args=args)
+
+    trfParameters = ["2", "5", "7", "80", "10", "50", "2000"]
+    maskedFasta = fasta + ".".join(trfParameters) + ".mask"
+
+    runCmd(parameters=["trf", fasta] + trfParameters + ["-m", "-h", "-ngs"], args=args)
+    return job.fileStore.writeGlobalFile(maskedFasta)
 
 def runRepeatScout(job, genome, halID, gffID, seqID):
     hal = job.fileStore.readGlobalFile(halID)
@@ -225,7 +191,7 @@ def buildLibrary_poa(job, halID, genome, gffIDs, args):
     """
     hal = job.fileStore.readGlobalFile(halID)
     gffFiles = [job.fileStore.readGlobalFile(gffID) for gffID in gffIDs]
-    repeatLibraryIDs = []
+    elementsJobs = []
     fastaFiles = [gffToFasta(job=job, hal=hal, genome=genome, gff=gffFile, args=args) for gffFile in gffFiles]
 
     for clusterNum, fastaFile in enumerate(fastaFiles):
@@ -234,9 +200,13 @@ def buildLibrary_poa(job, halID, genome, gffIDs, args):
         elementsJob = Job.wrapJobFn(getRepeatElementsFromGraph, graphID=poaJob.rv(), clusterName=clusterNum, args=args)
         job.addChild(poaJob)
         poaJob.addFollowOn(elementsJob)
-        repeatLibraryIDs.append(elementsJob.rv())
+        elementsJobs.append(elementsJob)
 
-    return job.addFollowOnJobFn(catFilesJobFn, repeatLibraryIDs).rv()
+    catFilesJob = Job.wrapJobFn(catFilesJobFn, fileIDs = [elementsJob.rv() for elementsJob in elementsJobs])
+    for elementsJob in elementsJobs:
+        elementsJob.addFollowOn(catFilesJob)
+    job.addChild(catFilesJob)
+    return catFilesJob.rv()
 
 def runPoa(job, fastaID, args, heaviestBundle=True):
     fasta = job.fileStore.readGlobalFile(fastaID)
@@ -266,42 +236,16 @@ def getRepeatElementsFromGraph(job, graphID, clusterName, args):
 
     return job.fileStore.writeGlobalFile(repeatLibrary)
 
-def joinSubfamiliesByMinhashDistance(repeatFamilies, args):
-    graph = networkx.Graph()
-    
-    seqFileNames = []
-    for i in range(len(repeatFamilies)):
-        graph.add_node(i)
-        seqFile = getTempFile(rootDir=args.outDir)
-        writeSequencesToFile(repeatFamilies[i], seqFile)
-        seqFileNames.append(seqFile)
-
-        for j in range(i):
-            if len(repeatFamilies[i]) <= 1 or len(repeatFamilies[j]) <= 1:
-                continue
-            dist = float(runCmd(parameters=["minhash", "--kmerLength", str(args.minhashClusterDistKmerLength), "--clusterA", seqFileNames[i], "--clusterB", seqFileNames[j]], args=args))
-            print("Found distance %f between clusters %d and %d of size %d and %d" % (dist, i, j, len(repeatFamilies[i]), len(repeatFamilies[j])))
-            if dist < args.minhashClusterDistanceThreshold:
-                assert graph.has_node(i)
-                assert graph.has_node(j)
-                graph.add_edge(i, j)
-
-    newClusters = []
-    for component in networkx.connected_components(graph):
-        newCluster = []
-        for node in component:
-            newCluster.extend(repeatFamilies[node])
-        newClusters.append(newCluster)
-    return newClusters
-
 def poaPipeline(job, halID, genome, args):
-    #Get candidate insertions from the cactus alignment
-    getInsertionsJob = Job.wrapJobFn(getInsertionsOnBranch, halID=halID, genome=args.genome, args=args)
+    #Get candidate TE insertions from the cactus alignment
+    getTECandidatesJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, genome=args.genome, args=args)
+
+    trfJob = Job.wrapJobFn(runTRF, halID=halID, gffID=getTECandidatesJob.rv(), genome=args.genome, args=args)
 
     #Cluster the sequences into large families with minhash
     #so that the graph construction step is computationally 
     #possible
-    initialClusteringJob = Job.wrapJobFn(minhashClustering, gffID=getInsertionsJob.rv(), halID=halID, genome=genome, args=args)
+    initialClusteringJob = Job.wrapJobFn(minhashClustering, gffID=trfJob.rv(), halID=halID, genome=genome, args=args)
 
     #Build a poa graph for each cluster and extract 
     #consensus repeat sequences from each graph
@@ -315,18 +259,18 @@ def poaPipeline(job, halID, genome, args):
     repeatMaskerJob = Job.wrapJobFn(runRepeatMasker, repeatLibraryID=buildLibraryJob.rv(), seqID=genomeID, args=args)
 
 
-    job.addChild(getInsertionsJob)
-    getInsertionsJob.addFollowOn(initialClusteringJob)
+    job.addChild(getTECandidatesJob)
+    getTECandidatesJob.addFollowOn(trfJob)
+    trfJob.addFollowOn(initialClusteringJob)
     initialClusteringJob.addFollowOn(buildLibraryJob)
     buildLibraryJob.addFollowOn(repeatMaskerJob)
 
     #concatenate the gffs for each cluster and return them
     #for debugging
     catFilesJob = Job.wrapJobFn(catFilesJobFn, fileIDs=initialClusteringJob.rv())
-    job.addChild(catFilesJob)
-    initialClusteringJob.addFollowOn(catFilesJob)
+    repeatMaskerJob.addFollowOn(catFilesJob)
 
-    return {'final.gff': repeatMaskerJob.rv(), 'library.fa': buildLibraryJob.rv(), 'clusters.gff': catFilesJob.rv()}
+    return {'clusters.gff': catFilesJob.rv(), 'masked_candidates.gff': trfJob.rv(), 'final.gff': repeatMaskerJob.rv(), 'library.fa': buildLibraryJob.rv()}
 
 
 def repeatScoutPipeline(job, halID, args):
@@ -334,13 +278,13 @@ def repeatScoutPipeline(job, halID, args):
 
     genomeFile = getFasta(job=job, hal=hal, genome=args.genome, chrom=args.chrom, start=args.start, end=args.end, args=args)
     genomeID = job.fileStore.writeGlobalFile(genomeFile)
-    getInsertionsJob = Job.wrapJobFn(getInsertionsOnBranch, halID=halID, genome=args.genome, args=args)
+    getTECandidatesJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, genome=args.genome, args=args)
 
-    repeatScoutJob = Job.wrapJobFn(runRepeatScout, genome=args.genome, halID=halID, gffID = getInsertionsJob.rv(), seqID=seqID)
+    repeatScoutJob = Job.wrapJobFn(runRepeatScout, genome=args.genome, halID=halID, gffID = getTECandidatesJob.rv(), seqID=seqID)
     repeatMaskerJob = Job.wrapJobFn(runRepeatMasker, repeatLibraryID=repeatScoutJob.rv(), seqID=genomeID, args=args)
 
-    job.addChild(getInsertionsJob)
-    getInsertionsJob.addFollowOn(repeatScoutJob)
+    job.addChild(getTECandidatesJob)
+    getTECandidatesJob.addFollowOn(repeatScoutJob)
     repeatScoutJob.addFollowOn(repeatMaskerJob)
 
     return {'final.gff':repeatMaskerJob.rv(), 'library.fa':repeatScoutJob.rv()}
@@ -353,8 +297,8 @@ def main():
     parser.add_argument("outDir", type=str)
 
 
-    parser.add_argument("--minInsertionSize", type=int, default=100)
-    parser.add_argument("--maxInsertionSize", type=int, default=10000)
+    parser.add_argument("--minTESize", type=int, default=100)
+    parser.add_argument("--maxTESize", type=int, default=10000)
     parser.add_argument("--maxNFraction", type=float, default=0.1)
     parser.add_argument("--maxInsertions", type=int, default=None)
 
