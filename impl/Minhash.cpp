@@ -3,8 +3,6 @@
 #include <stack>
 #include <iostream>
 #include <getopt.h>
-#include <set>
-#include <algorithm>
 
 #include "MurmurHash3.h"
 #include <boost/math/distributions/binomial.hpp>
@@ -138,52 +136,6 @@ double minhashJaccard(vector<uint32_t> &a, vector<uint32_t> &b, int length_a, in
 	}
 	double d = (-1.0/kmerLength)*log(2*J/(1 + J));
 	return d;
-}
-
-
-set<set<long> > buildClusters(vector<tuple<int, int, double> > &distances, int nSeqs, double distanceThreshold) {
-
-    //sort sequence pairs by ascending distance
-    sort(distances.begin(), distances.end(), [](tuple<int, int, double> a, tuple<int, int, double> b) {
-        return (get<2>(a) < get<2>(b));
-    });
-
-    stUnionFind *components = stUnionFind_construct();
-    for (int i = 0; i < nSeqs; i++) {
-        stUnionFind_add(components, (void*)i+1);
-    }
-    for (auto &t: distances) {
-        int i = get<0>(t);
-        int j = get<1>(t);
-        double distance = get<2>(t);
-
-        //int64_t size_i = stUnionFind_getSize(components, (void*)i+1);
-        //int64_t size_j = stUnionFind_getSize(components, (void*)j+1);
-
-        double numJoins = log2(nSeqs);
-        if (distance <= distanceThreshold) {
-            stUnionFind_union(components, (void*) i+1, (void*) j+1);
-        }
-
-    }
-
-    set<set<long> > partitioning;
-    stUnionFindIt *it = stUnionFind_getIterator(components);
-    stSet *component;
-    while((component = stUnionFindIt_getNext(it)) != NULL) {
-        void *node;
-        stSetIterator *nodeIt = stSet_getIterator(component);
-        set<long> cluster;
-        while((node = stSet_getNext(nodeIt)) 
-                != NULL) {
-            cluster.insert((long)node - 1);
-        }
-        partitioning.insert(cluster);
-        stSet_destructIterator(nodeIt);
-    }
-    stUnionFind_destructIterator(it);
-    stUnionFind_destruct(components);
-    return partitioning;
 }
 
 /* Filter simple kmers

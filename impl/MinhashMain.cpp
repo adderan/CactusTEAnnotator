@@ -4,8 +4,6 @@
 #include <iostream>
 #include <tuple>
 #include <getopt.h>
-#include <set>
-
 #include "MurmurHash3.h"
 
 extern "C" {
@@ -49,9 +47,7 @@ int main(int argc, char **argv) {
         static struct option long_options[] = { 
             { "sequences", required_argument, 0, 'a' }, 
             { "kmerLength", required_argument, 0, 'b' }, 
-            { "distanceThreshold", required_argument, 0, 'c'},
             { "exact", no_argument, 0, 'd'},
-			{ "distancesOnly", no_argument, 0, 'e'},
             { "clusterA", required_argument, 0, 'f'},
             { "clusterB", required_argument, 0, 'g'},
 			{ "sketchSize", required_argument, 0, 'h'},
@@ -59,7 +55,7 @@ int main(int argc, char **argv) {
 
         int option_index = 0;
 
-        int key = getopt_long(argc, argv, "a:b:c:d", long_options, &option_index);
+        int key = getopt_long(argc, argv, "a:b:d:f:g:h:", long_options, &option_index);
 
         if (key == -1) {
             break;
@@ -73,16 +69,9 @@ int main(int argc, char **argv) {
                 i = sscanf(optarg, "%d", &kmerLength);
                 assert(i == 1);
                 break;
-            case 'c':
-                i = sscanf(optarg, "%lf", &distanceThreshold);
-                assert(i == 1);
-                break;
             case 'd':
                 exact = true;
                 break;
-			case 'e':
-				distancesOnly = true;
-				break;
             case 'f':
                 clusterAFilename = stString_copy(optarg);
                 break;
@@ -111,20 +100,9 @@ int main(int argc, char **argv) {
             distances = getDistances(sequences, numSequences, kmerLength, sketchSize);
         }
 
-        if (distancesOnly) {
-            for (auto &t: distances) {
-                printf("%s %s %f\n", seqNames[get<0>(t)], seqNames[get<1>(t)], get<2>(t));
-            }
-            exit(0);
-        }
-        set<set<long> > partitioning = buildClusters(distances, numSequences, distanceThreshold);
-        for (auto &cluster: partitioning) {
-            for (auto &seqNum: cluster) {
-                printf("%s ", seqNames[seqNum]);
-            }
-            printf("\n\n");
-        }
-        cerr << "Found " << partitioning.size() << " clusters" << endl;
+		for (auto &t: distances) {
+			printf("%s %s %f\n", seqNames[get<0>(t)], seqNames[get<1>(t)], get<2>(t));
+		}
     }
 
     else if (clusterAFilename && clusterBFilename) {

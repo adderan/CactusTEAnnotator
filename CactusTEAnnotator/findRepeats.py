@@ -140,19 +140,12 @@ def minhashClustering(job, fastaID, args):
     fasta = job.fileStore.readGlobalFile(fastaID)
     distances = job.fileStore.getLocalTempFile()
 
-    runCmd(parameters=["minhash", "--kmerLength", str(args.kmerLength), "--sequences", os.path.basename(fasta), "--distancesOnly"], streamfile=distances, args=args)
+    runCmd(parameters=["minhash", "--kmerLength", str(args.kmerLength), "--sequences", os.path.basename(fasta)], streamfile=distances, args=args)
 
     clusters = job.fileStore.getLocalTempFile()
     runCmd(parameters=["build_clusters", os.path.basename(distances), "--distanceThreshold", str(args.distanceThreshold)], streamfile=clusters, args=args)
 
     return job.fileStore.writeGlobalFile(clusters)
-
-
-def writeSequencesToFile(gff, seqsFile):
-    with open(seqsFile, "w") as seqsWrite:
-        for repeatCandidate in repeatCandidates:
-            seqsWrite.write(">%s\n" % repeatCandidate.name)
-            seqsWrite.write("%s\n" % repeatCandidate.seq)
 
 def buildLibrary_poa(job, fastaID, clustersID, args):
     """Build a poa graph for each family and extract
