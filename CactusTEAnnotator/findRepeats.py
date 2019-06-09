@@ -50,14 +50,6 @@ class GffInfo:
 def getGffLine(chrom, name, strand, start, end, family):
     return "%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\n" % (chrom, "cactus_repeat_annotation", name, start, end, 0, strand, '.', family)
 
-def getFasta(job, hal, genome, chrom, start, end, args):
-    hal2fastaCmd = ["hal2fasta", os.path.basename(hal), genome]
-    if end and start and chrom:
-        hal2fastaCmd.extend(["--sequence", chrom, "--start", str(start), "--length", str(end - start)])
-    fastaFile = job.fileStore.getLocalTempFile()
-    runCmd(parameters=hal2fastaCmd, streamfile=fastaFile, args=args)
-    return fastaFile
-
 def gffToFasta(job, hal, genome, gff, args):
     fasta = job.fileStore.getLocalTempFile()
     runCmd(parameters=["getSequencesFromHAL", hal, gff, genome], streamfile=fasta, args=args)
@@ -104,22 +96,6 @@ def runRepeatScout(job, genome, halID, gffID, seqID):
 
     return job.fileStore.writeGlobalFile(repeatScoutLibrary)
 
-def parseRepeatMaskerGFF(job, gffID, args):
-    rmaskGffFile = job.fileStore.readGlobalFile(gffID)
-    gffFile = job.fileStore.getLocalTempFile()
-    with open(rmaskGffFile, 'r') as outputGFFRead:
-        with open(gffFile, 'w') as gffWrite:
-            for i, line in enumerate(outputGFFRead):
-                try:
-                    score, div, deletions, insertions, chrom, start, end, left, strand, family, repeatType, a, b, c, d = line.split()
-                    start = int(start) + args.start
-                    end = int(end) + args.start
-                    gffLine = getGffLine(chrom = chrom, start = int(start), end = int(end), name = str(i), strand = strand, family = family)
-                    gffWrite.write("%s" % gffLine)
-                except ValueError:
-                    continue
-    return job.fileStore.writeGlobalFile(gffFile)
-
 
 def runRepeatMasker(job, repeatLibraryID, seqID, args):
     repeatLibrary = job.fileStore.readGlobalFile(repeatLibraryID)
@@ -130,7 +106,7 @@ def runRepeatMasker(job, repeatLibraryID, seqID, args):
     job.fileStore.logToMaster("directory contents: %s" % os.listdir(repeatMaskerOutput))
     outputGffID = job.fileStore.writeGlobalFile(outputGff)
 
-    return job.addChildJobFn(parseRepeatMaskerGFF, gffID = outputGffID, args = args).rv()
+    return outputGffID
 
 def minhashClustering(job, fastaID, args):
     """Cluster a set of candidate repeat annotations
@@ -206,41 +182,47 @@ def getRepeatElementsFromGraph(job, graphID, clusterName, args):
 def poaPipeline(job, halID, genome, args):
     #Get candidate TE insertions from the cactus alignment
     getTECandidatesJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, genome=args.genome, args=args)
+    job.addChild(getTECandidatesJob)
 
+    #Mask low complexity regions and simple repeats with TRF
     trfJob = Job.wrapJobFn(runTRF, fastaID=getTECandidatesJob.rv('fasta'), args=args)
+    getTECandidatesJob.addFollowOn(trfJob)
 
     #Cluster the sequences into large families with minhash
     #so that the graph construction step is computationally 
     #possible
     initialClusteringJob = Job.wrapJobFn(minhashClustering, fastaID=trfJob.rv(), args=args)
-
+    trfJob.addFollowOn(initialClusteringJob)
 
     #Build a poa graph for each cluster and extract 
     #consensus repeat sequences from each graph
     buildLibraryJob = Job.wrapJobFn(buildLibrary_poa, clustersID=initialClusteringJob.rv(), fastaID=trfJob.rv(), args=args)
-
-
-    hal = job.fileStore.readGlobalFile(halID)
-    genomeFile = getFasta(job=job, hal=hal, genome=args.genome, chrom=args.chrom, start=args.start, end=args.end, args=args)
-    genomeID = job.fileStore.writeGlobalFile(genomeFile)
-
-    repeatMaskerJob = Job.wrapJobFn(runRepeatMasker, repeatLibraryID=buildLibraryJob.rv(), seqID=genomeID, args=args)
-
-
-    job.addChild(getTECandidatesJob)
-    getTECandidatesJob.addFollowOn(trfJob)
-    trfJob.addFollowOn(initialClusteringJob)
     initialClusteringJob.addFollowOn(buildLibraryJob)
-    buildLibraryJob.addFollowOn(repeatMaskerJob)
 
+    if args.skipRepeatMasker:
+        finalGffID = None
+    else:
+        #Download a section of the genome to annotate
+        #with RepeatMasker, using the library we constructed
+        hal = job.fileStore.readGlobalFile(halID)
+        genomeFile = job.fileStore.getLocalTempFile()
+        hal2fastaCmd = ["hal2fasta", os.path.basename(hal), genome]
+        if args.chrom and args.start and args.end:
+            hal2fastaCmd.extend(["--sequence", chrom, "--start", str(start), "--length", str(end - start)])
+        runCmd(parameters=hal2fastaCmd, streamfile=genomeFile, args=args)
 
-    return {'candidates.gff': getTECandidatesJob.rv('gff'), 'masked_candidates.fa': trfJob.rv(),'clusters.txt': initialClusteringJob.rv(), 'final.gff': repeatMaskerJob.rv(), 'library.fa': buildLibraryJob.rv()}
+        genomeID = job.fileStore.writeGlobalFile(genomeFile)
+        repeatMaskerJob = Job.wrapJobFn(runRepeatMasker, repeatLibraryID=buildLibraryJob.rv(), seqID=genomeID, args=args)
+        buildLibraryJob.addFollowOn(repeatMaskerJob)
+        finalGffID = repeatMaskerJob.rv()
+
+    return {'candidates.gff': getTECandidatesJob.rv('gff'), 'masked_candidates.fa': trfJob.rv(),'clusters.txt': initialClusteringJob.rv(), 'final.gff': finalGffID, 'library.fa': buildLibraryJob.rv()}
 
 
 def repeatScoutPipeline(job, halID, args):
     hal = job.fileStore.readGlobalFile(halID)
 
-    genomeFile = getFasta(job=job, hal=hal, genome=args.genome, chrom=args.chrom, start=args.start, end=args.end, args=args)
+    #genomeFile = getFasta(job=job, hal=hal, genome=args.genome, chrom=args.chrom, start=args.start, end=args.end, args=args)
     genomeID = job.fileStore.writeGlobalFile(genomeFile)
     getTECandidatesJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, genome=args.genome, args=args)
 
@@ -270,7 +252,7 @@ def main():
     parser.add_argument("--start", type=int, default=None)
     parser.add_argument("--end", type=int, default=None)
 
-    parser.add_argument("--distanceThreshold", type=float, default=0.1)
+    parser.add_argument("--distanceThreshold", type=float, default=0.05)
 
     parser.add_argument("--heaviestBundlingThreshold", type=float, default=0.8)
     parser.add_argument("--kmerLength", type=int, default=5)
@@ -278,6 +260,7 @@ def main():
 
 
     parser.add_argument("--usePoa", action="store_true", default=False, help="Use the POA pipeline")
+    parser.add_argument("--skipRepeatMasker", action="store_true", default=False)
 
     parser.add_argument("--localBinaries", action="store_true", default=False)
 
@@ -303,6 +286,8 @@ def main():
 
         results = toil.start(rootJob)
         for filename in results:
+            if results[filename] is None:
+                continue
             toil.exportFile(results[filename], makeURL(os.path.join(args.outDir, filename)))
 
 if __name__ == "__main__":

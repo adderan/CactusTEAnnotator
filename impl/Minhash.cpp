@@ -130,6 +130,9 @@ double minhashJaccard(vector<uint32_t> &a, vector<uint32_t> &b, int length_a, in
         }
         total += 1.0;
     }
+	if (total <= 5.0) {
+		return 10000.0;
+	}
 	double J = matches/total;
 	if (J == 0.0) {
 		return 10000.0;
