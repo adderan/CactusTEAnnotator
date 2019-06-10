@@ -15,15 +15,15 @@ def makeURL(path):
 
 dockerImage = "cactus-te-annotator:latest"
 
-def runCmd(parameters, args, streamfile=None):
+def runCmd(parameters, args, outfile=None):
     if args.localBinaries:
         cmd = parameters
     else:
         cmd = ["docker", "run", "-it", "--rm", "-v", "%s:/data" % os.getcwd(), dockerImage] + parameters
        
-    if streamfile:
-        with open(streamfile, "w") as streamfileWrite:
-            subprocess.check_call(cmd, stdout=streamfileWrite)
+    if outfile:
+        with open(outfile, "w") as outfileWrite:
+            subprocess.check_call(cmd, stdout=outfileWrite)
     else:
         output = subprocess.check_output(cmd)
         return output
@@ -52,7 +52,7 @@ def getGffLine(chrom, name, strand, start, end, family):
 
 def gffToFasta(job, hal, genome, gff, args):
     fasta = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["getSequencesFromHAL", hal, gff, genome], streamfile=fasta, args=args)
+    runCmd(parameters=["getSequencesFromHAL", hal, gff, genome], outfile=fasta, args=args)
     return fasta
    
 def getRootPath():
@@ -79,7 +79,12 @@ def runTRF(job, fastaID, args):
     maskedFasta = os.path.basename(fasta) + "." + ".".join(trfParameters) + ".mask"
 
     runCmd(parameters=["trf", os.path.basename(fasta)] + trfParameters + ["-m", "-h", "-ngs"], args=args)
-    return job.fileStore.writeGlobalFile(maskedFasta)
+
+    #TRF masks the low-complexity sequences with Ns, so discard
+    #sequences with too many
+    NFilteredFasta = job.fileStore.getLocalTempFile()
+    runCmd(parameters=["filterNs", maskedFasta, str(args.maxNFraction)], outfile=NFilteredFasta, args=args)
+    return job.fileStore.writeGlobalFile(NFilteredFasta)
 
 def runRepeatScout(job, genome, halID, gffID, seqID):
     hal = job.fileStore.readGlobalFile(halID)
@@ -116,10 +121,10 @@ def minhashClustering(job, fastaID, args):
     fasta = job.fileStore.readGlobalFile(fastaID)
     distances = job.fileStore.getLocalTempFile()
 
-    runCmd(parameters=["minhash", "--kmerLength", str(args.kmerLength), "--sequences", os.path.basename(fasta)], streamfile=distances, args=args)
+    runCmd(parameters=["minhash", "--kmerLength", str(args.kmerLength), "--sequences", os.path.basename(fasta)], outfile=distances, args=args)
 
     clusters = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["build_clusters", os.path.basename(distances), "--distanceThreshold", str(args.distanceThreshold)], streamfile=clusters, args=args)
+    runCmd(parameters=["build_clusters", os.path.basename(distances), "--distanceThreshold", str(args.distanceThreshold)], outfile=clusters, args=args)
 
     return job.fileStore.writeGlobalFile(clusters)
 
@@ -137,7 +142,7 @@ def buildLibrary_poa(job, fastaID, clustersID, args):
     elementsJobs = []
     for i, seqList in enumerate(clusters):
         cluster_i_fasta = job.fileStore.getLocalTempFile()
-        runCmd(parameters=["samtools", "faidx", os.path.basename(fasta)] + seqList, streamfile=cluster_i_fasta, args=args)
+        runCmd(parameters=["samtools", "faidx", os.path.basename(fasta)] + seqList, outfile=cluster_i_fasta, args=args)
 
         cluster_i_fastaID = job.fileStore.writeGlobalFile(cluster_i_fasta)
         poaJob = Job.wrapJobFn(runPoa, fastaID=cluster_i_fastaID, args=args)
@@ -165,7 +170,7 @@ def runPoa(job, fastaID, args, heaviestBundle=True):
 def getRepeatElementsFromGraph(job, graphID, clusterName, args):
     graph = job.fileStore.readGlobalFile(graphID)
     consensusSequences = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["getHeaviestBundles", "--lpo", os.path.basename(graph)], streamfile=consensusSequences, args=args)
+    runCmd(parameters=["getHeaviestBundles", "--lpo", os.path.basename(graph)], outfile=consensusSequences, args=args)
 
     #Give the sequences unique names
     repeatLibrary = job.fileStore.getLocalTempFile()
@@ -209,7 +214,7 @@ def poaPipeline(job, halID, genome, args):
         hal2fastaCmd = ["hal2fasta", os.path.basename(hal), genome]
         if args.chrom and args.start and args.end:
             hal2fastaCmd.extend(["--sequence", chrom, "--start", str(start), "--length", str(end - start)])
-        runCmd(parameters=hal2fastaCmd, streamfile=genomeFile, args=args)
+        runCmd(parameters=hal2fastaCmd, outfile=genomeFile, args=args)
 
         genomeID = job.fileStore.writeGlobalFile(genomeFile)
         repeatMaskerJob = Job.wrapJobFn(runRepeatMasker, repeatLibraryID=buildLibraryJob.rv(), seqID=genomeID, args=args)
@@ -245,14 +250,14 @@ def main():
 
     parser.add_argument("--minTESize", type=int, default=100)
     parser.add_argument("--maxTESize", type=int, default=10000)
-    parser.add_argument("--maxNFraction", type=float, default=0.1)
+    parser.add_argument("--maxNFraction", type=float, default=0.2)
     parser.add_argument("--maxInsertions", type=int, default=None)
 
     parser.add_argument("--chrom", type=str, default=None)
     parser.add_argument("--start", type=int, default=None)
     parser.add_argument("--end", type=int, default=None)
 
-    parser.add_argument("--distanceThreshold", type=float, default=0.05)
+    parser.add_argument("--distanceThreshold", type=float, default=0.01)
 
     parser.add_argument("--heaviestBundlingThreshold", type=float, default=0.8)
     parser.add_argument("--kmerLength", type=int, default=5)

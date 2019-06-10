@@ -18,7 +18,7 @@ liblpo = poaV2/liblpo.a
 all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries cte
 
 
-cte: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters
+cte: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs
 
 halBinaries:
 	cd cactus && make
@@ -72,6 +72,9 @@ bin/getThreadPartitions: impl/getThreadPartitions.c ${liblpo}
 
 bin/getHeaviestBundles: impl/getHeaviestBundles.c poaV2/liblpo.a
 	gcc ${cflags} -o bin/getHeaviestBundles -I poaV2/ impl/getHeaviestBundles.c ${liblpo} -lm
+
+bin/filterNs: impl/filterNs.c ${libSonLib}
+	gcc ${cflags} -o bin/filterNs -I ${sonLibInc} impl/filterNs.c ${libSonLib} -lm
 
 bin/build_clusters: scripts/build_clusters
 	cp scripts/build_clusters bin/build_clusters

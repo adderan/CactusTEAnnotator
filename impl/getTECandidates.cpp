@@ -3,25 +3,13 @@
 #include <string>
 #include "hal.h"
 
+extern "C" {
+#include "sonLib.h"
+}
+
 
 using namespace hal;
 using namespace std;
-
-double getNFraction(DNAIteratorConstPtr it, hal_size_t start, hal_size_t length) {
-	int numN = 0;
-	hal_size_t genomeLength = it->getGenome()->getSequenceLength();
-
-	it->jumpTo(start);
-	for (hal_size_t i = 0; i < length; i++) {
-		if (it->getArrayIndex() >= genomeLength) break;
-		if (it->getChar() == 'N') {
-			numN++;
-		}
-		it->toRight();
-	}
-
-	return (double)numN/(double)length;
-}
 
 int main(int argc, char **argv) {
 	string halPath;
@@ -77,7 +65,6 @@ int main(int argc, char **argv) {
 		gffFile = fopen(gffFilename.c_str(), "w");
 	}
 
-
 	TopSegmentIteratorConstPtr topSeg = genome->getTopSegmentIterator();
 	TopSegmentIteratorConstPtr endSeg = genome->getTopSegmentEndIterator();
 
@@ -88,23 +75,24 @@ int main(int argc, char **argv) {
 		if (topSeg->getLength() > maxLength) continue;
 		if (topSeg->getLength() < minLength) continue;
 
-		double nFraction = getNFraction(dnaIt, topSeg->getStartPosition(), topSeg->getLength());
-
-		if (nFraction > 0.1) continue;
-
 		const Sequence *sequence = topSeg->getSequence();
 		int start = topSeg->getStartPosition() - sequence->getStartPosition();
 		int end = topSeg->getEndPosition() - sequence->getStartPosition();
 
 		//Print the GFF line
 		fprintf(gffFile, "%s\tcandidate_transposon\tcte_%d\t%d\t%d\t0\t+\t.\t%d\n", sequence->getName().c_str(), i, start, end, i);
-
+		fprintf(gffFile, "%s\tcandidate_transposon\tcte_%d_comp\t%d\t%d\t-\t.\t%d\n", sequence->getName().c_str(), i, start, end, i);
 
 		if (fastaFile) {
 			string seqBuffer;
 			sequence->getSubString(seqBuffer, start, topSeg->getLength());
 			fprintf(fastaFile, ">cte_%d\n", i);
 			fprintf(fastaFile, "%s\n", seqBuffer.c_str());
+
+			char *reverseCompSeq = stString_reverseComplementString(seqBuffer.c_str());
+			fprintf(fastaFile, ">cte_%d_comp\n", i);
+			fprintf(fastaFile, "%s\n", reverseCompSeq);
+			free(reverseCompSeq);
 		}
 
 		i++;
