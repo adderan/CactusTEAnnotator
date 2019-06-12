@@ -22,15 +22,15 @@ void printGffEntry(ostream *output, const vector<TopSegmentIteratorConstPtr> &se
 			hal_size_t end = sequence->getStartPosition() + segments[i]->getEndPosition();
 
 			char strand = '+';
-			*output << 
+			*output <<
 				sequence->getName() << "\t"
 				"candidate_transposon" << "\t" <<
-				"cte" << seqNum << "_" << i << "\t" << 
-				start << "\t" << 
-				end << "\t" << 
-				"0" << "\t" << 
-				strand << "\t" << 
-				"." << "\t" << 
+				"cte" << seqNum << "_" << i << "\t" <<
+				start << "\t" <<
+				end << "\t" <<
+				"0" << "\t" <<
+				strand << "\t" <<
+				"." << "\t" <<
 				seqNum << endl;
 		}
 	}
@@ -53,8 +53,8 @@ void printFastaEntry(ostream *output, const vector<TopSegmentIteratorConstPtr> &
 int main(int argc, char **argv) {
 	string halPath;
 	string genomeName;
-	hal_size_t minLength = 100;
-	hal_size_t maxLength = 10000;
+	hal_size_t minLength;
+	hal_size_t maxLength;
 	string fastaFilename;
 	string gffFilename;
 	hal_size_t maxDiscardedSequence;
@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
 	parser->addOption("maxLength", "Maximum length of candidate TEs", 10000);
 	parser->addOption("maxSequences", "Maximium number of candidate TEs to output", 0);
 
-	parser->addOption("maxDiscardedSequence", "Maximum distance to join multiple HAL insertions as one candidate TE", 500);
+	parser->addOption("maxDiscardedSequence", "Maximum distance to join multiple HAL insertions as one candidate TE", 100);
 
 	try {
 		parser->parseOptions(argc, argv);
@@ -125,7 +125,6 @@ int main(int argc, char **argv) {
 			topSeg->toRight();
 		}
 
-
 		while (true) {
 			if (topSeg->hasParent()) {
 				discardedSequence += topSeg->getLength();
@@ -135,6 +134,8 @@ int main(int argc, char **argv) {
 				segments.push_back(topSeg->copy());
 				seqLength += topSeg->getLength();
 			}
+			if (topSeg->equals(endSeg)) break;
+			topSeg->toRight();
 		}
 
 		if (seqLength < minLength) continue;
