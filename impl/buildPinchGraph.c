@@ -4,7 +4,6 @@
 
 #include "stPinchGraphs.h"
 
-
 int main(int argc, char **argv) {
 	FILE *alignmentsFile = fopen(argv[1], "r");
 
@@ -13,6 +12,8 @@ int main(int argc, char **argv) {
 	stUnionFind *families = stUnionFind_construct();
 	stSet *alignments = stSet_construct();
 	stHash *seqNames = stHash_construct();
+
+	//stPinchThreadSet *threadSet = stPinchThreadSet_construct();
 	while((pairwiseAlignment = cigarRead(alignmentsFile)) != NULL) {
 		stSet_insert(alignments, pairwiseAlignment);
 		stUnionFind_add(families, (void*) stHash_stringKey(pairwiseAlignment->contig1));
@@ -20,6 +21,7 @@ int main(int argc, char **argv) {
 
 		stHash_insert(seqNames, (void*) stHash_stringKey(pairwiseAlignment->contig1), (void*) pairwiseAlignment->contig1);
 		stHash_insert(seqNames, (void*) stHash_stringKey(pairwiseAlignment->contig2), (void*) pairwiseAlignment->contig2);
+
 
 	}
 

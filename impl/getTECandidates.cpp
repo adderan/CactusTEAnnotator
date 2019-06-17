@@ -63,7 +63,6 @@ int main(int argc, char **argv) {
 	if (fastaFilename != "") {
 		fastaFile = fopen(fastaFilename.c_str(), "w");
 	}
-
 	if (gffFilename != "") {
 		gffFile = fopen(gffFilename.c_str(), "w");
 	}

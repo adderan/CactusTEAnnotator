@@ -107,9 +107,71 @@ def runRepeatScout(job, genome, halID, gffID, seqID):
 def runLastz(job, fastaID, args):
     fasta = job.fileStore.readGlobalFile(fastaID)
     alignments = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["cPecanLastz", "--notrivial", "--format=cigar", "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
+    runCmd(parameters=["lastz", "--notrivial", "--format=cigar", "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
 
     return job.fileStore.writeGlobalFile(alignments)
+
+def sampleLastzAlignments(job, fastaID, args):
+    levels = [0.01, 0.1, 1.0]
+    fasta = job.fileStore.readGlobalFile(fastaID)
+
+    returnValues = {}
+    samplingRatesID = job.fileStore.writeGlobalFile(job.fileStore.getLocalTempFile())
+    alignmentsID = None
+    nLevels = len(levels)
+    alignmentJobs = []
+    for i in range(nLevels):
+        alignmentJobs.append(Job.wrapJobFn(runLastzAndGetCoveredSeeds, fastaID=fastaID, samplingRatesID = samplingRatesID, baseSamplingRate = levels[i], args=args))
+
+        alignmentsID = alignmentJobs[i].rv('alignments')
+        samplingRatesID = alignmentJobs[i].rv('samplingRates')
+
+        returnValues["alignments_%f.cigar" % levels[i]] = alignmentsID
+        returnValues["samplingRates_%f.txt" % levels[i]] = samplingRatesID
+
+        if i > 0:
+            alignmentJobs[i-1].addFollowOn(alignmentJobs[i])
+    job.addChild(alignmentJobs[0])
+
+    returnValues["alignments"] = alignmentsID
+    return returnValues
+
+def runLastzAndGetCoveredSeeds(job, fastaID, samplingRatesID, baseSamplingRate, args):
+    fasta = job.fileStore.readGlobalFile(fastaID)
+
+    samplingRatesFile = job.fileStore.readGlobalFile(samplingRatesID)
+
+    alignments = job.fileStore.getLocalTempFile()
+    runCmd(parameters=["lastz", "--format=cigar", "--notrivial", "--samplingRates=%s" % os.path.basename(samplingRatesFile), "--baseSamplingRate=%f" % baseSamplingRate, "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
+
+    alignmentsID = job.fileStore.writeGlobalFile(alignments)
+
+    samplingRates = {}
+    with open(samplingRatesFile, 'r') as f:
+        for line in f:
+            seed, rate = line.split()
+            samplingRates[seed] = float(rate)
+
+    seedCountsFile = job.fileStore.getLocalTempFile()
+    runCmd(parameters=["lastz", "--tableonly=count", "%s[multiple]" % os.path.basename(fasta)], outfile=seedCountsFile, args=args)
+
+    for line in runCmd(parameters=["getCoveredSeeds", "--seeds", os.path.basename(seedCountsFile), "--alignments", os.path.basename(alignments), "--sequences", os.path.basename(fasta)], args=args).split("\n"):
+        if len(line.split()) != 3:
+            continue
+        seed, count, length = line.split()
+        count = int(count)
+        length = int(length)
+        updatedSamplingRate = baseSamplingRate * (1.0/(count*length))
+        if not seed in samplingRates or samplingRates[seed] > updatedSamplingRate:
+            samplingRates[seed] = updatedSamplingRate
+
+    newSamplingRatesFile = job.fileStore.getLocalTempFile()
+    with open(newSamplingRatesFile, "w") as fh:
+        for seed in samplingRates:
+            fh.write("%s %lf\n" % (seed, samplingRates[seed]))
+    samplingRatesID = job.fileStore.writeGlobalFile(newSamplingRatesFile)
+
+    return {"alignments": alignmentsID, "samplingRates": samplingRatesID}
 
 def runRepeatMasker(job, repeatLibraryID, seqID, args):
     repeatLibrary = job.fileStore.readGlobalFile(repeatLibraryID)
@@ -200,10 +262,10 @@ def lastzPipeline(job, halID, genome, args):
     trfJob = Job.wrapJobFn(runTRF, fastaID=getTECandidatesJob.rv('fasta'), args=args)
     getTECandidatesJob.addFollowOn(trfJob)
 
-    lastzJob = Job.wrapJobFn(runLastz, fastaID=trfJob.rv(), args=args)
+    lastzJob = Job.wrapJobFn(sampleLastzAlignments, fastaID=trfJob.rv(), args=args)
     trfJob.addFollowOn(lastzJob)
 
-    return {"masked_candidates.fa": trfJob.rv(), "alignments.cigar": lastzJob.rv()}
+    return {"masked_candidates.fa": trfJob.rv(), "alignments.cigar": lastzJob.rv('alignments'), "alignmentFiles": lastzJob.rv()}
 
 def poaPipeline(job, halID, genome, args):
     #Get candidate TE insertions from the cactus alignment
@@ -261,6 +323,17 @@ def repeatScoutPipeline(job, halID, args):
 
     return {'final.gff':repeatMaskerJob.rv(), 'library.fa':repeatScoutJob.rv()}
 
+def exportResultsFiles(toil, results, outDir):
+    for item in results:
+        if results[item] is None:
+            continue
+        if isinstance(results[item], dict):
+            #Store any extra files returned from a job in their own directory
+            subDir = os.path.join(outDir, item)
+            os.makedirs(subDir)
+            exportResultsFiles(toil=toil, results=results[item], outDir=subDir)
+        else:
+            toil.exportFile(results[item], makeURL(os.path.join(outDir, item)))
 
 def main():
     parser = argparse.ArgumentParser()
@@ -314,10 +387,7 @@ def main():
             rootJob = Job.wrapJobFn(repeatScoutPipeline, halID=halID, args=args)
 
         results = toil.start(rootJob)
-        for filename in results:
-            if results[filename] is None:
-                continue
-            toil.exportFile(results[filename], makeURL(os.path.join(args.outDir, filename)))
+        exportResultsFiles(toil=toil, results=results, outDir=args.outDir)
 
 if __name__ == "__main__":
     main()

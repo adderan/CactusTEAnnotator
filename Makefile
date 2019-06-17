@@ -15,10 +15,10 @@ halInc = cactus/submodules/hal/lib/
 
 liblpo = poaV2/liblpo.a
 
-all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries cte
+all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries cte bin/lastz
 
 
-cte: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs bin/repeatGluer
+cte: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs bin/buildPinchGraph bin/getCoveredSeeds
 
 halBinaries:
 	cd cactus && make
@@ -38,6 +38,9 @@ ${liblpo}:
 poa: ${liblpo}
 	cp poaV2/poa bin/
 
+bin/lastz:
+	cd cPecan/externalTools/lastz-distrib-1.03.54 && make
+	cp cPecan/externalTools/lastz-distrib-1.03.54/src/lastz bin/
 
 ${objs}: ${sources} ${libSonLib}
 	g++ -I ${sonLibInc} -I smhasher/src -c ${sources}
@@ -76,8 +79,11 @@ bin/getHeaviestBundles: impl/getHeaviestBundles.c poaV2/liblpo.a
 bin/filterNs: impl/filterNs.c ${libSonLib}
 	gcc ${cflags} -o bin/filterNs -I ${sonLibInc} impl/filterNs.c ${libSonLib} -lm
 
-bin/repeatGluer: impl/repeatGluer.c ${libSonLib}
-	gcc ${cflags} -o bin/repeatGluer -I ${sonLibInc} impl/repeatGluer.c ${libSonLib} -lm
+bin/buildPinchGraph: impl/buildPinchGraph.c ${libSonLib}
+	gcc ${cflags} -o bin/buildPinchGraph -I ${sonLibInc} impl/buildPinchGraph.c ${libSonLib} -lm
+
+bin/getCoveredSeeds: impl/getCoveredSeeds.c ${libSonLib}
+	gcc ${cflags} -o bin/getCoveredSeeds -I ${sonLibInc} impl/getCoveredSeeds.c ${libSonLib} -lm
 
 bin/build_clusters: scripts/build_clusters
 	cp scripts/build_clusters bin/build_clusters
