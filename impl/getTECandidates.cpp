@@ -19,6 +19,7 @@ int main(int argc, char **argv) {
 	string fastaFilename;
 	string gffFilename;
 	int maxSequences = 0;
+	bool ignoreReverse;
 
 	CLParserPtr parser = hdf5CLParserInstance(false);
 	parser->addArgument("halPath", "Input hal file");
@@ -28,6 +29,7 @@ int main(int argc, char **argv) {
 	parser->addOption("minLength", "Minimum length of candidate TEs", 100);
 	parser->addOption("maxLength", "Maximum length of candidate TEs", 10000);
 	parser->addOption("maxSequences", "Maximium number of candidate TEs to output", 0);
+	parser->addOptionFlag("ignoreReverse", "Include the forward and reverse strands for each insert.", false);
 
 	try {
 		parser->parseOptions(argc, argv);
@@ -38,6 +40,7 @@ int main(int argc, char **argv) {
 		minLength = parser->getOption<hal_size_t>("minLength");
 		maxLength = parser->getOption<hal_size_t>("maxLength");
 		maxSequences = parser->getOption<int>("maxSequences");
+		ignoreReverse = parser->getFlag("ignoreReverse");
 	}
 	catch (exception& e) {
 		cerr << e.what() << endl;
@@ -81,7 +84,9 @@ int main(int argc, char **argv) {
 
 		//Print the GFF line
 		fprintf(gffFile, "%s\tcandidate_transposon\tcte_%d\t%d\t%d\t0\t+\t.\t%d\n", sequence->getName().c_str(), i, start, end, i);
-		fprintf(gffFile, "%s\tcandidate_transposon\tcte_%d_comp\t%d\t%d\t-\t.\t%d\n", sequence->getName().c_str(), i, start, end, i);
+		if (!ignoreReverse) {
+			fprintf(gffFile, "%s\tcandidate_transposon\tcte_%d_comp\t%d\t%d\t-\t.\t%d\n", sequence->getName().c_str(), i, start, end, i);
+		}
 
 		if (fastaFile) {
 			string seqBuffer;
@@ -89,10 +94,12 @@ int main(int argc, char **argv) {
 			fprintf(fastaFile, ">cte_%d\n", i);
 			fprintf(fastaFile, "%s\n", seqBuffer.c_str());
 
-			char *reverseCompSeq = stString_reverseComplementString(seqBuffer.c_str());
-			fprintf(fastaFile, ">cte_%d_comp\n", i);
-			fprintf(fastaFile, "%s\n", reverseCompSeq);
-			free(reverseCompSeq);
+			if (!ignoreReverse) {
+				char *reverseCompSeq = stString_reverseComplementString(seqBuffer.c_str());
+				fprintf(fastaFile, ">cte_%d_comp\n", i);
+				fprintf(fastaFile, "%s\n", reverseCompSeq);
+				free(reverseCompSeq);
+			}
 		}
 
 		i++;

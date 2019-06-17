@@ -60,7 +60,7 @@ def getRootPath():
     i = os.path.abspath(CactusTEAnnotator.__file__)
     return os.path.split(i)[0]
 
-def getTECandidatesOnBranch(job, halID, genome, args):
+def getTECandidatesOnBranch(job, halID, genome, args, includeReverse=True):
     """Use the HAL graph of the alignment to search for candidate TE insertions in this  \
     genome relative to its parent.
         """
@@ -68,7 +68,10 @@ def getTECandidatesOnBranch(job, halID, genome, args):
     gff = job.fileStore.getLocalTempFile()
     fasta = job.fileStore.getLocalTempFile()
 
-    runCmd(parameters=["getTECandidates", os.path.basename(hal), genome, "--minLength", str(args.minTESize), "--maxLength", str(args.maxTESize), "--outGFF", os.path.basename(gff), "--outFasta", os.path.basename(fasta), "--maxSequences", str(args.maxInsertions)], args=args)
+    cmd = ["getTECandidates", os.path.basename(hal), genome, "--minLength", str(args.minTESize), "--maxLength", str(args.maxTESize), "--outGFF", os.path.basename(gff), "--outFasta", os.path.basename(fasta), "--maxSequences", str(args.maxInsertions)]
+    if not includeReverse:
+        cmd.extend(["--ignoreReverse"])
+    runCmd(parameters=cmd, args=args)
 
     return {'fasta': job.fileStore.writeGlobalFile(fasta), 'gff': job.fileStore.writeGlobalFile(gff)}
 
@@ -101,6 +104,12 @@ def runRepeatScout(job, genome, halID, gffID, seqID):
 
     return job.fileStore.writeGlobalFile(repeatScoutLibrary)
 
+def runLastz(job, fastaID, args):
+    fasta = job.fileStore.readGlobalFile(fastaID)
+    alignments = job.fileStore.getLocalTempFile()
+    runCmd(parameters=["cPecanLastz", "--notrivial", "--format=cigar", "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
+
+    return job.fileStore.writeGlobalFile(alignments)
 
 def runRepeatMasker(job, repeatLibraryID, seqID, args):
     repeatLibrary = job.fileStore.readGlobalFile(repeatLibraryID)
@@ -184,9 +193,21 @@ def getRepeatElementsFromGraph(job, graphID, clusterName, args):
 
     return job.fileStore.writeGlobalFile(repeatLibrary)
 
+def lastzPipeline(job, halID, genome, args):
+    getTECandidatesJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, genome=genome, includeReverse=False, args=args)
+    job.addChild(getTECandidatesJob)
+
+    trfJob = Job.wrapJobFn(runTRF, fastaID=getTECandidatesJob.rv('fasta'), args=args)
+    getTECandidatesJob.addFollowOn(trfJob)
+
+    lastzJob = Job.wrapJobFn(runLastz, fastaID=trfJob.rv(), args=args)
+    trfJob.addFollowOn(lastzJob)
+
+    return {"masked_candidates.fa": trfJob.rv(), "alignments.cigar": lastzJob.rv()}
+
 def poaPipeline(job, halID, genome, args):
     #Get candidate TE insertions from the cactus alignment
-    getTECandidatesJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, genome=args.genome, args=args)
+    getTECandidatesJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, genome=genome, args=args)
     job.addChild(getTECandidatesJob)
 
     #Mask low complexity regions and simple repeats with TRF
@@ -265,6 +286,7 @@ def main():
 
 
     parser.add_argument("--usePoa", action="store_true", default=False, help="Use the POA pipeline")
+    parser.add_argument("--useLastz", action="store_true", default=False, help="")
     parser.add_argument("--skipRepeatMasker", action="store_true", default=False)
 
     parser.add_argument("--localBinaries", action="store_true", default=False)
@@ -286,6 +308,8 @@ def main():
         if args.usePoa:
             args.substMatrixID = toil.importFile(makeURL(os.path.join(os.path.dirname(__file__), args.substMatrix)))
             rootJob = Job.wrapJobFn(poaPipeline, halID=halID, genome=args.genome, args=args)
+        elif args.useLastz:
+            rootJob = Job.wrapJobFn(lastzPipeline, halID=halID, genome=args.genome, args=args)
         else:
             rootJob = Job.wrapJobFn(repeatScoutPipeline, halID=halID, args=args)
 
