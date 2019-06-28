@@ -13,6 +13,13 @@ sonLibInc = cactus/submodules/sonLib/lib/
 libHal = cactus/submodules/hal/lib/halLib.a
 halInc = cactus/submodules/hal/lib/
 
+cactusInc = cactus/lib
+cafLib = cactus/lib/stCaf.a
+cactusLib = cactus/lib/cactusLib.a
+
+pinchesAndCactiInc = cactus/submodules/sonLib/lib/
+pinchesAndCactiLib = cactus/submodules/sonLib/lib/stPinchesAndCacti.a
+
 liblpo = poaV2/liblpo.a
 
 all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries cte bin/lastz
@@ -80,7 +87,7 @@ bin/filterNs: impl/filterNs.c ${libSonLib}
 	gcc ${cflags} -o bin/filterNs -I ${sonLibInc} impl/filterNs.c ${libSonLib} -lm
 
 bin/buildPinchGraph: impl/buildPinchGraph.c ${libSonLib}
-	gcc ${cflags} -o bin/buildPinchGraph -I ${sonLibInc} impl/buildPinchGraph.c ${libSonLib} -lm
+	gcc ${cflags} -o bin/buildPinchGraph -I ${sonLibInc} -I ${cactusInc} -I ${pinchesAndCactiInc} impl/buildPinchGraph.c ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} -lm -lz
 
 bin/getCoveredSeeds: impl/getCoveredSeeds.c ${libSonLib}
 	gcc ${cflags} -o bin/getCoveredSeeds -I ${sonLibInc} impl/getCoveredSeeds.c ${libSonLib} -lm
