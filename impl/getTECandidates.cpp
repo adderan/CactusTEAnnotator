@@ -82,20 +82,20 @@ int main(int argc, char **argv) {
 		int end = topSeg->getEndPosition() - sequence->getStartPosition();
 
 		//Print the GFF line
-		fprintf(gffFile, "%s\tcandidate_transposon\tcte_%d\t%d\t%d\t0\t+\t.\t%d\n", sequence->getName().c_str(), i, start, end, i);
+		fprintf(gffFile, "%s\tcandidate_transposon\t%d\t%d\t%d\t0\t+\t.\t%d\n", sequence->getName().c_str(), i, start, end, i);
 		if (!ignoreReverse) {
-			fprintf(gffFile, "%s\tcandidate_transposon\tcte_%d_comp\t%d\t%d\t-\t.\t%d\n", sequence->getName().c_str(), i, start, end, i);
+			fprintf(gffFile, "%s\tcandidate_transposon\t%d_comp\t%d\t%d\t-\t.\t%d\n", sequence->getName().c_str(), i, start, end, i);
 		}
 
 		if (fastaFile) {
 			string seqBuffer;
 			sequence->getSubString(seqBuffer, start, topSeg->getLength());
-			fprintf(fastaFile, ">cte_%d\n", i);
+			fprintf(fastaFile, ">%d\n", i);
 			fprintf(fastaFile, "%s\n", seqBuffer.c_str());
 
 			if (!ignoreReverse) {
 				char *reverseCompSeq = stString_reverseComplementString(seqBuffer.c_str());
-				fprintf(fastaFile, ">cte_%d_comp\n", i);
+				fprintf(fastaFile, ">%d_comp\n", i);
 				fprintf(fastaFile, "%s\n", reverseCompSeq);
 				free(reverseCompSeq);
 			}

@@ -109,25 +109,57 @@ def runLastz(job, fastaID, args):
     alignments = job.fileStore.getLocalTempFile()
     runCmd(parameters=["lastz", "--notrivial", "--format=cigar", "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
 
-    return job.fileStore.writeGlobalFile(alignments)
+    return {"alignments": job.fileStore.writeGlobalFile(alignments)}
 
 def sampleLastzAlignments(job, fastaID, args):
-    levels = [0.01, 0.1, 1.0]
-    fasta = job.fileStore.readGlobalFile(fastaID)
-
     returnValues = {}
-    samplingRatesID = job.fileStore.writeGlobalFile(job.fileStore.getLocalTempFile())
+
+    #calculate how shallow we should begin sampling the alignments based on
+    #an estimate of the largest repeat family size
+    fasta = job.fileStore.readGlobalFile(fastaID)
+    largestFamilySize = 0.0
+    for line in runCmd(parameters=["lastz", "--tableonly=count", "%s[multiple]" % os.path.basename(fasta)], args=args).split("\n"):
+        if line.split() != 2:
+            continue
+        other, count = line.split()
+        count = float(count)
+        if count > largestFamilySize:
+            largestFamilySize = count
+
+    #assume an average family length (in number of seeds covered)
+    averageFamilyLength = 5000.0
+    lowestSamplingLevel = 1.0/((largestFamilySize*largestFamilySize) * averageFamilyLength)
+    
+    #Fill out the other levels, incrementing by an order of magnitude
+    levels = []
+    level = lowestSamplingLevel
+    while (level < 1.0):
+        levels.append(level)
+        level *= 10.0
+
+    #Always sample at full depth on the last iteration
+    levels.append(1.0)
+
+    #Store the levels for debugging
+    levelsFile = job.fileStore.getLocalTempFile()
+    with open(levelsFile, "w") as f:
+        f.write("Largest family size = %d\n" % largestFamilySize)
+        f.write(" ".join(levels) + "\n")
+    returnValues["levels.txt"] = job.fileStore.writeGlobalFile(levelsFile)
+
+    #Start with every seed treated equally
+    seedWeightsID = job.fileStore.writeGlobalFile(job.fileStore.getLocalTempFile())
     alignmentsID = None
     nLevels = len(levels)
     alignmentJobs = []
     for i in range(nLevels):
-        alignmentJobs.append(Job.wrapJobFn(runLastzAndGetCoveredSeeds, fastaID=fastaID, samplingRatesID = samplingRatesID, baseSamplingRate = levels[i], args=args))
+        alignmentJobs.append(Job.wrapJobFn(runLastzAndGetCoveredSeeds, fastaID=fastaID, seedWeightsID = seedWeightsID, baseSamplingRate = levels[i], args=args))
 
         alignmentsID = alignmentJobs[i].rv('alignments')
-        samplingRatesID = alignmentJobs[i].rv('samplingRates')
+        seedWeightsID = alignmentJobs[i].rv('seedWeightsRates')
 
         returnValues["alignments_%f.cigar" % levels[i]] = alignmentsID
-        returnValues["samplingRates_%f.txt" % levels[i]] = samplingRatesID
+        returnValues["seedWeightsRates_%f.txt" % levels[i]] = seedWeightsID
 
         if i > 0:
             alignmentJobs[i-1].addFollowOn(alignmentJobs[i])
@@ -136,21 +168,21 @@ def sampleLastzAlignments(job, fastaID, args):
     returnValues["alignments"] = alignmentsID
     return returnValues
 
-def runLastzAndGetCoveredSeeds(job, fastaID, samplingRatesID, baseSamplingRate, args):
+def runLastzAndGetCoveredSeeds(job, fastaID, seedWeightsID, baseSamplingRate, args):
     fasta = job.fileStore.readGlobalFile(fastaID)
 
-    samplingRatesFile = job.fileStore.readGlobalFile(samplingRatesID)
+    seedWeightsFile = job.fileStore.readGlobalFile(seedWeightsID)
 
     alignments = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["lastz", "--format=cigar", "--notrivial", "--samplingRates=%s" % os.path.basename(samplingRatesFile), "--baseSamplingRate=%f" % baseSamplingRate, "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
+    runCmd(parameters=["lastz", "--format=cigar", "--notrivial", "--seedWeights=%s" % os.path.basename(seedWeightsFile), "--baseSamplingRate=%f" % baseSamplingRate, "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
 
     alignmentsID = job.fileStore.writeGlobalFile(alignments)
 
-    samplingRates = {}
-    with open(samplingRatesFile, 'r') as f:
+    seedWeights = {}
+    with open(seedWeightsFile, 'r') as f:
         for line in f:
             seed, rate = line.split()
-            samplingRates[seed] = float(rate)
+            seedWeights[seed] = float(rate)
 
     seedCountsFile = job.fileStore.getLocalTempFile()
     runCmd(parameters=["lastz", "--tableonly=count", "%s[multiple]" % os.path.basename(fasta)], outfile=seedCountsFile, args=args)
@@ -159,19 +191,42 @@ def runLastzAndGetCoveredSeeds(job, fastaID, samplingRatesID, baseSamplingRate, 
         if len(line.split()) != 3:
             continue
         seed, count, length = line.split()
-        count = int(count)
-        length = int(length)
-        updatedSamplingRate = baseSamplingRate * (1.0/(count*length))
-        if not seed in samplingRates or samplingRates[seed] > updatedSamplingRate:
-            samplingRates[seed] = updatedSamplingRate
+        count = float(count)
+        length = float(length)
 
-    newSamplingRatesFile = job.fileStore.getLocalTempFile()
-    with open(newSamplingRatesFile, "w") as fh:
-        for seed in samplingRates:
-            fh.write("%s %lf\n" % (seed, samplingRates[seed]))
-    samplingRatesID = job.fileStore.writeGlobalFile(newSamplingRatesFile)
+        #Percentage of the n*(n-1)/2 pairwise alignments between a 
+        #family of n repeat copies that will be sampled
+        #in order to build a transitively complete set of 
+        #alignments representing the family
+        alignmentSampleFraction = 0.1
 
-    return {"alignments": alignmentsID, "samplingRates": samplingRatesID}
+        #Adjust for the fact that lastz will explore the entire alignment
+        #if any of the seeds contained within it is matched.
+        updatedSeedWeight = alignmentSampleFraction * (1.0/(count*length))
+
+        if not seed in seedWeights or seedWeights[seed] > updatedSeedWeight:
+            seedWeights[seed] = updatedSeedWeight
+
+    newSeedWeightsFile = job.fileStore.getLocalTempFile()
+    with open(newSeedWeightsFile, "w") as fh:
+        for seed in seedWeights:
+            fh.write("%s %lf\n" % (seed, seedWeights[seed]))
+    seedWeightsID = job.fileStore.writeGlobalFile(newSeedWeightsFile)
+
+    return {"alignments": alignmentsID, "seedWeights": seedWeightsID}
+
+def repeatLibraryFromPinchGraph(job, alignmentsID, sequencesID, args):
+    """Construct a pinch graph from the set of pairwise alignments
+    representing the repeat family. Then use the graph to define repeat
+    element boundaries and extract the consensus sequence for each 
+    defined element.
+    """
+    alignments = job.fileStore.readGlobalFile(alignmentsID)
+    sequences = job.fileStore.readGlobalFile(sequencesID)
+
+    repeatLibrary = job.fileStore.getLocalTempFile()
+    runCmd(parameters=["getElementsFromPinchGraph", os.path.basename(alignments), os.path.basename(sequences)], outfile=repeatLibrary, args=args)
+    return job.fileStore.writeGlobalFile(repeatLibrary)
 
 def runRepeatMasker(job, repeatLibraryID, seqID, args):
     repeatLibrary = job.fileStore.readGlobalFile(repeatLibraryID)
@@ -262,7 +317,10 @@ def lastzPipeline(job, halID, genome, args):
     trfJob = Job.wrapJobFn(runTRF, fastaID=getTECandidatesJob.rv('fasta'), args=args)
     getTECandidatesJob.addFollowOn(trfJob)
 
-    lastzJob = Job.wrapJobFn(sampleLastzAlignments, fastaID=trfJob.rv(), args=args)
+    if args.lastzExact:
+        lastzJob = Job.wrapJobFn(runLastz, fastaID=trfJob.rv(), args=args)
+    else:
+        lastzJob = Job.wrapJobFn(sampleLastzAlignments, fastaID=trfJob.rv(), args=args)
     trfJob.addFollowOn(lastzJob)
 
     return {"masked_candidates.fa": trfJob.rv(), "alignments.cigar": lastzJob.rv('alignments'), "alignmentFiles": lastzJob.rv()}
@@ -360,6 +418,7 @@ def main():
 
     parser.add_argument("--usePoa", action="store_true", default=False, help="Use the POA pipeline")
     parser.add_argument("--useLastz", action="store_true", default=False, help="")
+    parser.add_argument("--lastzExact", action="store_true", default=False)
     parser.add_argument("--skipRepeatMasker", action="store_true", default=False)
 
     parser.add_argument("--localBinaries", action="store_true", default=False)
