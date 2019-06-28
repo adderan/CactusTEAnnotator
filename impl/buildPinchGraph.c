@@ -6,7 +6,7 @@
 #include "stPinchGraphs.h"
 
 int main(int argc, char **argv) {
-	//FILE *alignmentsFile = fopen(argv[1], "r");
+	FILE *alignmentsFile = fopen(argv[1], "r");
 	
 	FILE *sequencesFile = fopen(argv[2], "r");
 	struct List *seqs = constructEmptyList(0, NULL);
@@ -19,14 +19,15 @@ int main(int argc, char **argv) {
 		stPinchThreadSet_addThread(threadSet, stHash_stringKey(headers->list[i]), 0, strlen(seqs->list[i]));
 	}
 
-	stPinchIterator *pinchIterator = stPinchIterator_constructFromFile(argv[1]);
+	//stPinchIterator *pinchIterator = stPinchIterator_constructFromFile(argv[1]);
+	
+	struct PairwiseAlignment *alignment = NULL;
+	while((alignment = cigarRead(alignmentsFile)) != NULL) {
 
-	stPinch *pinch;
-	while((pinch = stPinchIterator_getNext(pinchIterator)) != NULL) {
-
-		stPinchThread *thread1 = stPinchThreadSet_getThread(threadSet, stHash_stringKey(pinch->name1));
-		stPinchThread *thread2 = stPinchThreadSet_getThread(threadSet, stHash_stringKey(pinch->name2));
-		stPinchThread_pinch(thread1, thread2, pinch->start1, pinch->start2, pinch->length, pinch->strand);
+		stPinchThread *thread1 = stPinchThreadSet_getThread(threadSet, stHash_stringKey(alignment->contig1));
+		stPinchThread *thread2 = stPinchThreadSet_getThread(threadSet, stHash_stringKey(alignment->contig2));
+		int64_t length = alignment->end1 - alignment->start1;
+		stPinchThread_pinch(thread1, thread2, alignment->start1, alignment->start2, length, alignment->strand1);
 
 	}
 	fprintf(stderr, "Total blocks: %ld\n", stPinchThreadSet_getTotalBlockNumber(threadSet));
