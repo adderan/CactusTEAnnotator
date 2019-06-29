@@ -109,13 +109,24 @@ def runLastz(job, fastaID, args):
     alignments = job.fileStore.getLocalTempFile()
     runCmd(parameters=["lastz", "--notrivial", "--format=cigar", "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
 
-    return job.fileStore.writeGlobalFile(alignments)
+    return {"alignments": job.fileStore.writeGlobalFile(alignments)}
 
 def sampleLastzAlignments(job, fastaID, args):
-    levels = [0.01, 0.1, 1.0]
-    fasta = job.fileStore.readGlobalFile(fastaID)
-
     returnValues = {}
+
+    #calculate how shallow we should begin sampling the alignments based on
+    #an estimate of the largest repeat family size
+    fasta = job.fileStore.readGlobalFile(fastaID)
+    maxSeedMultiplicity = 0.0
+    for line in runCmd(parameters=["lastz", "--tableonly=count", "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], args=args).split("\n"):
+        other, count = line.split()
+        count = float(count)
+        if count > maxSeedMultiplicity:
+            maxSeedMultiplicity = count
+
+    largestFamilySize = (maxSeedMultiplicity**2) / 2.0
+    levels = [0.01, 0.1, 1.0]
+
     samplingRatesID = job.fileStore.writeGlobalFile(job.fileStore.getLocalTempFile())
     alignmentsID = None
     nLevels = len(levels)
@@ -159,9 +170,19 @@ def runLastzAndGetCoveredSeeds(job, fastaID, samplingRatesID, baseSamplingRate, 
         if len(line.split()) != 3:
             continue
         seed, count, length = line.split()
-        count = int(count)
-        length = int(length)
-        updatedSamplingRate = baseSamplingRate * (1.0/(count*length))
+        count = float(count)
+        length = float(length)
+
+        #Percentage of the n*(n-1)/2 pairwise alignments between a 
+        #family of n repeat copies that will be sampled
+        #in order to build a transitively complete set of 
+        #alignments representing the family
+        alignmentSampleFraction = 0.1
+
+        #Adjust for the fact that lastz will explore the entire alignment
+        #if any of the seeds contained within it is matched.
+        updatedSamplingRate = alignmentSampleFraction * (1.0/(count*length))
+
         if not seed in samplingRates or samplingRates[seed] > updatedSamplingRate:
             samplingRates[seed] = updatedSamplingRate
 
@@ -172,6 +193,19 @@ def runLastzAndGetCoveredSeeds(job, fastaID, samplingRatesID, baseSamplingRate, 
     samplingRatesID = job.fileStore.writeGlobalFile(newSamplingRatesFile)
 
     return {"alignments": alignmentsID, "samplingRates": samplingRatesID}
+
+def repeatLibraryFromPinchGraph(job, alignmentsID, sequencesID, args):
+    """Construct a pinch graph from the set of pairwise alignments
+    representing the repeat family. Then use the graph to define repeat
+    element boundaries and extract the consensus sequence for each 
+    defined element.
+    """
+    alignments = job.fileStore.readGlobalFile(alignmentsID)
+    sequences = job.fileStore.readGlobalFile(sequencesID)
+
+    repeatLibrary = job.fileStore.getLocalTempFile()
+    runCmd(parameters=["getElementsFromPinchGraph", os.path.basename(alignments), os.path.basename(sequences)], outfile=repeatLibrary, args=args)
+    return job.fileStore.writeGlobalFile(repeatLibrary)
 
 def runRepeatMasker(job, repeatLibraryID, seqID, args):
     repeatLibrary = job.fileStore.readGlobalFile(repeatLibraryID)
@@ -262,7 +296,10 @@ def lastzPipeline(job, halID, genome, args):
     trfJob = Job.wrapJobFn(runTRF, fastaID=getTECandidatesJob.rv('fasta'), args=args)
     getTECandidatesJob.addFollowOn(trfJob)
 
-    lastzJob = Job.wrapJobFn(sampleLastzAlignments, fastaID=trfJob.rv(), args=args)
+    if args.lastzExact:
+        lastzJob = Job.wrapJobFn(runLastz, fastaID=trfJob.rv(), args=args)
+    else:
+        lastzJob = Job.wrapJobFn(sampleLastzAlignments, fastaID=trfJob.rv(), args=args)
     trfJob.addFollowOn(lastzJob)
 
     return {"masked_candidates.fa": trfJob.rv(), "alignments.cigar": lastzJob.rv('alignments'), "alignmentFiles": lastzJob.rv()}
@@ -360,6 +397,7 @@ def main():
 
     parser.add_argument("--usePoa", action="store_true", default=False, help="Use the POA pipeline")
     parser.add_argument("--useLastz", action="store_true", default=False, help="")
+    parser.add_argument("--lastzExact", action="store_true", default=False)
     parser.add_argument("--skipRepeatMasker", action="store_true", default=False)
 
     parser.add_argument("--localBinaries", action="store_true", default=False)

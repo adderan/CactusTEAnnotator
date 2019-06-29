@@ -25,7 +25,7 @@ liblpo = poaV2/liblpo.a
 all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries cte bin/lastz
 
 
-cte: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs bin/buildPinchGraph bin/getCoveredSeeds
+local: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs bin/getElementsFromPinchGraph bin/getCoveredSeeds
 
 halBinaries:
 	cd cactus && make
@@ -86,8 +86,8 @@ bin/getHeaviestBundles: impl/getHeaviestBundles.c poaV2/liblpo.a
 bin/filterNs: impl/filterNs.c ${libSonLib}
 	gcc ${cflags} -o bin/filterNs -I ${sonLibInc} impl/filterNs.c ${libSonLib} -lm
 
-bin/buildPinchGraph: impl/buildPinchGraph.c ${libSonLib}
-	gcc ${cflags} -o bin/buildPinchGraph -I ${sonLibInc} -I ${cactusInc} -I ${pinchesAndCactiInc} impl/buildPinchGraph.c ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} -lm -lz
+bin/getElementsFromPinchGraph: impl/getElementsFromPinchGraph.c ${libSonLib}
+	gcc ${cflags} -o bin/getElementsFromPinchGraph -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/getElementsFromPinchGraph.c ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} -lm -lz
 
 bin/getCoveredSeeds: impl/getCoveredSeeds.c ${libSonLib}
 	gcc ${cflags} -o bin/getCoveredSeeds -I ${sonLibInc} impl/getCoveredSeeds.c ${libSonLib} -lm
