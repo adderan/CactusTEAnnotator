@@ -33,6 +33,21 @@ int main(int argc, char **argv) {
 	fprintf(stderr, "Total blocks: %ld\n", stPinchThreadSet_getTotalBlockNumber(threadSet));
 
 	fprintf(stderr, "Number of components: %ld\n", stSortedSet_size(stPinchThreadSet_getThreadComponents(threadSet)));
+
+	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(threadSet);
+	//stPinchBlock *block;
+	//while((block = stPinchThreadSetBlockIt_getNext(&blockIt)) != NULL) {
+	//	printf("Block degree: %ld\n", stPinchBlock_getDegree(block));
+	//}
+	
+	stPinchBlock *firstBlock = stPinchThreadSetBlockIt_getNext(&blockIt);
+	stPinchBlockIt segmentIt = stPinchBlock_getSegmentIterator(firstBlock);
+	stPinchSegment *firstSegment = stPinchBlockIt_getNext(&segmentIt);
+	printf("First segment start %ld\n", stPinchSegment_getStart(firstSegment));
+	stPinchEnd firstEnd = stPinchEnd_constructStatic(firstBlock, 0);
+	stSet *adjacentEnds = stPinchEnd_getConnectedPinchEnds(&firstEnd);
+	printf("Found %ld connected blocks\n", stSet_size(adjacentEnds));
+
 	fclose(sequencesFile);
 	stPinchIterator_destruct(pinchIterator);
 	stPinchThreadSet_destruct(threadSet);
