@@ -11,34 +11,34 @@ int main(int argc, char **argv) {
 	char *alignmentsFilename = NULL;
 	char *seedsFilename = NULL;
 	while (1) {
-        static struct option long_options[] = {
-            { "sequences", required_argument, 0, 'a' }, 
+		static struct option long_options[] = {
+			{ "sequences", required_argument, 0, 'a' }, 
 			{ "alignments", required_argument, 0, 'b'},
 			{ "seeds", required_argument, 0, 'c'},
-            { 0, 0, 0, 0 } };
+			{ 0, 0, 0, 0 } };
 
-        int option_index = 0;
+		int option_index = 0;
 
-        int key = getopt_long(argc, argv, "a:b:c:", long_options, &option_index);
+		int key = getopt_long(argc, argv, "a:b:c:", long_options, &option_index);
 
-        if (key == -1) {
-            break;
-        }
+		if (key == -1) {
+			break;
+		}
 
-        switch (key) {
-            case 'a':
+		switch (key) {
+			case 'a':
 				sequencesFilename = strdup(optarg);
-                break;
-            case 'b':
+				break;
+			case 'b':
 				alignmentsFilename = strdup(optarg);
-                break;
+				break;
 			case 'c':
 				seedsFilename = strdup(optarg);
 				break;
-            default:
-                return 1;
-        }
-    }
+			default:
+				return 1;
+		}
+	}
 
 	FILE *alignmentsFile = fopen(alignmentsFilename, "r");
 	FILE *sequencesFile = fopen(sequencesFilename, "r");
@@ -69,8 +69,8 @@ int main(int argc, char **argv) {
 
 	stHash *seqNameToSeq = stHash_construct();
 	struct List *seqs = constructEmptyList(0, NULL);
-    struct List *seqLengths = constructEmptyList(0, free);
-    struct List *headers = constructEmptyList(0, free);
+	struct List *seqLengths = constructEmptyList(0, free);
+	struct List *headers = constructEmptyList(0, free);
 	fastaRead(sequencesFile, seqs, seqLengths, headers);
 	for (int i = 0; i < seqs->length; i++) {
 		stHash_insert(seqNameToSeq, (void*) stHash_stringKey(headers->list[i]), (void*) seqs->list[i]);

@@ -127,7 +127,6 @@ void zeroPath(LPOSequence_T *graph, int *path, int pathLength) {
 	}
 }
 
-
 int main(int argc, char **argv) {
 	char *lpoFilename = NULL;
 	bool iterate = false;

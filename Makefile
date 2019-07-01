@@ -22,7 +22,7 @@ pinchesAndCactiLib = cactus/submodules/sonLib/lib/stPinchesAndCacti.a
 
 liblpo = poaV2/liblpo.a
 
-all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries cte bin/lastz
+all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries local bin/lastz
 
 
 local: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs bin/getElementsFromPinchGraph bin/getCoveredSeeds
