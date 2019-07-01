@@ -44,9 +44,31 @@ int main(int argc, char **argv) {
 	stPinchBlockIt segmentIt = stPinchBlock_getSegmentIterator(firstBlock);
 	stPinchSegment *firstSegment = stPinchBlockIt_getNext(&segmentIt);
 	printf("First segment start %ld\n", stPinchSegment_getStart(firstSegment));
-	stPinchEnd firstEnd = stPinchEnd_constructStatic(firstBlock, 0);
-	stSet *adjacentEnds = stPinchEnd_getConnectedPinchEnds(&firstEnd);
-	printf("Found %ld connected blocks\n", stSet_size(adjacentEnds));
+	stPinchEnd firstEnd = stPinchEnd_constructStatic(firstBlock, 1);
+	stPinchEnd *end = &firstEnd;
+	stPinchBlock *block;
+	stSet *seen = stSet_construct();
+	while(true) {
+		block = stPinchEnd_getBlock(end);
+		printf("Arrived at %d end of block of length %ld, degree %ld\n", stPinchEnd_getOrientation(end), stPinchBlock_getLength(block), stPinchBlock_getDegree(block));
+		if (stSet_search(seen, block)) {
+			printf("Traversed cycle");
+			break;
+		}
+		stSet_insert(seen, block);
+
+		stSet *adjacentEnds = stPinchEnd_getConnectedPinchEnds(end);
+		printf("Found %ld connected blocks\n", stSet_size(adjacentEnds));
+		stPinchEnd *nextEnd = stSet_peek(adjacentEnds);
+		if (nextEnd == NULL) {
+			printf("No adjacent ends\n");
+			break;
+		}
+		printf("Number of subsequences: %ld\n", stList_length(stPinchEnd_getSubSequenceLengthsConnectingEnds(end, nextEnd)));
+		end = nextEnd;
+
+	}
+
 
 	fclose(sequencesFile);
 	stPinchIterator_destruct(pinchIterator);
