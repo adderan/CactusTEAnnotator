@@ -7,6 +7,9 @@ cppflags=-g -O0 -Wall
 objs=Minhash.o
 sources=impl/Minhash.cpp
 
+cObjs=repeatGraph.o
+cSources=impl/repeatGraph.c
+
 libSonLib = cactus/submodules/sonLib/lib/sonLib.a
 sonLibInc = cactus/submodules/sonLib/lib/
 
@@ -25,7 +28,7 @@ liblpo = poaV2/liblpo.a
 all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries local bin/lastz
 
 
-local: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs bin/getElementsFromPinchGraph bin/getCoveredSeeds
+local: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs bin/getElementsFromPinchGraph bin/getCoveredSeeds bin/repeatGraphTests
 
 halBinaries:
 	cd cactus && make
@@ -86,8 +89,15 @@ bin/getHeaviestBundles: impl/getHeaviestBundles.c poaV2/liblpo.a
 bin/filterNs: impl/filterNs.c ${libSonLib}
 	gcc ${cflags} -o bin/filterNs -I ${sonLibInc} impl/filterNs.c ${libSonLib} -lm
 
-bin/getElementsFromPinchGraph: impl/getElementsFromPinchGraph.c ${libSonLib}
-	gcc ${cflags} -o bin/getElementsFromPinchGraph -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/getElementsFromPinchGraph.c ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} -lm -lz
+impl/repeatGraphs.o: impl/repeatGraphs.c
+	gcc ${cflags} -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} -c impl/repeatGraphs.c
+	mv repeatGraphs.o impl/repeatGraphs.o
+
+bin/repeatGraphTests: impl/repeatGraphs.o impl/repeatGraphTests.c ${libSonLib} ${pinchesAndCactiLib} ${cafLib} ${cactusLib}
+	gcc ${cflags} -o bin/repeatGraphTests -I impl/ -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/repeatGraphTests.c impl/repeatGraphs.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} -lm -lz
+
+bin/getElementsFromPinchGraph: impl/repeatGraphs.o impl/getElementsFromPinchGraph.c ${libSonLib} ${pinchesAndCactiLib} ${cafLib} ${cactusLib}
+	gcc ${cflags} -o bin/getElementsFromPinchGraph -I impl/ -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/getElementsFromPinchGraph.c impl/repeatGraphs.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} -lm -lz
 
 bin/getCoveredSeeds: impl/getCoveredSeeds.c ${libSonLib}
 	gcc ${cflags} -o bin/getCoveredSeeds -I ${sonLibInc} impl/getCoveredSeeds.c ${libSonLib} -lm

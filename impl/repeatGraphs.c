@@ -5,6 +5,11 @@
 #include "stPinchGraphs.h"
 #include "stPinchIterator.h"
 
+#include "repeatGraphs.h"
+
+
+bool pinchIsNegative;
+
 stSortedSet *getThreads(stPinchBlock *block) {
 	stPinchBlockIt blockIt = stPinchBlock_getSegmentIterator(block);
 	stSortedSet *threads = stSortedSet_construct();
@@ -32,19 +37,7 @@ bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	return filter;
 }
 
-bool reachableOnThread(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
-	if (stPinchSegment_getThread(seg1) != stPinchSegment_getThread(seg2)) return false;
-	bool beforeTarget = (stPinchSegment_getStart(seg1) <= (stPinchSegment_getStart(seg2) + stPinchSegment_getLength(seg2)));
-
-	bool afterTarget = (stPinchSegment_getStart(seg2) <= stPinchSegment_getStart(seg1) + stPinchSegment_getLength(seg1)); 
-	if (direction) {
-		return beforeTarget;
-	}
-	return afterTarget;
-}
-
 /*
-
 bool graphIsAcyclic(stPinchThreadSet *graph) {
 	stList *adjacencyComponents = stPinchThreadSet_getAdjacencyComponents(graph);
 	stListIterator *componentsIt = stList_getIterator(adjacencyComponents);
@@ -65,7 +58,6 @@ bool graphIsAcyclic(stPinchThreadSet *graph) {
 
 	stList_destructIterator(componentsIt);
 }
-
 */
 
 stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
@@ -80,7 +72,6 @@ stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
 	return stPinchEnd_construct(block, orientation);
 }
 
-//check if there is a directed walk from segment 1 to segment 2
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
 	stPinchEnd *startEnd = getAdjacentEnd(seg1, direction);
 	if (!startEnd) return false;
@@ -112,6 +103,7 @@ bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
 			break;
 		}
 		if (!stSet_search(seen, block)) {
+			stSet_insert(seen, block);
 			//get the ends connected to the opposite side of this block
 			//and add them to the stack
 			stSet *adjEnds = stPinchEnd_getConnectedPinchEnds(&otherEnd);
@@ -129,61 +121,14 @@ bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
 	return reachable;
 }
 
-void testDirectedWalk() {
-	stPinchThreadSet *threadSet = stPinchThreadSet_construct();
-	stPinchThreadSet_addThread(threadSet, 1, 0, 100);
-	stPinchThreadSet_addThread(threadSet, 2, 0, 100);
-
-
-	stPinchThread *thread1 = stPinchThreadSet_getThread(threadSet, 1);
-	stPinchThread *thread2 = stPinchThreadSet_getThread(threadSet, 2);
-
-	stPinchThread_pinch(thread1, thread2, 10, 10, 10, 1);
-
-	stPinchSegment *seg1 = stPinchThread_getSegment(thread1, 25);
-	stPinchSegment *seg2 = stPinchThread_getSegment(thread2, 25);
-
-	//moving toward 5' end
-	assert(!directedWalk(seg1, seg2, 0));
-	//moving toward 3' end
-	assert(!directedWalk(seg1, seg2, 1));
-
-	stPinchThread_pinch(thread1, thread2, 50, 50, 10, 1);
-	seg1 = stPinchThread_getSegment(thread1, 25);
-	seg2 = stPinchThread_getSegment(thread2, 25);
-	stPinchBlock *blockA = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 10));
-	stPinchEnd blockALeftEnd = stPinchEnd_constructStatic(blockA, 1);
-	assert(stPinchEnd_getNumberOfConnectedPinchEnds(&blockALeftEnd) == 0);
-	assert(!directedWalk(seg1, seg2, 0));
-	assert(!directedWalk(seg1, seg2, 1));
-
-
-	stPinchThreadSet_destruct(threadSet);
-	threadSet = stPinchThreadSet_construct();
-	stPinchThreadSet_addThread(threadSet, 1, 0, 100);
-	stPinchThreadSet_addThread(threadSet, 2, 0, 100);
-
-	thread1 = stPinchThreadSet_getThread(threadSet, 1);
-	thread2 = stPinchThreadSet_getThread(threadSet, 2);
-
-	stPinchThread_pinch(thread1, thread2, 10, 10, 10, 0);
-
-	seg1 = stPinchThread_getSegment(thread1, 25);
-	seg2 = stPinchThread_getSegment(thread2, 25);
-
-	//should be able to go backwards on thread 1, traverse
-	//the reverse block, and then forwards on thread 2
-	assert(directedWalk(seg1, seg2, 0));
-	assert(!directedWalk(seg1, seg2, 1));
-
-}
 
 bool acyclicFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	if (singleCopyFilterFn(seg1, seg2)) return true;
 
-	//dfs to check if block2 is reachable from block1
-	if(directedWalk(seg1, seg2, 0) || directedWalk(seg1, seg2, 1)) return true;
-	else return false;
+	if (pinchIsNegative) {
+		return directedWalk(seg1, seg2, 0);
+	}
+	return directedWalk(seg1, seg2, 1);
 }
 
 void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output) {
@@ -206,30 +151,7 @@ void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output) {
 	fprintf(output, "}\n");
 }
 
-bool isLeftStub(stPinchBlock *block) {
-	stPinchEnd _3PrimeEnd = stPinchEnd_constructStatic(block, 0);
-	return (stPinchEnd_getNumberOfConnectedPinchEnds(&_3PrimeEnd) == 0);
-}
-
-bool isRightStub(stPinchBlock *block) {
-	stPinchEnd _5PrimeEnd = stPinchEnd_constructStatic(block, 1);
-	return (stPinchEnd_getNumberOfConnectedPinchEnds(&_5PrimeEnd) == 0);
-}
-
-void highestWeightPath(stPinchThreadSet *threadSet) {
-	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(threadSet);
-
-
-	stPinchBlock *block = NULL;
-	while((block = stPinchThreadSetBlockIt_getNext(&blockIt)) != NULL) {
-		if (isRightStub(block)) {
-			printf("Found left stub %ld\n", stHash_pointer(block));
-		}
-
-	}
-}
-
-stPinchThreadSet *buildGraph(char *sequencesFilename, char *alignmentsFilename) {
+stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFilename) {
 	FILE *sequencesFile = fopen(sequencesFilename, "r");
 	struct List *seqs = constructEmptyList(0, NULL);
     struct List *seqLengths = constructEmptyList(0, free);
@@ -249,6 +171,10 @@ stPinchThreadSet *buildGraph(char *sequencesFilename, char *alignmentsFilename) 
 	while((pinch = stPinchIterator_getNext(pinchIterator)) != NULL) {
 		stPinchThread *thread1 = stPinchThreadSet_getThread(threadSet, pinch->name1);
 		stPinchThread *thread2 = stPinchThreadSet_getThread(threadSet, pinch->name2);
+
+		//need to store this in a global because filterPinch doesn't
+		//provide the orientation to the filter function
+		pinchIsNegative = pinch->strand;
 		stPinchThread_filterPinch(thread1, thread2, pinch->start1, pinch->start2, pinch->length, pinch->strand, acyclicFilterFn);
 
 
@@ -258,19 +184,4 @@ stPinchThreadSet *buildGraph(char *sequencesFilename, char *alignmentsFilename) 
 	return threadSet;
 }
 
-int main(int argc, char **argv) {
-	/*
-	stPinchThreadSet *threadSet = buildGraph(argv[1], argv[2]);
 
-	if (argv[3] != NULL) {
-		FILE *graphFile = fopen(argv[3], "w");
-		pinchToGraphViz(threadSet, graphFile);
-		fclose(graphFile);
-	}
-
-
-	stPinchThreadSet_destruct(threadSet);
-	*/
-
-	testDirectedWalk();
-}
