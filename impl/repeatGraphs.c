@@ -37,28 +37,78 @@ bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	return filter;
 }
 
-/*
-bool graphIsAcyclic(stPinchThreadSet *graph) {
-	stList *adjacencyComponents = stPinchThreadSet_getAdjacencyComponents(graph);
-	stListIterator *componentsIt = stList_getIterator(adjacencyComponents);
+bool componentIsAcyclic2(stPinchEnd *startEnd) {
+	stList *stack = stList_construct();
+	stList_append(stack, startEnd);
 
-	stList *component;
-	while (component = stList_getNext(componentsIt)) {
-		stSet *red = stSet_construct();
-		stSet *black = stSet_construct();
-		stPinchEnd *end = stList_peek(component);
+	stSet *red = stSet_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void *)) stPinchEnd_destruct);
+	stSet *black = stSet_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void *)) stPinchEnd_destruct);
 
-		stList *stack = stList_construct();
-		stPinchBlock *block;
-		while(end) {
-			block = stPinchEnd_getBlock(end);
-			if (stSet_search(red, block)
+	stPinchBlock *block;
+	stPinchEnd *end;
+	bool foundCycle = false;
+	while (stList_length(stack) > 0) {
+		end = stList_pop(stack);
+		block = stPinchEnd_getBlock(end);
+
+		bool seenBlock = true;
+		if (!stSet_search(black, end)) {
+			seenBlock = false;
+			if (stSet_search(red, end)) {
+				foundCycle = true;
+				break;
+			}
+			stSet_insert(black, end);
+		}
+
+		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
+		if (!stSet_search(red, oppositeEnd)) {
+			stSet_insert(red, oppositeEnd);
+		}
+		if (!seenBlock) {
+			stSet *adjacentEnds = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
+			stSetIterator *adjEndIt = stSet_getIterator(adjacentEnds);
+			stPinchEnd *adjEnd;
+			while((adjEnd = stSet_getNext(adjEndIt))) {
+				stList_append(stack, adjEnd);
+			}
+			stSet_destructIterator(adjEndIt);
 		}
 	}
-
-	stList_destructIterator(componentsIt);
+	stSet_destruct(red);
+	stSet_destruct(black);
+	return foundCycle;
 }
-*/
+
+
+bool componentIsAcyclic(stPinchBlock *block) {
+	stPinchEnd *leftStart = stPinchEnd_construct(block, 0);
+	stPinchEnd *rightStart = stPinchEnd_construct(block, 1);
+	return (componentIsAcyclic2(leftStart) && componentIsAcyclic2(rightStart));
+
+}
+
+bool graphIsAcyclic(stPinchThreadSet *graph) {
+	stSortedSet *threadComponents = stPinchThreadSet_getThreadComponents(graph);
+	stSortedSetIterator *componentsIt = stSortedSet_getIterator(threadComponents);
+
+	stList *component;
+	while ((component = stSortedSet_getNext(componentsIt))) {
+
+		//get any block in the component
+		stPinchSegment *segment = stPinchThread_getFirst(stList_peek(component));
+		while (segment && (stPinchSegment_getBlock(segment) == NULL)) segment = stPinchSegment_get3Prime(segment);
+
+		stPinchBlock *block = stPinchSegment_getBlock(segment);
+		if (!componentIsAcyclic(block)) {
+			stSortedSet_destructIterator(componentsIt);
+			return false;
+		}
+
+	}
+	stSortedSet_destructIterator(componentsIt);
+	return true;
+}
 
 stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
 	while (segment && (stPinchSegment_getBlock(segment) == NULL)) {
@@ -75,7 +125,7 @@ stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
 	stPinchEnd *startEnd = getAdjacentEnd(seg1, direction);
 	if (!startEnd) return false;
-	printf("Starting at %d end of block at coordinate %ld.\n", stPinchEnd_getOrientation(startEnd), stPinchSegment_getStart(stPinchBlock_getFirst(stPinchEnd_getBlock(startEnd))));
+	fprintf(stderr, "Starting at %d end of block at coordinate %ld.\n", stPinchEnd_getOrientation(startEnd), stPinchSegment_getStart(stPinchBlock_getFirst(stPinchEnd_getBlock(startEnd))));
 
 	//Arriving at either of these ends means seg2 can
 	//be traversed
@@ -94,7 +144,7 @@ bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
 	while(stList_length(stack) > 0) {
 		end = stList_pop(stack);
 		block = stPinchEnd_getBlock(end);
-		printf("Arrived at %d end of block at coordinate %ld.\n", stPinchEnd_getOrientation(end), stPinchSegment_getStart(stPinchBlock_getFirst(stPinchEnd_getBlock(end))));
+		fprintf(stderr, "Arrived at %d end of block at coordinate %ld.\n", stPinchEnd_getOrientation(end), stPinchSegment_getStart(stPinchBlock_getFirst(stPinchEnd_getBlock(end))));
 
 		stPinchEnd otherEnd = stPinchEnd_constructStatic(block, !stPinchEnd_getOrientation(end));
 
@@ -107,7 +157,7 @@ bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
 			//get the ends connected to the opposite side of this block
 			//and add them to the stack
 			stSet *adjEnds = stPinchEnd_getConnectedPinchEnds(&otherEnd);
-			printf("Found %ld connected ends on %d end of block\n", stPinchEnd_getNumberOfConnectedPinchEnds(&otherEnd), stPinchEnd_getOrientation(&otherEnd));
+			fprintf(stderr, "Found %ld connected ends on %d end of block\n", stPinchEnd_getNumberOfConnectedPinchEnds(&otherEnd), stPinchEnd_getOrientation(&otherEnd));
 			stSetIterator *adjEndIt = stSet_getIterator(adjEnds);
 			stPinchEnd *adjEnd;
 			while((adjEnd = stSet_getNext(adjEndIt)) != NULL) {
@@ -120,7 +170,6 @@ bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
 	stList_destruct(stack);
 	return reachable;
 }
-
 
 bool acyclicFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	if (singleCopyFilterFn(seg1, seg2)) return true;
@@ -175,12 +224,15 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 		//need to store this in a global because filterPinch doesn't
 		//provide the orientation to the filter function
 		pinchIsNegative = pinch->strand;
+
 		stPinchThread_filterPinch(thread1, thread2, pinch->start1, pinch->start2, pinch->length, pinch->strand, acyclicFilterFn);
 
 
 	}
 	fclose(sequencesFile);
 	stPinchIterator_destruct(pinchIterator);
+
+	fprintf(stderr, "Graph is acyclic: %d\n", graphIsAcyclic(threadSet));
 	return threadSet;
 }
 
