@@ -1,6 +1,7 @@
 #include "repeatGraphs.h"
 
 void testDirectedWalk() {
+	fprintf(stderr, "Testing directedWalk\n");
 	stPinchThreadSet *threadSet = stPinchThreadSet_construct();
 	stPinchThreadSet_addThread(threadSet, 1, 0, 100);
 	stPinchThreadSet_addThread(threadSet, 2, 0, 100);
@@ -46,9 +47,27 @@ void testDirectedWalk() {
 	//the reverse block, and then forwards on thread 2
 	assert(directedWalk(seg1, seg2, 0));
 	assert(!directedWalk(seg1, seg2, 1));
+	fprintf(stderr, "Passed\n");
+}
 
+void testAcyclic() {
+	fprintf(stderr, "Testing graphIsAcyclic\n");
+	stPinchThreadSet *threadSet = stPinchThreadSet_construct();
+	stPinchThread *thread1 = stPinchThreadSet_addThread(threadSet, 1, 0, 100);
+	stPinchThread *thread2 = stPinchThreadSet_addThread(threadSet, 2, 0, 100);
+
+	stPinchThread_pinch(thread1, thread2, 10, 10, 10, 1);
+	stPinchThread_pinch(thread1, thread2, 40, 40, 10, 1);
+
+	assert(graphIsAcyclic(threadSet));
+
+	stPinchThread_pinch(thread1, thread2, 70, 70, 10, 0);
+	assert(!graphIsAcyclic(threadSet));
+
+	fprintf(stderr, "Passed\n");
 }
 
 int main(int argc, char **argv) {
 	testDirectedWalk();
+	testAcyclic();
 }

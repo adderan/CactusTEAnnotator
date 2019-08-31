@@ -49,15 +49,21 @@ bool componentIsAcyclic2(stPinchEnd *startEnd) {
 	bool foundCycle = false;
 	while (stList_length(stack) > 0) {
 		end = stList_pop(stack);
+		fprintf(stderr, "Arrived at end %d of block starting at %ld\n", stPinchEnd_getOrientation(end), stPinchSegment_getStart(stPinchBlock_getFirst(stPinchEnd_getBlock(end))));
 		block = stPinchEnd_getBlock(end);
 
-		bool seenBlock = true;
-		if (!stSet_search(black, end)) {
-			seenBlock = false;
-			if (stSet_search(red, end)) {
-				foundCycle = true;
-				break;
-			}
+		bool seenBlock = false;
+		if (stSet_search(black, end)) {
+			fprintf(stderr, "End is black\n");
+			seenBlock = true;
+		}
+		else if (stSet_search(red, end)) {
+			fprintf(stderr, "End is red\n");
+			foundCycle = true;
+			break;
+		}
+		else {
+			fprintf(stderr, "End is unlabeled, labeling it black\n");
 			stSet_insert(black, end);
 		}
 
@@ -67,6 +73,7 @@ bool componentIsAcyclic2(stPinchEnd *startEnd) {
 		}
 		if (!seenBlock) {
 			stSet *adjacentEnds = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
+			fprintf(stderr, "Found %ld ends adjacent to %d side\n", stSet_size(adjacentEnds), stPinchEnd_getOrientation(oppositeEnd));
 			stSetIterator *adjEndIt = stSet_getIterator(adjacentEnds);
 			stPinchEnd *adjEnd;
 			while((adjEnd = stSet_getNext(adjEndIt))) {
@@ -77,7 +84,7 @@ bool componentIsAcyclic2(stPinchEnd *startEnd) {
 	}
 	stSet_destruct(red);
 	stSet_destruct(black);
-	return foundCycle;
+	return !foundCycle;
 }
 
 
@@ -91,6 +98,7 @@ bool componentIsAcyclic(stPinchBlock *block) {
 bool graphIsAcyclic(stPinchThreadSet *graph) {
 	stSortedSet *threadComponents = stPinchThreadSet_getThreadComponents(graph);
 	stSortedSetIterator *componentsIt = stSortedSet_getIterator(threadComponents);
+	fprintf(stderr, "Found %ld components\n", stSortedSet_size(threadComponents));
 
 	stList *component;
 	while ((component = stSortedSet_getNext(componentsIt))) {
