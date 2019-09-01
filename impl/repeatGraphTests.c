@@ -59,10 +59,10 @@ void testAcyclic() {
 	stPinchThread_pinch(thread1, thread2, 10, 10, 10, 1);
 	stPinchThread_pinch(thread1, thread2, 40, 40, 10, 1);
 
-	assert(graphIsAcyclic(threadSet));
+	assert(getOrdering(threadSet));
 
 	stPinchThread_pinch(thread1, thread2, 70, 70, 10, 0);
-	assert(!graphIsAcyclic(threadSet));
+	assert(!getOrdering(threadSet));
 
 	fprintf(stderr, "Passed\n");
 }

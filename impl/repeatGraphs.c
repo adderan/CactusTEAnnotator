@@ -37,16 +37,17 @@ bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	return filter;
 }
 
-bool componentIsAcyclic2(stPinchEnd *startEnd) {
+stList *getComponentOrdering2(stPinchEnd *startEnd) {
 	stList *stack = stList_construct();
 	stList_append(stack, startEnd);
 
 	stSet *red = stSet_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void *)) stPinchEnd_destruct);
 	stSet *black = stSet_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void *)) stPinchEnd_destruct);
 
+	stList *ordering = stList_construct();
+
 	stPinchBlock *block;
 	stPinchEnd *end;
-	bool foundCycle = false;
 	while (stList_length(stack) > 0) {
 		end = stList_pop(stack);
 		fprintf(stderr, "Arrived at end %d of block starting at %ld\n", stPinchEnd_getOrientation(end), stPinchSegment_getStart(stPinchBlock_getFirst(stPinchEnd_getBlock(end))));
@@ -58,13 +59,17 @@ bool componentIsAcyclic2(stPinchEnd *startEnd) {
 			seenBlock = true;
 		}
 		else if (stSet_search(red, end)) {
-			fprintf(stderr, "End is red\n");
-			foundCycle = true;
-			break;
+			fprintf(stderr, "Encountered cycle\n");
+			stList_destruct(ordering);
+			stSet_destruct(red);
+			stSet_destruct(black);
+			return NULL;
+
 		}
 		else {
 			fprintf(stderr, "End is unlabeled, labeling it black\n");
 			stSet_insert(black, end);
+			stList_append(ordering, end);
 		}
 
 		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
@@ -84,22 +89,30 @@ bool componentIsAcyclic2(stPinchEnd *startEnd) {
 	}
 	stSet_destruct(red);
 	stSet_destruct(black);
-	return !foundCycle;
+	return ordering;
 }
 
-
-bool componentIsAcyclic(stPinchBlock *block) {
+stList *getComponentOrdering(stPinchBlock *block) {
 	stPinchEnd *leftStart = stPinchEnd_construct(block, 0);
 	stPinchEnd *rightStart = stPinchEnd_construct(block, 1);
-	return (componentIsAcyclic2(leftStart) && componentIsAcyclic2(rightStart));
-
+	stList *leftOrdering = getComponentOrdering2(leftStart);
+	stList *rightOrdering = getComponentOrdering2(rightStart);
+	if (!(leftOrdering && rightOrdering)) return NULL;
+	stList *ordering = stList_construct();
+	stList_appendAll(ordering, leftOrdering);
+	stList_appendAll(ordering, rightOrdering);
+	return ordering;
 }
 
-bool graphIsAcyclic(stPinchThreadSet *graph) {
+/*Get an ordering of the nodes in the graph, such that each node
+ * is preceded in the ordering by all nodes from which it is accessible
+ * by a directed walk. Return NULL if the graph is not acyclic. */
+stList *getOrdering(stPinchThreadSet *graph) {
 	stSortedSet *threadComponents = stPinchThreadSet_getThreadComponents(graph);
-	stSortedSetIterator *componentsIt = stSortedSet_getIterator(threadComponents);
 	fprintf(stderr, "Found %ld components\n", stSortedSet_size(threadComponents));
+	stList *ordering = stList_construct();
 
+	stSortedSetIterator *componentsIt = stSortedSet_getIterator(threadComponents);
 	stList *component;
 	while ((component = stSortedSet_getNext(componentsIt))) {
 
@@ -108,14 +121,13 @@ bool graphIsAcyclic(stPinchThreadSet *graph) {
 		while (segment && (stPinchSegment_getBlock(segment) == NULL)) segment = stPinchSegment_get3Prime(segment);
 
 		stPinchBlock *block = stPinchSegment_getBlock(segment);
-		if (!componentIsAcyclic(block)) {
-			stSortedSet_destructIterator(componentsIt);
-			return false;
-		}
+		stList *componentOrdering = getComponentOrdering(block);
+		if (!componentOrdering) return NULL;
+		stList_appendAll(ordering, componentOrdering);
 
 	}
 	stSortedSet_destructIterator(componentsIt);
-	return true;
+	return ordering;
 }
 
 stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
@@ -239,8 +251,6 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 	}
 	fclose(sequencesFile);
 	stPinchIterator_destruct(pinchIterator);
-
-	fprintf(stderr, "Graph is acyclic: %d\n", graphIsAcyclic(threadSet));
 	return threadSet;
 }
 
