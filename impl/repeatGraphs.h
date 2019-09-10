@@ -2,10 +2,15 @@
 #define repeat_graph_h
 #include "stPinchGraphs.h"
 
+#define _5PRIME 1
+#define _3PRIME 0
+
 void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output);
 stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFilename);
-bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction);
+stPinchEnd *directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction);
 stList *getOrdering(stPinchThreadSet *threadSet);
+bool pinchCreatesCycle(stPinchSegment *seg1, stPinchSegment *seg2,
+		bool orientation);
 
 
 #endif

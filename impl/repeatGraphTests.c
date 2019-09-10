@@ -16,18 +16,19 @@ void testDirectedWalk() {
 	stPinchSegment *seg2 = stPinchThread_getSegment(thread2, 25);
 
 	//moving toward 5' end
-	assert(!directedWalk(seg1, seg2, 0));
+	assert(!directedWalk(seg1, seg2, _3PRIME));
 	//moving toward 3' end
-	assert(!directedWalk(seg1, seg2, 1));
+	assert(!directedWalk(seg1, seg2, _5PRIME));
 
 	stPinchThread_pinch(thread1, thread2, 50, 50, 10, 1);
 	seg1 = stPinchThread_getSegment(thread1, 25);
 	seg2 = stPinchThread_getSegment(thread2, 25);
 	stPinchBlock *blockA = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 10));
-	stPinchEnd blockALeftEnd = stPinchEnd_constructStatic(blockA, 1);
+	stPinchEnd blockALeftEnd = stPinchEnd_constructStatic(blockA, _5PRIME);
 	assert(stPinchEnd_getNumberOfConnectedPinchEnds(&blockALeftEnd) == 0);
-	assert(!directedWalk(seg1, seg2, 0));
-	assert(!directedWalk(seg1, seg2, 1));
+
+	assert(!directedWalk(seg1, seg2, _3PRIME));
+	assert(!directedWalk(seg1, seg2, _5PRIME));
 
 
 	stPinchThreadSet_destruct(threadSet);
@@ -45,8 +46,10 @@ void testDirectedWalk() {
 
 	//should be able to go backwards on thread 1, traverse
 	//the reverse block, and then forwards on thread 2
-	assert(directedWalk(seg1, seg2, 0));
-	assert(!directedWalk(seg1, seg2, 1));
+	assert(directedWalk(seg1, seg2, _5PRIME));
+	assert(!directedWalk(seg1, seg2, _3PRIME));
+	assert(pinchCreatesCycle(seg1, seg2, 0));
+	assert(!pinchCreatesCycle(seg1, seg2, 1));
 	fprintf(stderr, "Passed\n");
 }
 

@@ -8,7 +8,8 @@
 #include "repeatGraphs.h"
 
 
-bool pinchIsNegative;
+
+bool pinchOrientation;
 
 stSortedSet *getThreads(stPinchBlock *block) {
 	stPinchBlockIt blockIt = stPinchBlock_getSegmentIterator(block);
@@ -119,6 +120,7 @@ stList *getOrdering(stPinchThreadSet *graph) {
 		//get any block in the component
 		stPinchSegment *segment = stPinchThread_getFirst(stList_peek(component));
 		while (segment && (stPinchSegment_getBlock(segment) == NULL)) segment = stPinchSegment_get3Prime(segment);
+		if (segment == NULL) return NULL;
 
 		stPinchBlock *block = stPinchSegment_getBlock(segment);
 		stList *componentOrdering = getComponentOrdering(block);
@@ -131,18 +133,27 @@ stList *getOrdering(stPinchThreadSet *graph) {
 }
 
 stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
+	if (stPinchSegment_getBlock(segment)) {
+		return stPinchEnd_construct(stPinchSegment_getBlock(segment), direction);
+	}
 	while (segment && (stPinchSegment_getBlock(segment) == NULL)) {
-		segment = direction ? stPinchSegment_get3Prime(segment) : stPinchSegment_get5Prime(segment);
+		if (direction == _3PRIME) {
+			segment = stPinchSegment_get3Prime(segment);
+		}
+		else {
+			assert(direction == _5PRIME);
+			segment = stPinchSegment_get5Prime(segment);
+		}
 	}
 	if (!segment) return NULL;
 	stPinchBlock *block = stPinchSegment_getBlock(segment);
 	if (!block) return NULL;
 
-	bool orientation = !(direction ^ stPinchSegment_getBlockOrientation(segment));
+	bool orientation = direction ^ stPinchSegment_getBlockOrientation(segment);
 	return stPinchEnd_construct(block, orientation);
 }
 
-bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
+stPinchEnd *directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
 	stPinchEnd *startEnd = getAdjacentEnd(seg1, direction);
 	if (!startEnd) return false;
 	fprintf(stderr, "Starting at %d end of block at coordinate %ld.\n", stPinchEnd_getOrientation(startEnd), stPinchSegment_getStart(stPinchBlock_getFirst(stPinchEnd_getBlock(startEnd))));
@@ -150,9 +161,13 @@ bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
 	//Arriving at either of these ends means seg2 can
 	//be traversed
 	//First end encountered walking left from seg2
-	stPinchEnd *leftTargetEnd = getAdjacentEnd(seg2, 1);
+	stPinchEnd *leftTargetEnd = getAdjacentEnd(seg2, _5PRIME);
+	if (leftTargetEnd) fprintf(stderr, "Left target: %d end of block starting at %ld\n", stPinchEnd_getOrientation(leftTargetEnd), stPinchSegment_getStart(stPinchBlock_getFirst(stPinchEnd_getBlock(leftTargetEnd))));
+ 
 	//First end encountered walking right from seg2
-	stPinchEnd *rightTargetEnd = getAdjacentEnd(seg2, 0);
+	stPinchEnd *rightTargetEnd = getAdjacentEnd(seg2, _3PRIME);
+	if (rightTargetEnd) fprintf(stderr, "Right target: %d end of block starting at %ld\n", stPinchEnd_getOrientation(rightTargetEnd), stPinchSegment_getStart(stPinchBlock_getFirst(stPinchEnd_getBlock(rightTargetEnd))));
+
 
 	stPinchBlock *block = NULL;
 	stSet *seen = stSet_construct();
@@ -160,7 +175,6 @@ bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
 	stList *stack = stList_construct();
 	stPinchEnd *end = startEnd;
 	stList_append(stack, end);
-	bool reachable = false;
 	while(stList_length(stack) > 0) {
 		end = stList_pop(stack);
 		block = stPinchEnd_getBlock(end);
@@ -168,9 +182,16 @@ bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
 
 		stPinchEnd otherEnd = stPinchEnd_constructStatic(block, !stPinchEnd_getOrientation(end));
 
-		if ((leftTargetEnd && stPinchEnd_equalsFn(&otherEnd, leftTargetEnd)) || (rightTargetEnd && stPinchEnd_equalsFn(&otherEnd, rightTargetEnd))) {
-			reachable = true;
-			break;
+		if (leftTargetEnd && stPinchEnd_equalsFn(&otherEnd, leftTargetEnd)) {
+			stList_destruct(stack);
+			stPinchEnd *finalEnd = stPinchEnd_construct(stPinchSegment_getBlock(seg2), _3PRIME);
+			return finalEnd;
+		}
+		else if (rightTargetEnd 
+				&& stPinchEnd_equalsFn(&otherEnd, rightTargetEnd)) {
+			stList_destruct(stack);
+			stPinchEnd *finalEnd = stPinchEnd_construct(stPinchSegment_getBlock(seg2), _5PRIME);
+			return finalEnd;
 		}
 		if (!stSet_search(seen, block)) {
 			stSet_insert(seen, block);
@@ -186,18 +207,27 @@ bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
 			stSet_destructIterator(adjEndIt);
 		}
 	}
-
 	stList_destruct(stack);
-	return reachable;
+	return NULL;
+}
+
+bool pinchCreatesCycle(stPinchSegment *seg1, stPinchSegment *seg2, bool pinchOrientation) {
+	stPinchEnd *path1End = directedWalk(seg1, seg2, _5PRIME);
+	stPinchEnd *path2End = directedWalk(seg1, seg2, _3PRIME);
+
+	//pinching these segments will create a cycle if there is a path 
+	//connecting them, starting and ending at opposite ends of the newly
+	//created block
+	bool opposite = 
+		(path1End && (pinchOrientation ^ (stPinchEnd_getOrientation(path1End) == _3PRIME))) ||
+		(path2End && (pinchOrientation ^ (stPinchEnd_getOrientation(path2End) == _5PRIME)));
+	return opposite;
 }
 
 bool acyclicFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	if (singleCopyFilterFn(seg1, seg2)) return true;
-
-	if (pinchIsNegative) {
-		return directedWalk(seg1, seg2, 0);
-	}
-	return directedWalk(seg1, seg2, 1);
+	
+	return (pinchCreatesCycle(seg1, seg2, pinchOrientation));
 }
 
 void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output) {
@@ -243,9 +273,14 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 
 		//need to store this in a global because filterPinch doesn't
 		//provide the orientation to the filter function
-		pinchIsNegative = pinch->strand;
+		pinchOrientation = pinch->strand;
 
 		stPinchThread_filterPinch(thread1, thread2, pinch->start1, pinch->start2, pinch->length, pinch->strand, acyclicFilterFn);
+
+		if (!getOrdering(threadSet)) {
+			fprintf(stderr, "Cycle created by previous pinch.\n");
+			break;
+		}
 
 
 	}
