@@ -38,12 +38,18 @@ bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	return filter;
 }
 
-stList *getComponentOrdering2(stPinchEnd *startEnd) {
+stList *getComponentOrdering(stPinchBlock *startBlock) {
 	stList *stack = stList_construct();
-	stList_append(stack, startEnd);
+	stPinchEnd *leftEnd = stPinchEnd_construct(startBlock, _5PRIME);
+	stPinchEnd *rightEnd = stPinchEnd_construct(startBlock, _3PRIME);
+	stList_append(stack, leftEnd);
+	stList_append(stack, rightEnd);
 
-	stSet *red = stSet_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void *)) stPinchEnd_destruct);
-	stSet *black = stSet_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void *)) stPinchEnd_destruct);
+
+	stHash *color = stHash_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void*)) stPinchEnd_destruct, NULL);
+
+	stSet_insert(color, leftEnd, (void*)1);
+	stSet_insert(color, rightEnd, (void*)2);
 
 	stList *ordering = stList_construct();
 
@@ -54,28 +60,22 @@ stList *getComponentOrdering2(stPinchEnd *startEnd) {
 		fprintf(stderr, "Arrived at end %d of block starting at %ld\n", stPinchEnd_getOrientation(end), stPinchSegment_getStart(stPinchBlock_getFirst(stPinchEnd_getBlock(end))));
 		block = stPinchEnd_getBlock(end);
 
-		bool seenBlock = false;
-		if (stSet_search(black, end)) {
-			fprintf(stderr, "End is black\n");
-			seenBlock = true;
-		}
-		else if (stSet_search(red, end)) {
-			fprintf(stderr, "Encountered cycle\n");
-			stList_destruct(ordering);
-			stSet_destruct(red);
-			stSet_destruct(black);
-			return NULL;
-
-		}
-		else {
-			fprintf(stderr, "End is unlabeled, labeling it black\n");
-			stSet_insert(black, end);
-			stList_append(ordering, end);
-		}
-
 		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
-		if (!stSet_search(red, oppositeEnd)) {
-			stSet_insert(red, oppositeEnd);
+
+		assert(stHash_search(color, end));
+		bool seenBlock = (stHash_search(color, oppositeEnd) != 0);
+		if (stHash_search(color, end) ==
+				stHash_search(color, oppositeEnd)) {
+			//encountered cycle
+			fprintf(stderr, "Encountered cycle.\n");
+			stList_destruct(stack);
+			stHash_destruct(color);
+			stList_destruct(ordering);
+			return NULL;
+		}
+		else if (!stHash_search(color, oppositeEnd)) {
+			if (stHash_search(color, end) == 1) stHash_insert(color, oppositeEnd, 2);
+			if (stHash_search(color, end) == 2) stHash_insert(color, oppositeEnd, 1);
 		}
 		if (!seenBlock) {
 			stSet *adjacentEnds = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
@@ -93,18 +93,6 @@ stList *getComponentOrdering2(stPinchEnd *startEnd) {
 	return ordering;
 }
 
-stList *getComponentOrdering(stPinchBlock *block) {
-	stPinchEnd *leftStart = stPinchEnd_construct(block, 0);
-	stPinchEnd *rightStart = stPinchEnd_construct(block, 1);
-	stList *leftOrdering = getComponentOrdering2(leftStart);
-	stList *rightOrdering = getComponentOrdering2(rightStart);
-	if (!(leftOrdering && rightOrdering)) return NULL;
-	stList *ordering = stList_construct();
-	stList_appendAll(ordering, leftOrdering);
-	stList_appendAll(ordering, rightOrdering);
-	return ordering;
-}
-
 /*Get an ordering of the nodes in the graph, such that each node
  * is preceded in the ordering by all nodes from which it is accessible
  * by a directed walk. Return NULL if the graph is not acyclic. */
@@ -116,11 +104,25 @@ stList *getOrdering(stPinchThreadSet *graph) {
 	stSortedSetIterator *componentsIt = stSortedSet_getIterator(threadComponents);
 	stList *component;
 	while ((component = stSortedSet_getNext(componentsIt))) {
+		if (stList_length(component) == 1) {
+			//only one thread with no blocks, so nothing to order
+			continue;
+		}
 
 		//get any block in the component
 		stPinchSegment *segment = stPinchThread_getFirst(stList_peek(component));
 		while (segment && (stPinchSegment_getBlock(segment) == NULL)) segment = stPinchSegment_get3Prime(segment);
-		if (segment == NULL) return NULL;
+		if (segment == NULL) {
+			//try other direction
+			segment = stPinchThread_getFirst(stList_peek(component));
+			while (segment && (stPinchSegment_getBlock(segment) == NULL)) {
+				segment = stPinchSegment_get3Prime(segment);
+			}
+		}
+		//The case of a single thread with no blocks has already
+		//been handled, so there must be a segment contained
+		//in a block
+		assert(segment);
 
 		stPinchBlock *block = stPinchSegment_getBlock(segment);
 		stList *componentOrdering = getComponentOrdering(block);
