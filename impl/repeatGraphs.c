@@ -7,9 +7,18 @@
 
 #include "repeatGraphs.h"
 
-
-
 bool pinchOrientation;
+
+char *endInfo(stPinchEnd *end) {
+	stPinchBlock *block = stPinchEnd_getBlock(end);
+	stPinchSegment *seg = stPinchBlock_getFirst(block);
+	int segStart = stPinchSegment_getStart(seg);
+	int segEnd = stPinchSegment_getStart(seg) + stPinchSegment_getLength(seg);
+	char *side = SIDENAME(stPinchEnd_getOrientation(end));
+	char *info = malloc(sizeof(char)*100);
+	sprintf(info, "%s end of block from %d-%d", side, segStart, segEnd);
+	return info;
+}
 
 stSortedSet *getThreads(stPinchBlock *block) {
 	stPinchBlockIt blockIt = stPinchBlock_getSegmentIterator(block);
@@ -38,6 +47,13 @@ bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	return filter;
 }
 
+/*If the graph is not acyclic, return NULL. If the graph is acyclic, 
+ * return an ordering of the nodes such that all nodes reachable 
+ * from any given node occur after it in the ordering.*/
+#define BLACK (void*)1
+#define RED (void*)2
+
+#define OP(X) ((void*)X == BLACK ? RED : BLACK)
 stList *getComponentOrdering(stPinchBlock *startBlock) {
 	stList *stack = stList_construct();
 	stPinchEnd *leftEnd = stPinchEnd_construct(startBlock, _5PRIME);
@@ -45,11 +61,12 @@ stList *getComponentOrdering(stPinchBlock *startBlock) {
 	stList_append(stack, leftEnd);
 	stList_append(stack, rightEnd);
 
+	stSet *seen = stSet_construct();
 
 	stHash *color = stHash_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void*)) stPinchEnd_destruct, NULL);
 
-	stSet_insert(color, leftEnd, (void*)1);
-	stSet_insert(color, rightEnd, (void*)2);
+	stHash_insert(color, leftEnd, BLACK);
+	stHash_insert(color, rightEnd, RED);
 
 	stList *ordering = stList_construct();
 
@@ -57,13 +74,12 @@ stList *getComponentOrdering(stPinchBlock *startBlock) {
 	stPinchEnd *end;
 	while (stList_length(stack) > 0) {
 		end = stList_pop(stack);
-		fprintf(stderr, "Arrived at end %d of block starting at %ld\n", stPinchEnd_getOrientation(end), stPinchSegment_getStart(stPinchBlock_getFirst(stPinchEnd_getBlock(end))));
+		fprintf(stderr, "Arrived at %s\n", endInfo(end));
 		block = stPinchEnd_getBlock(end);
 
 		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
 
 		assert(stHash_search(color, end));
-		bool seenBlock = (stHash_search(color, oppositeEnd) != 0);
 		if (stHash_search(color, end) ==
 				stHash_search(color, oppositeEnd)) {
 			//encountered cycle
@@ -74,22 +90,31 @@ stList *getComponentOrdering(stPinchBlock *startBlock) {
 			return NULL;
 		}
 		else if (!stHash_search(color, oppositeEnd)) {
-			if (stHash_search(color, end) == 1) stHash_insert(color, oppositeEnd, 2);
-			if (stHash_search(color, end) == 2) stHash_insert(color, oppositeEnd, 1);
+			stHash_insert(color, oppositeEnd, OP(stHash_search(color, end)));
 		}
-		if (!seenBlock) {
-			stSet *adjacentEnds = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
-			fprintf(stderr, "Found %ld ends adjacent to %d side\n", stSet_size(adjacentEnds), stPinchEnd_getOrientation(oppositeEnd));
-			stSetIterator *adjEndIt = stSet_getIterator(adjacentEnds);
+		if (!stSet_search(seen, block)) {
+			stSet_insert(seen, block);
+			stSet *nearAdjacentEnds = stPinchEnd_getConnectedPinchEnds(end);
+			fprintf(stderr, "Found %ld connected ends on near side\n", stSet_size(nearAdjacentEnds));
+			stSetIterator *adjEndIt = stSet_getIterator(nearAdjacentEnds);
 			stPinchEnd *adjEnd;
 			while((adjEnd = stSet_getNext(adjEndIt))) {
+				stHash_insert(color, adjEnd, OP(stHash_search(color, end)));
+				stList_append(stack, adjEnd);
+			}
+
+			stSet_destructIterator(adjEndIt);
+			stSet *farAdjacentEnds = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
+			fprintf(stderr, "Found %ld connected ends on far side.\n", stSet_size(farAdjacentEnds));
+			adjEndIt = stSet_getIterator(farAdjacentEnds);
+			while((adjEnd = stSet_getNext(adjEndIt))) {
+				stHash_insert(color, adjEnd, OP(stHash_search(color, oppositeEnd)));
 				stList_append(stack, adjEnd);
 			}
 			stSet_destructIterator(adjEndIt);
 		}
 	}
-	stSet_destruct(red);
-	stSet_destruct(black);
+	stHash_destruct(color);
 	return ordering;
 }
 
@@ -158,17 +183,14 @@ stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
 stPinchEnd *directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
 	stPinchEnd *startEnd = getAdjacentEnd(seg1, direction);
 	if (!startEnd) return false;
-	fprintf(stderr, "Starting at %d end of block at coordinate %ld.\n", stPinchEnd_getOrientation(startEnd), stPinchSegment_getStart(stPinchBlock_getFirst(stPinchEnd_getBlock(startEnd))));
 
 	//Arriving at either of these ends means seg2 can
 	//be traversed
 	//First end encountered walking left from seg2
 	stPinchEnd *leftTargetEnd = getAdjacentEnd(seg2, _5PRIME);
-	if (leftTargetEnd) fprintf(stderr, "Left target: %d end of block starting at %ld\n", stPinchEnd_getOrientation(leftTargetEnd), stPinchSegment_getStart(stPinchBlock_getFirst(stPinchEnd_getBlock(leftTargetEnd))));
  
 	//First end encountered walking right from seg2
 	stPinchEnd *rightTargetEnd = getAdjacentEnd(seg2, _3PRIME);
-	if (rightTargetEnd) fprintf(stderr, "Right target: %d end of block starting at %ld\n", stPinchEnd_getOrientation(rightTargetEnd), stPinchSegment_getStart(stPinchBlock_getFirst(stPinchEnd_getBlock(rightTargetEnd))));
 
 
 	stPinchBlock *block = NULL;
@@ -180,7 +202,7 @@ stPinchEnd *directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direct
 	while(stList_length(stack) > 0) {
 		end = stList_pop(stack);
 		block = stPinchEnd_getBlock(end);
-		fprintf(stderr, "Arrived at %d end of block at coordinate %ld.\n", stPinchEnd_getOrientation(end), stPinchSegment_getStart(stPinchBlock_getFirst(stPinchEnd_getBlock(end))));
+		fprintf(stderr, "Arrived at %s\n", endInfo(end));
 
 		stPinchEnd otherEnd = stPinchEnd_constructStatic(block, !stPinchEnd_getOrientation(end));
 

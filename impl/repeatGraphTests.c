@@ -53,14 +53,14 @@ void testDirectedWalk() {
 	fprintf(stderr, "Passed\n");
 }
 
-void testAcyclic() {
-	fprintf(stderr, "Testing graphIsAcyclic\n");
+void testOrdering() {
+	fprintf(stderr, "Testing graph ordering\n");
 	stPinchThreadSet *threadSet = stPinchThreadSet_construct();
 	stPinchThread *thread1 = stPinchThreadSet_addThread(threadSet, 1, 0, 100);
 	stPinchThread *thread2 = stPinchThreadSet_addThread(threadSet, 2, 0, 100);
 
 	stPinchThread_pinch(thread1, thread2, 10, 10, 10, 1);
-	stPinchThread_pinch(thread1, thread2, 40, 40, 10, 1);
+	stPinchThread_pinch(thread1, thread2, 40, 40, 10, 0);
 
 	assert(getOrdering(threadSet));
 
@@ -72,5 +72,5 @@ void testAcyclic() {
 
 int main(int argc, char **argv) {
 	testDirectedWalk();
-	testAcyclic();
+	testOrdering();
 }

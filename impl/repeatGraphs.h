@@ -5,6 +5,8 @@
 #define _5PRIME 1
 #define _3PRIME 0
 
+#define SIDENAME(X) (X == 0) ? "3-prime" : "5-prime"
+
 void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output);
 stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFilename);
 stPinchEnd *directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction);
