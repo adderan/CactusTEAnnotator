@@ -2,6 +2,7 @@
 
 void testDirectedWalk() {
 	fprintf(stderr, "Testing directedWalk\n");
+	assert((true ^ true) == false);
 	stPinchThreadSet *threadSet = stPinchThreadSet_construct();
 	stPinchThreadSet_addThread(threadSet, 1, 0, 100);
 	stPinchThreadSet_addThread(threadSet, 2, 0, 100);
@@ -48,8 +49,6 @@ void testDirectedWalk() {
 	//the reverse block, and then forwards on thread 2
 	assert(directedWalk(seg1, seg2, _5PRIME));
 	assert(!directedWalk(seg1, seg2, _3PRIME));
-	assert(pinchCreatesCycle(seg1, seg2, 0));
-	assert(!pinchCreatesCycle(seg1, seg2, 1));
 	fprintf(stderr, "Passed\n");
 }
 
