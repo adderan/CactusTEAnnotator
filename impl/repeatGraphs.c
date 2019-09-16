@@ -47,34 +47,36 @@ bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	return filter;
 }
 
-/*If the graph is not acyclic, return NULL. If the graph is acyclic, 
- * return an ordering of the nodes such that all nodes reachable 
- * from any given node occur after it in the ordering.*/
-#define BLACK (void*)1
-#define RED (void*)2
+void printGvizLine(stPinchEnd *end1, stPinchEnd *end2, stHash *endColor, FILE *gvizFile) {
+	stPinchBlock *block1 = (stHash_search(endColor, end1) == 
+			BLACK) ? stPinchEnd_getBlock(end1) : stPinchEnd_getBlock(end2);
 
-#define OP(X) ((void*)X == BLACK ? RED : BLACK)
-stList *getComponentOrdering(stPinchBlock *startBlock) {
+	stPinchBlock *block2 = (stHash_search(endColor, end1) == 
+			BLACK) ? stPinchEnd_getBlock(end2) : stPinchEnd_getBlock(end1);
+
+	fprintf(gvizFile, "\t%lu -> %lu\n", stHash_pointer(block1), stHash_pointer(block2));
+}
+
+/*If the graph is not acyclic, returns NULL. If the graph is acyclic, 
+* return an ordering of the nodes such that all nodes reachable 
+* from any given node occur after it in the ordering.*/
+stList *getComponentOrdering(stPinchBlock *startBlock, FILE *gvizFile) {
 	stList *stack = stList_construct();
-	stPinchEnd *leftEnd = stPinchEnd_construct(startBlock, _5PRIME);
-	stPinchEnd *rightEnd = stPinchEnd_construct(startBlock, _3PRIME);
-	stList_append(stack, leftEnd);
-	stList_append(stack, rightEnd);
-
 	stSet *seen = stSet_construct();
-
 	stHash *color = stHash_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void*)) stPinchEnd_destruct, NULL);
 
-	stHash_insert(color, leftEnd, BLACK);
-	stHash_insert(color, rightEnd, RED);
-
 	stList *ordering = stList_construct();
+
+	stPinchEnd *leftEnd = stPinchEnd_construct(startBlock, _5PRIME);
+
+	stList_append(stack, leftEnd);
+	stHash_insert(color, leftEnd, BLACK);
 
 	stPinchBlock *block;
 	stPinchEnd *end;
 	while (stList_length(stack) > 0) {
 		end = stList_pop(stack);
-		fprintf(stderr, "Arrived at %s\n", endInfo(end));
+		//fprintf(stderr, "Arrived at %s\n", endInfo(end));
 		block = stPinchEnd_getBlock(end);
 
 		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
@@ -83,47 +85,55 @@ stList *getComponentOrdering(stPinchBlock *startBlock) {
 		if (stHash_search(color, end) ==
 				stHash_search(color, oppositeEnd)) {
 			//encountered cycle
-			fprintf(stderr, "Encountered cycle.\n");
+			fprintf(stderr, "Encountered cycle, both ends %p.\n", stHash_search(color, end));
 			stList_destruct(stack);
 			stHash_destruct(color);
 			stList_destruct(ordering);
 			return NULL;
 		}
-		else if (!stHash_search(color, oppositeEnd)) {
-			stHash_insert(color, oppositeEnd, OP(stHash_search(color, end)));
-		}
+		stHash_insert(color, oppositeEnd, OP(stHash_search(color, end)));
+
 		if (!stSet_search(seen, block)) {
 			stSet_insert(seen, block);
 			stSet *nearAdjacentEnds = stPinchEnd_getConnectedPinchEnds(end);
-			fprintf(stderr, "Found %ld connected ends on near side\n", stSet_size(nearAdjacentEnds));
+			//fprintf(stderr, "Found %ld connected ends on near side\n", stSet_size(nearAdjacentEnds));
 			stSetIterator *adjEndIt = stSet_getIterator(nearAdjacentEnds);
 			stPinchEnd *adjEnd;
 			while((adjEnd = stSet_getNext(adjEndIt))) {
-				stHash_insert(color, adjEnd, OP(stHash_search(color, end)));
+				void *colorToTagEnd = OP(stHash_search(color, end));
+				if (stHash_search(color, adjEnd) == OP(colorToTagEnd)) {
+					fprintf(stderr, "About to encounter cycle\n");
+				}
+				stHash_insert(color, adjEnd, colorToTagEnd);
 				stList_append(stack, adjEnd);
+				if (gvizFile) printGvizLine(end, adjEnd, color, gvizFile);
 			}
 
 			stSet_destructIterator(adjEndIt);
 			stSet *farAdjacentEnds = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
-			fprintf(stderr, "Found %ld connected ends on far side.\n", stSet_size(farAdjacentEnds));
+			//fprintf(stderr, "Found %ld connected ends on far side.\n", stSet_size(farAdjacentEnds));
 			adjEndIt = stSet_getIterator(farAdjacentEnds);
 			while((adjEnd = stSet_getNext(adjEndIt))) {
-				stHash_insert(color, adjEnd, OP(stHash_search(color, oppositeEnd)));
+				void *colorToTagEnd = OP(stHash_search(color, oppositeEnd));
+				if (stHash_search(color, adjEnd) == OP(colorToTagEnd)) {
+					fprintf(stderr, "About to encounter cycle\n");
+				}
+				stHash_insert(color, adjEnd, colorToTagEnd);
 				stList_append(stack, adjEnd);
+				if (gvizFile) printGvizLine(oppositeEnd, adjEnd, color, gvizFile);
 			}
 			stSet_destructIterator(adjEndIt);
 		}
 	}
 	stHash_destruct(color);
+	stList_destruct(stack);
 	return ordering;
 }
 
-/*Get an ordering of the nodes in the graph, such that each node
- * is preceded in the ordering by all nodes from which it is accessible
- * by a directed walk. Return NULL if the graph is not acyclic. */
-stList *getOrdering(stPinchThreadSet *graph) {
+stList *getOrdering(stPinchThreadSet *graph, FILE *gvizFile) {
 	stSortedSet *threadComponents = stPinchThreadSet_getThreadComponents(graph);
 	fprintf(stderr, "Found %ld components\n", stSortedSet_size(threadComponents));
+	if (gvizFile) fprintf(gvizFile, "strict digraph {\n");
 	stList *ordering = stList_construct();
 
 	stSortedSetIterator *componentsIt = stSortedSet_getIterator(threadComponents);
@@ -150,14 +160,20 @@ stList *getOrdering(stPinchThreadSet *graph) {
 		assert(segment);
 
 		stPinchBlock *block = stPinchSegment_getBlock(segment);
-		stList *componentOrdering = getComponentOrdering(block);
-		if (!componentOrdering) return NULL;
+		stList *componentOrdering = getComponentOrdering(block, gvizFile);
+		if (!componentOrdering) {
+			ordering = NULL;
+			goto out;
+		}
 		stList_appendAll(ordering, componentOrdering);
 
 	}
+out:
+	if (gvizFile) fprintf(gvizFile, "}\n");
 	stSortedSet_destructIterator(componentsIt);
 	return ordering;
 }
+
 
 stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
 	if (stPinchSegment_getBlock(segment)) {
@@ -202,7 +218,7 @@ stPinchEnd *directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direct
 	while(stList_length(stack) > 0) {
 		end = stList_pop(stack);
 		block = stPinchEnd_getBlock(end);
-		fprintf(stderr, "Arrived at %s\n", endInfo(end));
+		//fprintf(stderr, "Arrived at %s\n", endInfo(end));
 
 		stPinchEnd otherEnd = stPinchEnd_constructStatic(block, !stPinchEnd_getOrientation(end));
 
@@ -222,7 +238,7 @@ stPinchEnd *directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direct
 			//get the ends connected to the opposite side of this block
 			//and add them to the stack
 			stSet *adjEnds = stPinchEnd_getConnectedPinchEnds(&otherEnd);
-			fprintf(stderr, "Found %ld connected ends on %d end of block\n", stPinchEnd_getNumberOfConnectedPinchEnds(&otherEnd), stPinchEnd_getOrientation(&otherEnd));
+			//fprintf(stderr, "Found %ld connected ends on %d end of block\n", stPinchEnd_getNumberOfConnectedPinchEnds(&otherEnd), stPinchEnd_getOrientation(&otherEnd));
 			stSetIterator *adjEndIt = stSet_getIterator(adjEnds);
 			stPinchEnd *adjEnd;
 			while((adjEnd = stSet_getNext(adjEndIt)) != NULL) {
@@ -274,7 +290,7 @@ void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output) {
 	fprintf(output, "}\n");
 }
 
-stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFilename) {
+stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFilename, char *gvizDebugFilename) {
 	FILE *sequencesFile = fopen(sequencesFilename, "r");
 	struct List *seqs = constructEmptyList(0, NULL);
     struct List *seqLengths = constructEmptyList(0, free);
@@ -301,16 +317,18 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 
 		stPinchThread_filterPinch(thread1, thread2, pinch->start1, pinch->start2, pinch->length, pinch->strand, acyclicFilterFn);
 
-		if (!getOrdering(threadSet)) {
+		fprintf(stderr, "Checking pinch\n");
+		if (!getOrdering(threadSet, NULL)) {
 			fprintf(stderr, "Cycle created by previous pinch.\n");
+			if (gvizDebugFilename) {
+				FILE *gvizFile = fopen(gvizDebugFilename, "w");
+				getOrdering(threadSet, gvizFile);
+				fclose(gvizFile);
+			}
 			break;
 		}
-
-
 	}
 	fclose(sequencesFile);
 	stPinchIterator_destruct(pinchIterator);
 	return threadSet;
 }
-
-

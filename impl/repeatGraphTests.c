@@ -60,12 +60,12 @@ void testOrdering() {
 	stPinchThread *thread2 = stPinchThreadSet_addThread(threadSet, 2, 0, 100);
 
 	stPinchThread_pinch(thread1, thread2, 10, 10, 10, 1);
-	stPinchThread_pinch(thread1, thread2, 40, 40, 10, 0);
+	stPinchThread_pinch(thread1, thread2, 40, 40, 10, 1);
 
-	assert(getOrdering(threadSet));
+	assert(getOrdering(threadSet, NULL));
 
 	stPinchThread_pinch(thread1, thread2, 70, 70, 10, 0);
-	assert(!getOrdering(threadSet));
+	assert(!getOrdering(threadSet, NULL));
 
 	fprintf(stderr, "Passed\n");
 }
