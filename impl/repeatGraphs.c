@@ -20,30 +20,31 @@ char *endInfo(stPinchEnd *end) {
 	return info;
 }
 
-stSortedSet *getThreads(stPinchBlock *block) {
+stSet *getThreads(stPinchBlock *block) {
 	stPinchBlockIt blockIt = stPinchBlock_getSegmentIterator(block);
-	stSortedSet *threads = stSortedSet_construct();
+	stSet *threads = stSet_construct();
 	stPinchSegment *seg = NULL;
 	while((seg = stPinchBlockIt_getNext(&blockIt)) != NULL) {
-		stSortedSet_insert(threads, (void*) stPinchSegment_getName(seg));
+		stSet_insert(threads, (void*) stPinchSegment_getName(seg));
 	}
 	return threads;
 }
 
 bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
+	if (stPinchSegment_getThread(seg1) == stPinchSegment_getThread(seg2)) return true;
 	bool filter = false;
 	stPinchBlock *block1 = stPinchSegment_getBlock(seg1);
 	stPinchBlock *block2 = stPinchSegment_getBlock(seg2);
 
 	if (!(block1 && block2)) return false;
-	stSortedSet *threads1 = getThreads(block1);
-	stSortedSet *threads2 = getThreads(block2);
+	stSet *threads1 = getThreads(block1);
+	stSet *threads2 = getThreads(block2);
 
-	stSortedSet *intersect = stSortedSet_getIntersection(threads1, threads2);
-	if (stSortedSet_size(intersect) > 0) filter = true;
-	stSortedSet_destruct(threads1);
-	stSortedSet_destruct(threads2);
-	stSortedSet_destruct(intersect);
+	stSet *intersect = stSet_getIntersection(threads1, threads2);
+	if (stSet_size(intersect) > 0) filter = true;
+	stSet_destruct(threads1);
+	stSet_destruct(threads2);
+	stSet_destruct(intersect);
 	return filter;
 }
 
@@ -100,6 +101,10 @@ stList *getComponentOrdering(stPinchBlock *startBlock, FILE *gvizFile) {
 			stSetIterator *adjEndIt = stSet_getIterator(nearAdjacentEnds);
 			stPinchEnd *adjEnd;
 			while((adjEnd = stSet_getNext(adjEndIt))) {
+				if (stPinchEnd_getBlock(adjEnd) == block) {
+					fprintf(stderr, "Encountered self-loop\n");
+					return NULL;
+				}
 				void *colorToTagEnd = OP(stHash_search(color, end));
 				if (stHash_search(color, adjEnd) == OP(colorToTagEnd)) {
 					fprintf(stderr, "About to encounter cycle\n");
@@ -114,6 +119,10 @@ stList *getComponentOrdering(stPinchBlock *startBlock, FILE *gvizFile) {
 			//fprintf(stderr, "Found %ld connected ends on far side.\n", stSet_size(farAdjacentEnds));
 			adjEndIt = stSet_getIterator(farAdjacentEnds);
 			while((adjEnd = stSet_getNext(adjEndIt))) {
+				if (stPinchEnd_getBlock(adjEnd) == block) {
+					fprintf(stderr, "Encountered self-loop\n");
+					return NULL;
+				}
 				void *colorToTagEnd = OP(stHash_search(color, oppositeEnd));
 				if (stHash_search(color, adjEnd) == OP(colorToTagEnd)) {
 					fprintf(stderr, "About to encounter cycle\n");
@@ -197,6 +206,7 @@ stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
 }
 
 stPinchEnd *directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direction) {
+	assert(stPinchSegment_getThread(seg1) != stPinchSegment_getThread(seg2));
 	stPinchEnd *startEnd = getAdjacentEnd(seg1, direction);
 	if (!startEnd) return false;
 
@@ -254,6 +264,8 @@ stPinchEnd *directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool direct
 bool pinchCreatesCycle(stPinchSegment *seg1, stPinchSegment *seg2, bool pinchOrientation) {
 	stPinchEnd *path1End = directedWalk(seg1, seg2, _5PRIME);
 	stPinchEnd *path2End = directedWalk(seg1, seg2, _3PRIME);
+
+	if (path1End || path2End) return true;
 
 	//pinching these segments will create a cycle if there is a path 
 	//connecting them, starting and ending at opposite ends of the newly
