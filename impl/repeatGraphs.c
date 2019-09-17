@@ -19,6 +19,13 @@ char *endInfo(stPinchEnd *end) {
 	return info;
 }
 
+void printSegmentInfo(stPinchSegment *seg) {
+	fprintf(stderr, "Arrived at segment %ld-%ld on thread %ld\n", 
+				stPinchSegment_getStart(seg), 
+				stPinchSegment_getStart(seg) + stPinchSegment_getLength(seg), 
+				stPinchThread_getName(stPinchSegment_getThread(seg)));
+}
+
 stSet *getThreads(stPinchSegment *segment) {
 	stSet *threads = stSet_construct();
 	stPinchBlock *block = stPinchSegment_getBlock(segment);
@@ -50,14 +57,27 @@ bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	return filter;
 }
 
-void printGvizLine(stPinchEnd *end1, stPinchEnd *end2, stHash *endColor, FILE *gvizFile) {
-	stPinchBlock *block1 = (stHash_search(endColor, end1) == 
-			BLACK) ? stPinchEnd_getBlock(end1) : stPinchEnd_getBlock(end2);
+char *endName(stPinchEnd *end) {
+	char *name = malloc(sizeof(char)*100);
+	sprintf(name, "%lu_%d", stHash_pointer(stPinchEnd_getBlock(end)),
+			stPinchEnd_getOrientation(end));
+	return name;
+}
 
-	stPinchBlock *block2 = (stHash_search(endColor, end1) == 
-			BLACK) ? stPinchEnd_getBlock(end2) : stPinchEnd_getBlock(end1);
+void printBlockEdge(stPinchEnd *end1, stPinchEnd *end2, FILE *gvizFile) {
+	fprintf(gvizFile, "\t%s [fillcolor = red]\n", endName(end1));
+	fprintf(gvizFile, "\t%s [fillcolor = black]\n", endName(end2));
 
-	fprintf(gvizFile, "\t%lu -> %lu\n", stHash_pointer(block1), stHash_pointer(block2));
+	fprintf(gvizFile, "\t%s -> %s [fillcolor = blue]\n", endName(end1), endName(end2));
+}
+
+void printAdjacencyEdge(stPinchEnd *end1, stPinchEnd *end2, stHash *endColor, FILE *gvizFile) {
+	stPinchEnd *blackEnd = (stHash_search(endColor, end1) == 
+			BLACK) ? end1 : end2;
+	stPinchEnd *redEnd = (stHash_search(endColor, end1) == 
+			BLACK) ? end2 : end1;
+
+	fprintf(gvizFile, "\t%s -> %s\n", endName(blackEnd), endName(redEnd));
 }
 
 /*If the graph is not acyclic, returns NULL. If the graph is acyclic, 
@@ -97,23 +117,22 @@ stList *getComponentOrdering(stPinchBlock *startBlock, FILE *gvizFile) {
 		stHash_insert(color, oppositeEnd, OP(stHash_search(color, end)));
 
 		if (!stSet_search(seen, block)) {
+			if (gvizFile) {
+				printBlockEdge(end, oppositeEnd, gvizFile);
+			}
 			stSet_insert(seen, block);
 			stSet *nearAdjacentEnds = stPinchEnd_getConnectedPinchEnds(end);
 			//fprintf(stderr, "Found %ld connected ends on near side\n", stSet_size(nearAdjacentEnds));
 			stSetIterator *adjEndIt = stSet_getIterator(nearAdjacentEnds);
 			stPinchEnd *adjEnd;
 			while((adjEnd = stSet_getNext(adjEndIt))) {
-				if (stPinchEnd_getBlock(adjEnd) == block) {
-					fprintf(stderr, "Encountered self-loop\n");
-					return NULL;
-				}
 				void *colorToTagEnd = OP(stHash_search(color, end));
 				if (stHash_search(color, adjEnd) == OP(colorToTagEnd)) {
 					fprintf(stderr, "About to encounter cycle\n");
 				}
 				stHash_insert(color, adjEnd, colorToTagEnd);
 				stList_append(stack, adjEnd);
-				if (gvizFile) printGvizLine(end, adjEnd, color, gvizFile);
+				if (gvizFile) printAdjacencyEdge(end, adjEnd, color, gvizFile);
 			}
 
 			stSet_destructIterator(adjEndIt);
@@ -121,17 +140,13 @@ stList *getComponentOrdering(stPinchBlock *startBlock, FILE *gvizFile) {
 			//fprintf(stderr, "Found %ld connected ends on far side.\n", stSet_size(farAdjacentEnds));
 			adjEndIt = stSet_getIterator(farAdjacentEnds);
 			while((adjEnd = stSet_getNext(adjEndIt))) {
-				if (stPinchEnd_getBlock(adjEnd) == block) {
-					fprintf(stderr, "Encountered self-loop\n");
-					return NULL;
-				}
 				void *colorToTagEnd = OP(stHash_search(color, oppositeEnd));
 				if (stHash_search(color, adjEnd) == OP(colorToTagEnd)) {
 					fprintf(stderr, "About to encounter cycle\n");
 				}
 				stHash_insert(color, adjEnd, colorToTagEnd);
 				stList_append(stack, adjEnd);
-				if (gvizFile) printGvizLine(oppositeEnd, adjEnd, color, gvizFile);
+				if (gvizFile) printAdjacencyEdge(oppositeEnd, adjEnd, color, gvizFile);
 			}
 			stSet_destructIterator(adjEndIt);
 		}
@@ -185,7 +200,6 @@ out:
 	return ordering;
 }
 
-
 stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
 	if (stPinchSegment_getBlock(segment)) {
 		return stPinchEnd_construct(stPinchSegment_getBlock(segment), direction);
@@ -207,6 +221,9 @@ stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
 	return stPinchEnd_construct(block, orientation);
 }
 
+//inefficient function for checking whether there is a directed
+//walk (a path of alternating block and adjacency edges) between
+//two segments.
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection) {
 	assert(stPinchSegment_getThread(seg1) != stPinchSegment_getThread(seg2));
 
@@ -226,13 +243,6 @@ bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirectio
 			seg = stList_pop(stack);
 			curDirection = stList_pop(directions);
 		}
-		/*
-		fprintf(stderr, "Arrived at segment %ld-%ld on thread %ld in direction %s\n", 
-				stPinchSegment_getStart(seg), 
-				stPinchSegment_getStart(seg) + stPinchSegment_getLength(seg), 
-				stPinchThread_getName(stPinchSegment_getThread(seg)),
-				SIDENAME(curDirection));
-				*/
 
 		if (seg == seg2) {
 			reachable = true;
@@ -247,15 +257,15 @@ bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirectio
 				if (nextSeg != seg) {
 					stList_append(stack, nextSeg);
 
-					//switch directions if the next segment or the current segment
-					//is reversed relative to the block
+					//switch directions if the next segment 
+					//or the current segment is reversed relative 
+					//to the block
 					bool nextSegDirection = curDirection 
 						^ (stPinchSegment_getBlockOrientation(nextSeg)==0)
 						^ (stPinchSegment_getBlockOrientation(seg)==0);
 					stList_append(directions, (void*)nextSegDirection);
 				}
 			}
-
 
 		}
 		seg = (curDirection == _5PRIME) ? 
@@ -265,7 +275,7 @@ bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirectio
 out:
 	stList_destruct(stack);
 	stList_destruct(directions);
-
+	stSet_destruct(seen);
 	return reachable;
 }
 
