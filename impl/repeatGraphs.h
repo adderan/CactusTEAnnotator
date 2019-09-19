@@ -9,13 +9,14 @@
 
 #define BLACK (void*)1
 #define RED (void*)2
+#define COLORNAME(X) (X == (void*)1) ? "green" : "red"
 
 #define OP(X) ((void*)X == BLACK ? RED : BLACK)
 
 void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output);
 stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFilename, char *gvizDebugFilename);
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection);
-stList *getOrdering(stPinchThreadSet *threadSet, FILE *gvizFile);
+stList *getOrdering(stPinchThreadSet *threadSet, stHash *coloring);
 bool pinchCreatesCycle(stPinchSegment *seg1, stPinchSegment *seg2,
 		bool orientation);
 

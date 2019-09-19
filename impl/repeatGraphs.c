@@ -57,43 +57,59 @@ bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	return filter;
 }
 
-char *endName(stPinchEnd *end) {
-	char *name = malloc(sizeof(char)*100);
-	sprintf(name, "%lu_%d", stHash_pointer(stPinchEnd_getBlock(end)),
-			stPinchEnd_getOrientation(end));
-	return name;
-}
 
-void printBlockEdge(stPinchEnd *end1, stPinchEnd *end2, FILE *gvizFile) {
-	fprintf(gvizFile, "\t%s [fillcolor = red]\n", endName(end1));
-	fprintf(gvizFile, "\t%s [fillcolor = black]\n", endName(end2));
+void printBiedgedGraph(stPinchThreadSet *threadSet, stHash *coloring, FILE *gvizFile) {
+	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(threadSet);
+	fprintf(gvizFile, "strict graph {\n");
+	stPinchBlock *block;
+	while((block = stPinchThreadSetBlockIt_getNext(&blockIt))) {
+		stPinchEnd *end1 = stPinchEnd_construct(block, 0);
+		stPinchEnd *end2 = stPinchEnd_construct(block, 1);
 
-	fprintf(gvizFile, "\t%s -> %s [fillcolor = blue]\n", endName(end1), endName(end2));
-}
+		//end nodes
+		char *end1Color = (stHash_search(coloring, end1)) ? COLORNAME(stHash_search(coloring, end1)) : "grey";
+		char *end2Color = (stHash_search(coloring, end2)) ? COLORNAME(stHash_search(coloring, end2)) : "grey";
+		fprintf(gvizFile, "\t%ld[style=filled fillcolor=%s];\n", stPinchEnd_hashFn(end1), end1Color);
+		fprintf(gvizFile, "\t%ld[style=filled fillcolor=%s];\n", stPinchEnd_hashFn(end2), end2Color);
 
-void printAdjacencyEdge(stPinchEnd *end1, stPinchEnd *end2, stHash *endColor, FILE *gvizFile) {
-	stPinchEnd *blackEnd = (stHash_search(endColor, end1) == 
-			BLACK) ? end1 : end2;
-	stPinchEnd *redEnd = (stHash_search(endColor, end1) == 
-			BLACK) ? end2 : end1;
+				
+		//block edge
+		fprintf(gvizFile, "\t%ld -- %ld[dir=none color=blue penwidth=10];\n", stPinchEnd_hashFn(end1), stPinchEnd_hashFn(end2));
 
-	fprintf(gvizFile, "\t%s -> %s\n", endName(blackEnd), endName(redEnd));
+		//fprintf(gvizFile, "{rank = same; %ld; %ld;}\n", stPinchEnd_hashFn(end1), stPinchEnd_hashFn(end2));
+		
+		//near adjacencies
+		stSet *nearAdjacent = stPinchEnd_getConnectedPinchEnds(end1);
+		stSetIterator *nearAdjacentIt = stSet_getIterator(nearAdjacent);
+		stPinchEnd *adjEnd;
+		while((adjEnd = stSet_getNext(nearAdjacentIt))) {
+			fprintf(gvizFile, "\t%ld -- %ld;\n", stPinchEnd_hashFn(end1), stPinchEnd_hashFn(adjEnd));
+
+		}
+		stSet_destructIterator(nearAdjacentIt);
+
+		stSet *farAdjacent = stPinchEnd_getConnectedPinchEnds(end2);
+		stSetIterator *farAdjacentIt = stSet_getIterator(farAdjacent);
+		while((adjEnd = stSet_getNext(farAdjacentIt))) {
+			fprintf(gvizFile, "\t%ld -- %ld;\n", stPinchEnd_hashFn(end2), stPinchEnd_hashFn(adjEnd));
+		}
+	}
+	fprintf(gvizFile, "}\n");
 }
 
 /*If the graph is not acyclic, returns NULL. If the graph is acyclic, 
 * return an ordering of the nodes such that all nodes reachable 
 * from any given node occur after it in the ordering.*/
-stList *getComponentOrdering(stPinchBlock *startBlock, FILE *gvizFile) {
+stList *getComponentOrdering(stPinchBlock *startBlock, stHash *coloring) {
 	stList *stack = stList_construct();
 	stSet *seen = stSet_construct();
-	stHash *color = stHash_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void*)) stPinchEnd_destruct, NULL);
-
+	
 	stList *ordering = stList_construct();
 
 	stPinchEnd *leftEnd = stPinchEnd_construct(startBlock, _5PRIME);
 
 	stList_append(stack, leftEnd);
-	stHash_insert(color, leftEnd, BLACK);
+	stHash_insert(coloring, leftEnd, BLACK);
 
 	stPinchBlock *block;
 	stPinchEnd *end;
@@ -104,35 +120,30 @@ stList *getComponentOrdering(stPinchBlock *startBlock, FILE *gvizFile) {
 
 		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
 
-		assert(stHash_search(color, end));
-		if (stHash_search(color, end) ==
-				stHash_search(color, oppositeEnd)) {
+		assert(stHash_search(coloring, end));
+		if (stHash_search(coloring, end) ==
+				stHash_search(coloring, oppositeEnd)) {
 			//encountered cycle
-			fprintf(stderr, "Encountered cycle at block %ld, both ends %p.\n", stHash_pointer(block), stHash_search(color, end));
+			fprintf(stderr, "Encountered cycle at end %ld, both ends %p.\n", stPinchEnd_hashFn(end), stHash_search(coloring, end));
 			stList_destruct(stack);
-			stHash_destruct(color);
 			stList_destruct(ordering);
 			return NULL;
 		}
-		stHash_insert(color, oppositeEnd, OP(stHash_search(color, end)));
+		stHash_insert(coloring, oppositeEnd, OP(stHash_search(coloring, end)));
 
 		if (!stSet_search(seen, block)) {
-			if (gvizFile) {
-				printBlockEdge(end, oppositeEnd, gvizFile);
-			}
 			stSet_insert(seen, block);
 			stSet *nearAdjacentEnds = stPinchEnd_getConnectedPinchEnds(end);
 			//fprintf(stderr, "Found %ld connected ends on near side\n", stSet_size(nearAdjacentEnds));
 			stSetIterator *adjEndIt = stSet_getIterator(nearAdjacentEnds);
 			stPinchEnd *adjEnd;
 			while((adjEnd = stSet_getNext(adjEndIt))) {
-				void *colorToTagEnd = OP(stHash_search(color, end));
-				if (stHash_search(color, adjEnd) == OP(colorToTagEnd)) {
+				void *colorToTagEnd = OP(stHash_search(coloring, end));
+				if (stHash_search(coloring, adjEnd) == OP(colorToTagEnd)) {
 					fprintf(stderr, "About to encounter cycle\n");
 				}
-				stHash_insert(color, adjEnd, colorToTagEnd);
+				stHash_insert(coloring, adjEnd, colorToTagEnd);
 				stList_append(stack, adjEnd);
-				if (gvizFile) printAdjacencyEdge(end, adjEnd, color, gvizFile);
 			}
 
 			stSet_destructIterator(adjEndIt);
@@ -140,27 +151,27 @@ stList *getComponentOrdering(stPinchBlock *startBlock, FILE *gvizFile) {
 			//fprintf(stderr, "Found %ld connected ends on far side.\n", stSet_size(farAdjacentEnds));
 			adjEndIt = stSet_getIterator(farAdjacentEnds);
 			while((adjEnd = stSet_getNext(adjEndIt))) {
-				void *colorToTagEnd = OP(stHash_search(color, oppositeEnd));
-				if (stHash_search(color, adjEnd) == OP(colorToTagEnd)) {
+				void *colorToTagEnd = OP(stHash_search(coloring, oppositeEnd));
+				if (stHash_search(coloring, adjEnd) == OP(colorToTagEnd)) {
 					fprintf(stderr, "About to encounter cycle\n");
 				}
-				stHash_insert(color, adjEnd, colorToTagEnd);
+				stHash_insert(coloring, adjEnd, colorToTagEnd);
 				stList_append(stack, adjEnd);
-				if (gvizFile) printAdjacencyEdge(oppositeEnd, adjEnd, color, gvizFile);
 			}
 			stSet_destructIterator(adjEndIt);
 		}
 	}
-	stHash_destruct(color);
 	stList_destruct(stack);
 	return ordering;
 }
 
-stList *getOrdering(stPinchThreadSet *graph, FILE *gvizFile) {
+stList *getOrdering(stPinchThreadSet *graph, stHash *coloring) {
 	stSortedSet *threadComponents = stPinchThreadSet_getThreadComponents(graph);
 	fprintf(stderr, "Found %ld components\n", stSortedSet_size(threadComponents));
-	if (gvizFile) fprintf(gvizFile, "strict digraph {\n");
 	stList *ordering = stList_construct();
+	if (!coloring) {
+		coloring = stHash_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void*)) stPinchEnd_destruct, NULL);
+	}
 
 	stSortedSetIterator *componentsIt = stSortedSet_getIterator(threadComponents);
 	stList *component;
@@ -186,7 +197,7 @@ stList *getOrdering(stPinchThreadSet *graph, FILE *gvizFile) {
 		assert(segment);
 
 		stPinchBlock *block = stPinchSegment_getBlock(segment);
-		stList *componentOrdering = getComponentOrdering(block, gvizFile);
+		stList *componentOrdering = getComponentOrdering(block, coloring);
 		if (!componentOrdering) {
 			ordering = NULL;
 			goto out;
@@ -195,7 +206,6 @@ stList *getOrdering(stPinchThreadSet *graph, FILE *gvizFile) {
 
 	}
 out:
-	if (gvizFile) fprintf(gvizFile, "}\n");
 	stSortedSet_destructIterator(componentsIt);
 	return ordering;
 }
@@ -333,8 +343,13 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 		if (!getOrdering(threadSet, NULL)) {
 			fprintf(stderr, "Cycle created by previous pinch.\n");
 			if (gvizDebugFilename) {
+				stHash *coloring = stHash_construct3(stPinchEnd_hashFn, 
+						stPinchEnd_equalsFn, 
+						(void(*)(void*)) stPinchEnd_destruct, NULL);
+
+				getOrdering(threadSet, coloring);
 				FILE *gvizFile = fopen(gvizDebugFilename, "w");
-				getOrdering(threadSet, gvizFile);
+				printBiedgedGraph(threadSet, coloring, gvizFile);
 				fclose(gvizFile);
 			}
 			break;
