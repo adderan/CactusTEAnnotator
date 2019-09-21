@@ -238,6 +238,11 @@ bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirectio
 	assert(stPinchSegment_getThread(seg1) != stPinchSegment_getThread(seg2));
 
 	stPinchSegment *seg = seg1;
+	stPinchBlock *block = stPinchSegment_getBlock(seg);
+
+
+	stPinchEnd *leftTargetEnd = (block) ? stPinchEnd_construct(stPinchSegment_getBlock(seg2), _5PRIME) : NULL;
+	stPinchEnd *rightTargetEnd = (block) ? stPinchEnd_construct(stPinchSegment_getBlock(seg2), _3PRIME) : NULL;
 
 	stSet *seen = stSet_construct();
 
@@ -247,18 +252,31 @@ bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirectio
 	stList_append(directions, (void*)startDirection);
 	bool curDirection = startDirection;
 	bool reachable = false;
-	stPinchBlock *block;
 	while(seg || stList_length(stack) > 0) {
 		if (!seg) {
 			seg = stList_pop(stack);
 			curDirection = stList_pop(directions);
 		}
-
 		if (seg == seg2) {
 			reachable = true;
 			goto out;
 		}
+
 		block = stPinchSegment_getBlock(seg);
+
+		if (block && leftTargetEnd && rightTargetEnd) {
+			stPinchEnd *leftEnd = stPinchEnd_construct(block, 0);
+			stPinchEnd *rightEnd = stPinchEnd_construct(block, 1);
+			if (stPinchEnd_equalsFn(leftEnd, leftTargetEnd) || 
+					stPinchEnd_equalsFn(rightEnd, rightTargetEnd) || 
+					stPinchEnd_equalsFn(rightEnd, leftTargetEnd) || 
+					stPinchEnd_equalsFn(leftEnd, rightTargetEnd)) {
+				reachable = true;
+				goto out;
+			}
+			stPinchEnd_destruct(leftEnd);
+			stPinchEnd_destruct(rightEnd);
+		}
 		if (block && !stSet_search(seen, block)) {
 			stSet_insert(seen, block);
 			stPinchBlockIt blockIt = stPinchBlock_getSegmentIterator(block);
@@ -316,7 +334,7 @@ void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output) {
 	fprintf(output, "}\n");
 }
 
-stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFilename, char *gvizDebugFilename) {
+stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFilename) {
 	FILE *sequencesFile = fopen(sequencesFilename, "r");
 	struct List *seqs = constructEmptyList(0, NULL);
     struct List *seqLengths = constructEmptyList(0, free);
@@ -342,16 +360,27 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 		fprintf(stderr, "Checking pinch\n");
 		if (!getOrdering(threadSet, NULL)) {
 			fprintf(stderr, "Cycle created by previous pinch.\n");
-			if (gvizDebugFilename) {
-				stHash *coloring = stHash_construct3(stPinchEnd_hashFn, 
-						stPinchEnd_equalsFn, 
-						(void(*)(void*)) stPinchEnd_destruct, NULL);
+			stHash *coloring = stHash_construct3(stPinchEnd_hashFn, 
+					stPinchEnd_equalsFn, 
+					(void(*)(void*)) stPinchEnd_destruct, NULL);
 
-				getOrdering(threadSet, coloring);
-				FILE *gvizFile = fopen(gvizDebugFilename, "w");
-				printBiedgedGraph(threadSet, coloring, gvizFile);
-				fclose(gvizFile);
-			}
+			getOrdering(threadSet, coloring);
+			FILE *afterPinchFile = fopen("after_bad_pinch.gvz", "w");
+			printBiedgedGraph(threadSet, coloring, afterPinchFile);
+			fclose(afterPinchFile);
+			stHash_destruct(coloring);
+
+			stPinchUndo *undo = stPinchThread_prepareUndo(thread1, thread2, pinch->start1, pinch->start2, pinch->length, pinch->strand);
+			assert(undo);
+			stPinchThreadSet_undoPinch(threadSet, undo);
+			stHash *coloring2 = stHash_construct3(stPinchEnd_hashFn, 
+					stPinchEnd_equalsFn, 
+					(void(*)(void*)) stPinchEnd_destruct, NULL);
+			getOrdering(threadSet, coloring2);
+			FILE *beforePinchFile = fopen("before_bad_pinch.gvz", "w");
+			printBiedgedGraph(threadSet, coloring2, beforePinchFile);
+			fclose(beforePinchFile);
+			stHash_destruct(coloring2);
 			break;
 		}
 	}
