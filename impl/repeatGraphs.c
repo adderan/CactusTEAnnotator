@@ -57,6 +57,12 @@ bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	return filter;
 }
 
+bool singleCopyFilterFn2(stPinchThread *thread1, stPinchThread *thread2, int64_t start1, int64_t start2) {
+	stPinchSegment *seg1 = stPinchThread_getSegment(thread1, start1);
+	stPinchSegment *seg2 = stPinchThread_getSegment(thread2, start2);
+	return singleCopyFilterFn(seg1, seg2);
+}
+
 
 void printBiedgedGraph(stPinchThreadSet *threadSet, stHash *coloring, FILE *gvizFile) {
 	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(threadSet);
@@ -141,6 +147,7 @@ stList *getComponentOrdering(stPinchBlock *startBlock, stHash *coloring) {
 				void *colorToTagEnd = OP(stHash_search(coloring, end));
 				if (stHash_search(coloring, adjEnd) == OP(colorToTagEnd)) {
 					fprintf(stderr, "About to encounter cycle\n");
+					return NULL;
 				}
 				stHash_insert(coloring, adjEnd, colorToTagEnd);
 				stList_append(stack, adjEnd);
@@ -154,6 +161,7 @@ stList *getComponentOrdering(stPinchBlock *startBlock, stHash *coloring) {
 				void *colorToTagEnd = OP(stHash_search(coloring, oppositeEnd));
 				if (stHash_search(coloring, adjEnd) == OP(colorToTagEnd)) {
 					fprintf(stderr, "About to encounter cycle\n");
+					return NULL;
 				}
 				stHash_insert(coloring, adjEnd, colorToTagEnd);
 				stList_append(stack, adjEnd);
@@ -355,33 +363,35 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 		stPinchThread *thread1 = stPinchThreadSet_getThread(threadSet, pinch->name1);
 		stPinchThread *thread2 = stPinchThreadSet_getThread(threadSet, pinch->name2);
 
+		bool ableToMakeGraph = false;
+		if (!singleCopyFilterFn2(thread1, thread2, pinch->start1, pinch->start2)) {
+			stHash *beforeColoring = stHash_construct3(stPinchEnd_hashFn, 
+					stPinchEnd_equalsFn, 
+					(void(*)(void*)) stPinchEnd_destruct, NULL);
+			getOrdering(threadSet, beforeColoring);
+			FILE *beforePinchFile = fopen("before_bad_pinch.gvz", "w");
+			printBiedgedGraph(threadSet, beforeColoring, beforePinchFile);
+			fclose(beforePinchFile);
+			stHash_destruct(beforeColoring);
+			ableToMakeGraph = true;
+		}
+
 		stPinchThread_filterPinch(thread1, thread2, pinch->start1, pinch->start2, pinch->length, pinch->strand, acyclicFilterFn);
 
-		fprintf(stderr, "Checking pinch\n");
-		if (!getOrdering(threadSet, NULL)) {
-			fprintf(stderr, "Cycle created by previous pinch.\n");
-			stHash *coloring = stHash_construct3(stPinchEnd_hashFn, 
-					stPinchEnd_equalsFn, 
-					(void(*)(void*)) stPinchEnd_destruct, NULL);
+		stHash *afterColoring = stHash_construct3(stPinchEnd_hashFn, 
+				stPinchEnd_equalsFn, 
+				(void(*)(void*)) stPinchEnd_destruct, NULL);
 
-			getOrdering(threadSet, coloring);
-			FILE *afterPinchFile = fopen("after_bad_pinch.gvz", "w");
-			printBiedgedGraph(threadSet, coloring, afterPinchFile);
-			fclose(afterPinchFile);
-			stHash_destruct(coloring);
+		stList *ordering = getOrdering(threadSet, afterColoring);
+		FILE *afterPinchFile = fopen("after_bad_pinch.gvz", "w");
+		printBiedgedGraph(threadSet, afterColoring, afterPinchFile);
+		fclose(afterPinchFile);
+		stHash_destruct(afterColoring);
 
-			stPinchUndo *undo = stPinchThread_prepareUndo(thread1, thread2, pinch->start1, pinch->start2, pinch->length, pinch->strand);
-			assert(undo);
-			stPinchThreadSet_undoPinch(threadSet, undo);
-			stHash *coloring2 = stHash_construct3(stPinchEnd_hashFn, 
-					stPinchEnd_equalsFn, 
-					(void(*)(void*)) stPinchEnd_destruct, NULL);
-			getOrdering(threadSet, coloring2);
-			FILE *beforePinchFile = fopen("before_bad_pinch.gvz", "w");
-			printBiedgedGraph(threadSet, coloring2, beforePinchFile);
-			fclose(beforePinchFile);
-			stHash_destruct(coloring2);
-			break;
+		if (!ordering) {
+			fprintf(stderr, "Pinch created cycle.\n");
+			fprintf(stderr, "Able to make graph: %d\n", ableToMakeGraph);
+			exit(1);
 		}
 	}
 	fclose(sequencesFile);
