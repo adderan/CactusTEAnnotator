@@ -8,6 +8,7 @@
 #include "repeatGraphs.h"
 
 bool pinchOrientation;
+bool ignoreRestOfPinch;
 
 
 char *endInfo(stPinchEnd *end) {
@@ -28,18 +29,18 @@ void printSegmentInfo(stPinchSegment *seg) {
 				stPinchThread_getName(stPinchSegment_getThread(seg)));
 }
 
-stSet *getThreads(stPinchSegment *segment) {
-	stSet *threads = stSet_construct();
+stSortedSet *getThreads(stPinchSegment *segment) {
+	stSortedSet *threads = stSortedSet_construct();
 	stPinchBlock *block = stPinchSegment_getBlock(segment);
 	if (block) {
 		stPinchBlockIt blockIt = stPinchBlock_getSegmentIterator(block);
 		stPinchSegment *otherSeg = NULL;
 		while((otherSeg = stPinchBlockIt_getNext(&blockIt)) != NULL) {
-			stSet_insert(threads, (void*) stPinchThread_getName(stPinchSegment_getThread(otherSeg)));
+			stSortedSet_insert(threads, (void*) stPinchThread_getName(stPinchSegment_getThread(otherSeg)));
 		}
 	}
 	else {
-		stSet_insert(threads, (void*) stPinchThread_getName(stPinchSegment_getThread(segment)));
+		stSortedSet_insert(threads, (void*) stPinchThread_getName(stPinchSegment_getThread(segment)));
 	}
 	return threads;
 }
@@ -48,14 +49,14 @@ bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	if (stPinchSegment_getThread(seg1) == stPinchSegment_getThread(seg2)) return true;
 	bool filter = false;
 
-	stSet *threads1 = getThreads(seg1);
-	stSet *threads2 = getThreads(seg2);
+	stSortedSet *threads1 = getThreads(seg1);
+	stSortedSet *threads2 = getThreads(seg2);
 
-	stSet *intersect = stSet_getIntersection(threads1, threads2);
-	if (stSet_size(intersect) > 0) filter = true;
-	stSet_destruct(threads1);
-	stSet_destruct(threads2);
-	stSet_destruct(intersect);
+	stSortedSet *intersect = stSortedSet_getIntersection(threads1, threads2);
+	if (stSortedSet_size(intersect) > 0) filter = true;
+	stSortedSet_destruct(threads1);
+	stSortedSet_destruct(threads2);
+	stSortedSet_destruct(intersect);
 	return filter;
 }
 
@@ -245,11 +246,11 @@ stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
 //inefficient function for checking whether there is a directed
 //walk (a path of alternating block and adjacency edges) between
 //two segments.
-stSet *directedWalk(stPinchSegment *segment, bool startDirection) {
+stSortedSet *directedWalk(stPinchSegment *segment, bool startDirection, stPinchSegment *targetSegment) {
 
 	stPinchBlock *block;
 	stSet *seenBlocks = stSet_construct();
-	stSet *visited = stSet_construct();
+	stSortedSet *visited = stSortedSet_construct();
 	stList *stack = stList_construct();
 	stList *directions = stList_construct();
 	stList_append(stack, segment);
@@ -260,7 +261,10 @@ stSet *directedWalk(stPinchSegment *segment, bool startDirection) {
 			segment = stList_pop(stack);
 			curDirection = stList_pop(directions);
 		}
-		stSet_insert(visited, segment);
+		if (targetSegment && (segment == targetSegment)) {
+			goto out;
+		}
+		stSortedSet_insert(visited, segment);
 
 		block = stPinchSegment_getBlock(segment);
 
@@ -287,6 +291,7 @@ stSet *directedWalk(stPinchSegment *segment, bool startDirection) {
 			stPinchSegment_get5Prime(segment) : stPinchSegment_get3Prime(segment);
 
 	}
+out:
 	stList_destruct(stack);
 	stList_destruct(directions);
 	stSet_destruct(seenBlocks);
@@ -296,42 +301,50 @@ stSet *directedWalk(stPinchSegment *segment, bool startDirection) {
 bool pinchCreatesCycle(stPinchSegment *seg1, stPinchSegment *seg2, bool pinchOrientation) {
 	bool ret = false;
 
-	stSet *leftWalk1 = directedWalk(seg1, _5PRIME);
-	stSet *rightWalk1 = directedWalk(seg1, _3PRIME);
-	stSet *leftWalk2 = NULL;
-	stSet *rightWalk2 = NULL;
-	if (stSet_search(leftWalk1, seg2) || stSet_search(rightWalk1, seg2)) {
+	stSortedSet *leftWalk1 = directedWalk(seg1, _5PRIME, seg2);
+	stSortedSet *rightWalk1 = directedWalk(seg1, _3PRIME, seg2);
+	stSortedSet *leftWalk2 = NULL;
+	stSortedSet *rightWalk2 = NULL;
+	if (stSortedSet_search(leftWalk1, seg2) || stSortedSet_search(rightWalk1, seg2)) {
 		ret = true;
 		goto out;
 	}
-	leftWalk2 = directedWalk(seg2, _5PRIME);
-	rightWalk2 = directedWalk(seg2, _3PRIME);
+	leftWalk2 = directedWalk(seg2, _5PRIME, NULL);
+	rightWalk2 = directedWalk(seg2, _3PRIME, NULL);
 
 	if (pinchOrientation == 1) {
+		stSortedSet *a = stSortedSet_getIntersection(leftWalk1, rightWalk2);
+		stSortedSet *b = stSortedSet_getIntersection(rightWalk1, leftWalk2);
 		ret = 
-			(stSet_size(stSet_getIntersection(leftWalk1, rightWalk2)) > 0) ||
-			(stSet_size(stSet_getIntersection(rightWalk1, leftWalk2)) > 0);
+			(stSortedSet_size(a) > 0) ||
+			(stSortedSet_size(b) > 0);
+		stSortedSet_destruct(a);
+		stSortedSet_destruct(b);
 	}
 	else {
+		stSortedSet *a = stSortedSet_getIntersection(leftWalk1, leftWalk2);
+		stSortedSet *b = stSortedSet_getIntersection(rightWalk1, rightWalk2);
 		ret = 
-			(stSet_size(stSet_getIntersection(leftWalk1, leftWalk2)) > 0) ||
-			(stSet_size(stSet_getIntersection(rightWalk1, rightWalk2)) > 0);
+			(stSortedSet_size(a) > 0) ||
+			(stSortedSet_size(b) > 0);
 	}
-
 out:
-	stSet_destruct(leftWalk1);
-	stSet_destruct(rightWalk1);
-	if (leftWalk2) stSet_destruct(leftWalk2);
-	if (rightWalk2) stSet_destruct(rightWalk2);
+	stSortedSet_destruct(leftWalk1);
+	stSortedSet_destruct(rightWalk1);
+	if (leftWalk2) stSortedSet_destruct(leftWalk2);
+	if (rightWalk2) stSortedSet_destruct(rightWalk2);
 
 	return ret;
 }
 
 
 bool acyclicFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
+	if (ignoreRestOfPinch) return true;
 	if (singleCopyFilterFn(seg1, seg2)) return true;
 	
-	return pinchCreatesCycle(seg1, seg2, pinchOrientation);
+	bool filter = pinchCreatesCycle(seg1, seg2, pinchOrientation);
+	ignoreRestOfPinch = filter;
+	return filter;
 }
 
 void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output) {
@@ -374,6 +387,7 @@ void applyPinch(stPinchThreadSet *threadSet, stPinch *pinch) {
 	stPinchThread *thread1 = stPinchThreadSet_getThread(threadSet, pinch->name1);
 	stPinchThread *thread2 = stPinchThreadSet_getThread(threadSet, pinch->name2);
 	pinchOrientation = pinch->strand;
+	ignoreRestOfPinch = false;
 	stPinchThread_filterPinch(thread1, thread2, pinch->start1, pinch->start2, pinch->length, pinch->strand, acyclicFilterFn);
 }
 
@@ -393,17 +407,14 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 	while((pinch = stPinchIterator_getNext(pinchIterator)) != NULL) {
 		applyPinch(threadSet, pinch);
 
+#ifdef DEBUG_
 		stList *ordering = getOrdering(threadSet, NULL);
 		if (!ordering) {
 			fprintf(stderr, "Pinch created cycle.\n");
-			#ifdef DEBUG_
 			printBiedgedGraph(threadSet, "after_bad_pinch.gvz");
 			printBiedgedGraph(threadSet_debug, "before_bad_pinch.gvz");
-#endif
 			exit(1);
 		}
-
-#ifdef DEBUG_
 		applyPinch(threadSet_debug, pinch);
 #endif
 

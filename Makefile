@@ -1,7 +1,7 @@
 murmurHashSources=smhasher/src/MurmurHash3.cpp
 
 cpp=g++
-cflags=-g -O0 -Wall -Werror
+cflags=-pg -O0 -Wall -Werror
 cppflags=-g -O0 -Wall
 
 objs=Minhash.o
