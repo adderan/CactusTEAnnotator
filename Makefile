@@ -90,7 +90,7 @@ bin/filterNs: impl/filterNs.c ${libSonLib}
 	gcc ${cflags} -o bin/filterNs -I ${sonLibInc} impl/filterNs.c ${libSonLib} -lm
 
 impl/repeatGraphs.o: impl/repeatGraphs.c
-	gcc ${cflags} -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} -c impl/repeatGraphs.c
+	gcc ${cflags} -DDEBUG_ -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} -c impl/repeatGraphs.c
 	mv repeatGraphs.o impl/repeatGraphs.o
 
 bin/repeatGraphTests: impl/repeatGraphs.o impl/repeatGraphTests.c ${libSonLib} ${pinchesAndCactiLib} ${cafLib} ${cactusLib}

@@ -8,9 +8,7 @@ int main(int argc, char **argv) {
 	stPinchThreadSet *threadSet = buildRepeatGraph(sequencesFilename, alignmentsFilename);
 
 	if (gvizDebugFilename) {
-		FILE *gvizFile = fopen(gvizDebugFilename, "w");
-		printBiedgedGraph(threadSet, NULL, gvizFile);
-		fclose(gvizFile);
+		printBiedgedGraph(threadSet, gvizDebugFilename);
 	}
 
 	stPinchThreadSet_destruct(threadSet);

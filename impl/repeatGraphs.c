@@ -57,14 +57,13 @@ bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	return filter;
 }
 
-bool singleCopyFilterFn2(stPinchThread *thread1, stPinchThread *thread2, int64_t start1, int64_t start2) {
-	stPinchSegment *seg1 = stPinchThread_getSegment(thread1, start1);
-	stPinchSegment *seg2 = stPinchThread_getSegment(thread2, start2);
-	return singleCopyFilterFn(seg1, seg2);
-}
+void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename) {
+	stHash *coloring = stHash_construct3(stPinchEnd_hashFn, 
+				stPinchEnd_equalsFn, 
+				(void(*)(void*)) stPinchEnd_destruct, NULL);
+	getOrdering(threadSet, coloring);
 
-
-void printBiedgedGraph(stPinchThreadSet *threadSet, stHash *coloring, FILE *gvizFile) {
+	FILE *gvizFile = fopen(gvizFilename, "w");
 	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(threadSet);
 	fprintf(gvizFile, "strict graph {\n");
 	stPinchBlock *block;
@@ -100,7 +99,9 @@ void printBiedgedGraph(stPinchThreadSet *threadSet, stHash *coloring, FILE *gviz
 			fprintf(gvizFile, "\t%ld -- %ld;\n", stPinchEnd_hashFn(end2), stPinchEnd_hashFn(adjEnd));
 		}
 	}
+	stHash_destruct(coloring);
 	fprintf(gvizFile, "}\n");
+	fclose(gvizFile);
 }
 
 /*If the graph is not acyclic, returns NULL. If the graph is acyclic, 
@@ -242,49 +243,31 @@ stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
 //inefficient function for checking whether there is a directed
 //walk (a path of alternating block and adjacency edges) between
 //two segments.
-bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection) {
+int directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection, stSet *visited) {
 	assert(stPinchSegment_getThread(seg1) != stPinchSegment_getThread(seg2));
 
 	stPinchSegment *seg = seg1;
 	stPinchBlock *block = stPinchSegment_getBlock(seg);
-
-
-	stPinchEnd *leftTargetEnd = (block) ? stPinchEnd_construct(stPinchSegment_getBlock(seg2), _5PRIME) : NULL;
-	stPinchEnd *rightTargetEnd = (block) ? stPinchEnd_construct(stPinchSegment_getBlock(seg2), _3PRIME) : NULL;
-
-	stSet *seen = stSet_construct();
 
 	stList *stack = stList_construct();
 	stList *directions = stList_construct();
 	stList_append(stack, seg);
 	stList_append(directions, (void*)startDirection);
 	bool curDirection = startDirection;
-	bool reachable = false;
+	bool cycle = false;
 	while(seg || stList_length(stack) > 0) {
 		if (!seg) {
 			seg = stList_pop(stack);
 			curDirection = stList_pop(directions);
 		}
+		if (visited) stSet_insert(visited, seg);
 		if (seg == seg2) {
-			reachable = true;
+			cycle = true;
 			goto out;
 		}
 
 		block = stPinchSegment_getBlock(seg);
 
-		if (block && leftTargetEnd && rightTargetEnd) {
-			stPinchEnd *leftEnd = stPinchEnd_construct(block, 0);
-			stPinchEnd *rightEnd = stPinchEnd_construct(block, 1);
-			if (stPinchEnd_equalsFn(leftEnd, leftTargetEnd) || 
-					stPinchEnd_equalsFn(rightEnd, rightTargetEnd) || 
-					stPinchEnd_equalsFn(rightEnd, leftTargetEnd) || 
-					stPinchEnd_equalsFn(leftEnd, rightTargetEnd)) {
-				reachable = true;
-				goto out;
-			}
-			stPinchEnd_destruct(leftEnd);
-			stPinchEnd_destruct(rightEnd);
-		}
 		if (block && !stSet_search(seen, block)) {
 			stSet_insert(seen, block);
 			stPinchBlockIt blockIt = stPinchBlock_getSegmentIterator(block);
@@ -312,14 +295,29 @@ out:
 	stList_destruct(stack);
 	stList_destruct(directions);
 	stSet_destruct(seen);
-	return reachable;
+	return cycle;
 }
 
 
 bool acyclicFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	if (singleCopyFilterFn(seg1, seg2)) return true;
 	
-	return (directedWalk(seg1, seg2, _5PRIME) || directedWalk(seg1, seg2, _3PRIME));
+	bool pinchCreatesCycle = false;
+	if (pinchOrientation == 1) {
+		stSet *visitedPositive = stSet_construct();
+		stSet *visitedNegative = stSet_construct();
+		int positive_walk = directedWalk(seg1, seg2, _5PRIME, visitedPositive);
+		int negative_walk = directedWalk(seg1, seg2, _3PRIME, visitedNegative);
+		if (positive_walk || negative_walk) {
+			pinchCreatesCycle = true;
+			goto out;
+		}
+		if (stSet_size(stSet_intersect(visitedPositive, visitedNegative)) > 0) {
+
+
+out:
+		return pinchCreatesCycle;
+
 }
 
 void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output) {
@@ -342,7 +340,7 @@ void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output) {
 	fprintf(output, "}\n");
 }
 
-stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFilename) {
+stPinchThreadSet *initializeGraph(char *sequencesFilename) {
 	FILE *sequencesFile = fopen(sequencesFilename, "r");
 	struct List *seqs = constructEmptyList(0, NULL);
     struct List *seqLengths = constructEmptyList(0, free);
@@ -355,46 +353,46 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 		sscanf(headers->list[i], "%ld", &threadName);
 		stPinchThreadSet_addThread(threadSet, threadName, 0, strlen(seqs->list[i]));
 	}
+	return threadSet;
+}
 
+void applyPinch(stPinchThreadSet *threadSet, stPinch *pinch) {
+	stPinchThread *thread1 = stPinchThreadSet_getThread(threadSet, pinch->name1);
+	stPinchThread *thread2 = stPinchThreadSet_getThread(threadSet, pinch->name2);
+	stPinchThread_filterPinch(thread1, thread2, pinch->start1, pinch->start2, pinch->length, pinch->strand, acyclicFilterFn);
+}
+
+
+stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFilename) {
+
+	stPinchThreadSet *threadSet = initializeGraph(sequencesFilename);
+#ifdef DEBUG_
+	//maintain another copy of the graph to keep track of what it looked
+	//like before applying a bad pinch
+	stPinchThreadSet *threadSet_debug = initializeGraph(sequencesFilename);
+#endif
+	
 	stPinchIterator *pinchIterator = stPinchIterator_constructFromFile(alignmentsFilename);
 	stPinch *pinch = NULL;
 
 	while((pinch = stPinchIterator_getNext(pinchIterator)) != NULL) {
-		stPinchThread *thread1 = stPinchThreadSet_getThread(threadSet, pinch->name1);
-		stPinchThread *thread2 = stPinchThreadSet_getThread(threadSet, pinch->name2);
+		applyPinch(threadSet, pinch);
 
-		bool ableToMakeGraph = false;
-		if (!singleCopyFilterFn2(thread1, thread2, pinch->start1, pinch->start2)) {
-			stHash *beforeColoring = stHash_construct3(stPinchEnd_hashFn, 
-					stPinchEnd_equalsFn, 
-					(void(*)(void*)) stPinchEnd_destruct, NULL);
-			getOrdering(threadSet, beforeColoring);
-			FILE *beforePinchFile = fopen("before_bad_pinch.gvz", "w");
-			printBiedgedGraph(threadSet, beforeColoring, beforePinchFile);
-			fclose(beforePinchFile);
-			stHash_destruct(beforeColoring);
-			ableToMakeGraph = true;
-		}
-
-		stPinchThread_filterPinch(thread1, thread2, pinch->start1, pinch->start2, pinch->length, pinch->strand, acyclicFilterFn);
-
-		stHash *afterColoring = stHash_construct3(stPinchEnd_hashFn, 
-				stPinchEnd_equalsFn, 
-				(void(*)(void*)) stPinchEnd_destruct, NULL);
-
-		stList *ordering = getOrdering(threadSet, afterColoring);
-		FILE *afterPinchFile = fopen("after_bad_pinch.gvz", "w");
-		printBiedgedGraph(threadSet, afterColoring, afterPinchFile);
-		fclose(afterPinchFile);
-		stHash_destruct(afterColoring);
-
+		stList *ordering = getOrdering(threadSet, NULL);
 		if (!ordering) {
 			fprintf(stderr, "Pinch created cycle.\n");
-			fprintf(stderr, "Able to make graph: %d\n", ableToMakeGraph);
+			#ifdef DEBUG_
+			printBiedgedGraph(threadSet, "after_bad_pinch.gvz");
+			printBiedgedGraph(threadSet_debug, "before_bad_pinch.gvz");
+#endif
 			exit(1);
 		}
+
+#ifdef DEBUG_
+		applyPinch(threadSet_debug, pinch);
+#endif
+
 	}
-	fclose(sequencesFile);
 	stPinchIterator_destruct(pinchIterator);
 	return threadSet;
 }
