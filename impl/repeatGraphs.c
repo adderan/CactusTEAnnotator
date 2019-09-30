@@ -1,33 +1,12 @@
 #include <stdio.h>
 #include "bioioC.h"
+#include "sonLibTypes.h"
 #include "pairwiseAlignment.h"
 
 #include "stPinchGraphs.h"
 #include "stPinchIterator.h"
 
 #include "repeatGraphs.h"
-
-bool pinchOrientation;
-bool ignoreRestOfPinch;
-
-
-char *endInfo(stPinchEnd *end) {
-	stPinchBlock *block = stPinchEnd_getBlock(end);
-	stPinchSegment *seg = stPinchBlock_getFirst(block);
-	int segStart = stPinchSegment_getStart(seg);
-	int segEnd = stPinchSegment_getStart(seg) + stPinchSegment_getLength(seg);
-	char *side = SIDENAME(stPinchEnd_getOrientation(end));
-	char *info = malloc(sizeof(char)*100);
-	sprintf(info, "%s end of block from %d-%d", side, segStart, segEnd);
-	return info;
-}
-
-void printSegmentInfo(stPinchSegment *seg) {
-	fprintf(stderr, "Arrived at segment %ld-%ld on thread %ld\n", 
-				stPinchSegment_getStart(seg), 
-				stPinchSegment_getStart(seg) + stPinchSegment_getLength(seg), 
-				stPinchThread_getName(stPinchSegment_getThread(seg)));
-}
 
 stSortedSet *getThreads(stPinchSegment *segment) {
 	stSortedSet *threads = stSortedSet_construct();
@@ -60,166 +39,228 @@ bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	return filter;
 }
 
-void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename) {
-	stHash *coloring = stHash_construct3(stPinchEnd_hashFn, 
-				stPinchEnd_equalsFn, 
-				(void(*)(void*)) stPinchEnd_destruct, NULL);
-	getOrdering(threadSet, coloring);
+/*
+void printBiedgedGraph(stPinchThreadSet *graph, char *gvizFilename) {
+	stList *ordering = getOrdering(graph);
+	stHash *blockToEnd = stHash_construct();
+	stListIterator *orderingIt = stList_getIterator(ordering);
+	stPinchEnd *end;
+	while((end = stList_getNext(orderingIt))) {
+		stHash_insert(blockToEnd, stPinchEnd_getBlock(end), end);
+	}
 
 	FILE *gvizFile = fopen(gvizFilename, "w");
-	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(threadSet);
-	fprintf(gvizFile, "strict graph {\n");
+	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(graph);
 	stPinchBlock *block;
+
+	fprintf(gvizFile, "strict graph {\n");
 	while((block = stPinchThreadSetBlockIt_getNext(&blockIt))) {
-		stPinchEnd *end1 = stPinchEnd_construct(block, 0);
-		stPinchEnd *end2 = stPinchEnd_construct(block, 1);
+		stPinchEnd *blackEnd = stHash_search(blockToEnd, block);
+		stPinchBlock *block = stPinchEnd_getBlock(blackEnd);
+		stPinchEnd *redEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(blackEnd));
 
 		//end nodes
-		char *end1Color = (stHash_search(coloring, end1)) ? COLORNAME(stHash_search(coloring, end1)) : "grey";
-		char *end2Color = (stHash_search(coloring, end2)) ? COLORNAME(stHash_search(coloring, end2)) : "grey";
-		fprintf(gvizFile, "\t%ld[style=filled fillcolor=%s];\n", stPinchEnd_hashFn(end1), end1Color);
-		fprintf(gvizFile, "\t%ld[style=filled fillcolor=%s];\n", stPinchEnd_hashFn(end2), end2Color);
+		fprintf(gvizFile, "\t%ld[style=filled fillcolor=grey];\n", stPinchEnd_hashFn(blackEnd));
+		fprintf(gvizFile, "\t%ld[style=filled fillcolor=red];\n", stPinchEnd_hashFn(redEnd));
 
-				
+
 		//block edge
-		fprintf(gvizFile, "\t%ld -- %ld[dir=none color=blue penwidth=10];\n", stPinchEnd_hashFn(end1), stPinchEnd_hashFn(end2));
+		fprintf(gvizFile, "\t%ld -- %ld[dir=none color=blue penwidth=10];\n", stPinchEnd_hashFn(blackEnd), stPinchEnd_hashFn(redEnd));
 
 		//fprintf(gvizFile, "{rank = same; %ld; %ld;}\n", stPinchEnd_hashFn(end1), stPinchEnd_hashFn(end2));
-		
+
 		//near adjacencies
-		stSet *nearAdjacent = stPinchEnd_getConnectedPinchEnds(end1);
+		stSet *nearAdjacent = stPinchEnd_getConnectedPinchEnds(blackEnd);
 		stSetIterator *nearAdjacentIt = stSet_getIterator(nearAdjacent);
 		stPinchEnd *adjEnd;
 		while((adjEnd = stSet_getNext(nearAdjacentIt))) {
-			fprintf(gvizFile, "\t%ld -- %ld;\n", stPinchEnd_hashFn(end1), stPinchEnd_hashFn(adjEnd));
+			fprintf(gvizFile, "\t%ld -- %ld;\n", stPinchEnd_hashFn(blackEnd), stPinchEnd_hashFn(adjEnd));
 
 		}
 		stSet_destructIterator(nearAdjacentIt);
 
-		stSet *farAdjacent = stPinchEnd_getConnectedPinchEnds(end2);
+		stSet *farAdjacent = stPinchEnd_getConnectedPinchEnds(redEnd);
 		stSetIterator *farAdjacentIt = stSet_getIterator(farAdjacent);
 		while((adjEnd = stSet_getNext(farAdjacentIt))) {
-			fprintf(gvizFile, "\t%ld -- %ld;\n", stPinchEnd_hashFn(end2), stPinchEnd_hashFn(adjEnd));
+			fprintf(gvizFile, "\t%ld -- %ld;\n", stPinchEnd_hashFn(redEnd), stPinchEnd_hashFn(adjEnd));
 		}
 	}
-	stHash_destruct(coloring);
 	fprintf(gvizFile, "}\n");
+
+	stList_destruct(ordering);
 	fclose(gvizFile);
+}
+*/
+
+stList *getPartialOrderGraph(stPinchThreadSet *graph) {
+	stList *stack = stList_construct();
+
+	stSet *seen = stSet_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void*) stPinchEnd_destruct);
+	stSet *addedToOrdering = stSet_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void*) stPinchEnd_destruct);
+
+	stHash *blockIndex = stHash_construct();
+
+	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(graph);
+	stPinchBlock *startBlock;
+	int64_t nodeID = 0;
+
+	stList *poGraph = stList_construct();
+
+	while((startBlock = stPinchThreadSetBlockIt_getNext(&blockIt))) {
+
+		stPinchEnd *startEnd = stPinchEnd_construct(startBlock, _5PRIME);
+
+		if (stSet_search(seen, startEnd)) continue;
+
+		stList_append(stack, startEnd);
+		stPinchBlock *block;
+		stPinchEnd *end;
+		while(stList_length(stack) > 0) {
+			end = stList_pop(stack);
+			block = stPinchEnd_getBlock(end);
+
+			if (stSet_search(seen, end)) continue;
+
+			stSet *incomingAdjacencies = stPinchEnd_getConnectedPinchEnds(end);
+			stSetIterator *incomingEndIt = stSet_getIterator(incomingAdjacencies);
+			stPinchEnd *incomingRedEnd;
+			stList *unseenPredecessors = stList_construct();
+			while((incomingRedEnd = stSet_getNext(incomingEndIt)) != NULL) {
+				stPinchEnd *incomingBlackEnd = stPinchEnd_construct(stPinchEnd_getBlock(incomingRedEnd), !stPinchEnd_getOrientation(incomingRedEnd));
+				if (!stSet_search(seen, incomingBlackEnd)) 
+					stList_append(unseenPredecessors, incomingBlackEnd);
+			}
+			stSet_destructIterator(incomingEndIt);
+
+			if (stList_length(unseenPredecessors) > 0) {
+				//re-visit this block after visiting all predecessors
+				stList_append(stack, end);
+				stList_appendAll(stack, unseenPredecessors);
+			}
+
+			else {
+				stSet_insert(seen, end);
+				//seen all the predecessors, so add this block
+				//to the partial order graph
+				PONode *node = malloc(sizeof(PONode));
+				node->nodeID = nodeID;
+				node->weight = stPinchBlock_getDegree(block) * stPinchBlock_getLength(block);
+				node->incomingNodes = malloc(sizeof(int64_t)*stPinchEnd_getNumberOfConnectedPinchEnds(end));
+				node->nIncomingNodes = stPinchEnd_getNumberOfConnectedPinchEnds(end);
+				stList *incomingEndList = stSet_getList(incomingAdjacencies);
+				for (int k = 0; k < stList_length(incomingEndList); k++) {
+					stPinchBlock *incomingBlock = stPinchEnd_getBlock(stList_get(incomingEndList, k));
+					//We should have already encountered this block
+					node->incomingNodes[k] = (int64_t) stHash_search(blockIndex, incomingBlock);
+				}
+				node->data = block;
+				stHash_insert(blockIndex, block, (void*)nodeID);
+				stList_append(poGraph, node);
+				nodeID++;
+
+				//visit next blocks
+				stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
+				stSet *outgoingAdjacencies = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
+				stSetIterator *outgoingEndIt = stSet_getIterator(outgoingAdjacencies);
+				stPinchEnd *outgoingEnd;
+				while((outgoingEnd = stSet_getNext(outgoingEndIt))) {
+					if (!stSet_search(seen, outgoingEnd)) stList_append(stack, outgoingEnd);
+				}
+				stPinchEnd_destruct(oppositeEnd);
+			}
+			stList_destruct(unseenPredecessors);
+		}
+	}
+	return poGraph;
 }
 
 /*If the graph is not acyclic, returns NULL. If the graph is acyclic, 
-* return an ordering of the nodes such that all nodes reachable 
-* from any given node occur after it in the ordering.*/
-stList *getComponentOrdering(stPinchBlock *startBlock, stHash *coloring) {
-	stList *stack = stList_construct();
+ * return a list of edges in the DAG corresponding to this pinch graph,
+ * in ordering implied by traversing the graph. */
+bool graphIsAcyclic(stPinchThreadSet *graph) {
 	stSet *seen = stSet_construct();
-	
-	stList *ordering = stList_construct();
 
-	stPinchEnd *leftEnd = stPinchEnd_construct(startBlock, _5PRIME);
+	stHash *coloring = stHash_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void*)) stPinchEnd_destruct, NULL);
 
-	stList_append(stack, leftEnd);
-	stHash_insert(coloring, leftEnd, BLACK);
+	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(graph);
+	stPinchBlock *startBlock;
+	while((startBlock = stPinchThreadSetBlockIt_getNext(&blockIt))) {
+		if (stSet_search(seen, startBlock)) continue;
+		stList *stack = stList_construct();
 
-	stPinchBlock *block;
-	stPinchEnd *end;
-	while (stList_length(stack) > 0) {
-		end = stList_pop(stack);
-		//fprintf(stderr, "Arrived at %s\n", endInfo(end));
-		block = stPinchEnd_getBlock(end);
+		stPinchEnd *leftEnd = stPinchEnd_construct(startBlock, _5PRIME);
 
-		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
+		stList_append(stack, leftEnd);
+		stHash_insert(coloring, leftEnd, BLACK);
 
-		assert(stHash_search(coloring, end));
-		if (stHash_search(coloring, end) ==
-				stHash_search(coloring, oppositeEnd)) {
-			//encountered cycle
-			fprintf(stderr, "Encountered cycle at end %ld, both ends %p.\n", stPinchEnd_hashFn(end), stHash_search(coloring, end));
-			stList_destruct(stack);
-			stList_destruct(ordering);
-			return NULL;
-		}
-		stHash_insert(coloring, oppositeEnd, OP(stHash_search(coloring, end)));
+		stPinchBlock *block;
+		stPinchEnd *end;
+		while (stList_length(stack) > 0) {
+			end = stList_pop(stack);
+			block = stPinchEnd_getBlock(end);
 
-		if (!stSet_search(seen, block)) {
-			stSet_insert(seen, block);
-			stSet *nearAdjacentEnds = stPinchEnd_getConnectedPinchEnds(end);
-			//fprintf(stderr, "Found %ld connected ends on near side\n", stSet_size(nearAdjacentEnds));
-			stSetIterator *adjEndIt = stSet_getIterator(nearAdjacentEnds);
-			stPinchEnd *adjEnd;
-			while((adjEnd = stSet_getNext(adjEndIt))) {
-				void *colorToTagEnd = OP(stHash_search(coloring, end));
-				if (stHash_search(coloring, adjEnd) == OP(colorToTagEnd)) {
-					fprintf(stderr, "About to encounter cycle\n");
-					return NULL;
-				}
-				stHash_insert(coloring, adjEnd, colorToTagEnd);
-				stList_append(stack, adjEnd);
+			stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
+
+			assert(stHash_search(coloring, end));
+			if (stHash_search(coloring, end) ==
+					stHash_search(coloring, oppositeEnd)) {
+				//encountered cycle
+				stList_destruct(stack);
+				return false;
 			}
+			stHash_insert(coloring, oppositeEnd, OP(stHash_search(coloring, end)));
 
-			stSet_destructIterator(adjEndIt);
-			stSet *farAdjacentEnds = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
-			//fprintf(stderr, "Found %ld connected ends on far side.\n", stSet_size(farAdjacentEnds));
-			adjEndIt = stSet_getIterator(farAdjacentEnds);
-			while((adjEnd = stSet_getNext(adjEndIt))) {
-				void *colorToTagEnd = OP(stHash_search(coloring, oppositeEnd));
-				if (stHash_search(coloring, adjEnd) == OP(colorToTagEnd)) {
-					fprintf(stderr, "About to encounter cycle\n");
-					return NULL;
+			if (!stSet_search(seen, block)) {
+				stSet_insert(seen, block);
+				//fprintf(stderr, "Found %ld connected ends on near side\n", stSet_size(nearAdjacentEnds));
+				stSet *incomingEnds = stPinchEnd_getConnectedPinchEnds(end);
+				stSetIterator *incomingEndIt = stSet_getIterator(incomingEnds);
+				stPinchEnd *adjEnd;
+				while((adjEnd = stSet_getNext(incomingEndIt))) {
+					void *colorToTagEnd = OP(stHash_search(coloring, end));
+					if (stHash_search(coloring, adjEnd) == OP(colorToTagEnd)) {
+						fprintf(stderr, "About to encounter cycle\n");
+						return NULL;
+					}
+					stHash_insert(coloring, adjEnd, colorToTagEnd);
+					stList_append(stack, adjEnd);
 				}
-				stHash_insert(coloring, adjEnd, colorToTagEnd);
-				stList_append(stack, adjEnd);
+
+				stSet_destructIterator(incomingEndIt);
+				stSet *outgoingEnds = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
+				stSetIterator *outgoingEndIt = stSet_getIterator(outgoingEnds);
+				outgoingEndIt = stSet_getIterator(outgoingEnds);
+				while((adjEnd = stSet_getNext(outgoingEndIt))) {
+					void *colorToTagEnd = OP(stHash_search(coloring, oppositeEnd));
+					if (stHash_search(coloring, adjEnd) == OP(colorToTagEnd)) {
+						fprintf(stderr, "About to encounter cycle\n");
+						return NULL;
+					}
+					stHash_insert(coloring, adjEnd, colorToTagEnd);
+					stList_append(stack, adjEnd);
+				}
+				stSet_destructIterator(outgoingEndIt);
 			}
-			stSet_destructIterator(adjEndIt);
 		}
+		stList_destruct(stack);
 	}
-	stList_destruct(stack);
-	return ordering;
+	stSet_destruct(seen);
+	return coloring;
 }
 
-stList *getOrdering(stPinchThreadSet *graph, stHash *coloring) {
-	stSortedSet *threadComponents = stPinchThreadSet_getThreadComponents(graph);
-	fprintf(stderr, "Found %ld components\n", stSortedSet_size(threadComponents));
-	stList *ordering = stList_construct();
-	if (!coloring) {
-		coloring = stHash_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void*)) stPinchEnd_destruct, NULL);
+stPinchBlock *getFirstBlock(stPinchThread *thread) {
+	stPinchSegment *segment = stPinchThread_getFirst(thread);
+	while(segment && (stPinchSegment_getBlock(segment) == NULL)) {
+		segment = stPinchSegment_get3Prime(segment);
 	}
-
-	stSortedSetIterator *componentsIt = stSortedSet_getIterator(threadComponents);
-	stList *component;
-	while ((component = stSortedSet_getNext(componentsIt))) {
-		if (stList_length(component) == 1) {
-			//only one thread with no blocks, so nothing to order
-			continue;
+	if (!segment) {
+		segment = stPinchThread_getFirst(thread);
+		while(segment && (stPinchSegment_getBlock(segment) == NULL)) {
+			segment = stPinchSegment_get3Prime(segment);
 		}
-
-		//get any block in the component
-		stPinchSegment *segment = stPinchThread_getFirst(stList_peek(component));
-		while (segment && (stPinchSegment_getBlock(segment) == NULL)) segment = stPinchSegment_get3Prime(segment);
-		if (segment == NULL) {
-			//try other direction
-			segment = stPinchThread_getFirst(stList_peek(component));
-			while (segment && (stPinchSegment_getBlock(segment) == NULL)) {
-				segment = stPinchSegment_get3Prime(segment);
-			}
-		}
-		//The case of a single thread with no blocks has already
-		//been handled, so there must be a segment contained
-		//in a block
-		assert(segment);
-
-		stPinchBlock *block = stPinchSegment_getBlock(segment);
-		stList *componentOrdering = getComponentOrdering(block, coloring);
-		if (!componentOrdering) {
-			ordering = NULL;
-			goto out;
-		}
-		stList_appendAll(ordering, componentOrdering);
-
 	}
-out:
-	stSortedSet_destructIterator(componentsIt);
-	return ordering;
+	if (!segment) return NULL;
+	return stPinchSegment_getBlock(segment);
 }
 
 stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
@@ -243,31 +284,30 @@ stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
 	return stPinchEnd_construct(block, orientation);
 }
 
+
 //inefficient function for checking whether there is a directed
 //walk (a path of alternating block and adjacency edges) between
 //two segments.
-stSortedSet *directedWalk(stPinchSegment *segment, bool startDirection, stPinchSegment *targetSegment) {
-
+bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection) {
 	stPinchBlock *block;
 	stSet *seenBlocks = stSet_construct();
-	stSortedSet *visited = stSortedSet_construct();
 	stList *stack = stList_construct();
 	stList *directions = stList_construct();
+	stPinchSegment *segment = seg1;
 	stList_append(stack, segment);
 	stList_append(directions, (void*)startDirection);
 	bool curDirection = startDirection;
+	bool walk = false;
 	while(segment || stList_length(stack) > 0) {
 		if (!segment) {
 			segment = stList_pop(stack);
 			curDirection = stList_pop(directions);
 		}
-		if (targetSegment && (segment == targetSegment)) {
+		if (segment == seg2) {
+			walk = true;
 			goto out;
 		}
-		stSortedSet_insert(visited, segment);
-
 		block = stPinchSegment_getBlock(segment);
-
 		if (block && !stSet_search(seenBlocks, block)) {
 			stSet_insert(seenBlocks, block);
 			stPinchBlockIt blockIt = stPinchBlock_getSegmentIterator(block);
@@ -295,130 +335,191 @@ out:
 	stList_destruct(stack);
 	stList_destruct(directions);
 	stSet_destruct(seenBlocks);
-	return visited;
+	return walk;
 }
-
-bool pinchCreatesCycle(stPinchSegment *seg1, stPinchSegment *seg2, bool pinchOrientation) {
-	bool ret = false;
-
-	stSortedSet *leftWalk1 = directedWalk(seg1, _5PRIME, seg2);
-	stSortedSet *rightWalk1 = directedWalk(seg1, _3PRIME, seg2);
-	stSortedSet *leftWalk2 = NULL;
-	stSortedSet *rightWalk2 = NULL;
-	if (stSortedSet_search(leftWalk1, seg2) || stSortedSet_search(rightWalk1, seg2)) {
-		ret = true;
-		goto out;
-	}
-	leftWalk2 = directedWalk(seg2, _5PRIME, NULL);
-	rightWalk2 = directedWalk(seg2, _3PRIME, NULL);
-
-	if (pinchOrientation == 1) {
-		stSortedSet *a = stSortedSet_getIntersection(leftWalk1, rightWalk2);
-		stSortedSet *b = stSortedSet_getIntersection(rightWalk1, leftWalk2);
-		ret = 
-			(stSortedSet_size(a) > 0) ||
-			(stSortedSet_size(b) > 0);
-		stSortedSet_destruct(a);
-		stSortedSet_destruct(b);
-	}
-	else {
-		stSortedSet *a = stSortedSet_getIntersection(leftWalk1, leftWalk2);
-		stSortedSet *b = stSortedSet_getIntersection(rightWalk1, rightWalk2);
-		ret = 
-			(stSortedSet_size(a) > 0) ||
-			(stSortedSet_size(b) > 0);
-	}
-out:
-	stSortedSet_destruct(leftWalk1);
-	stSortedSet_destruct(rightWalk1);
-	if (leftWalk2) stSortedSet_destruct(leftWalk2);
-	if (rightWalk2) stSortedSet_destruct(rightWalk2);
-
-	return ret;
-}
-
 
 bool acyclicFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
-	if (ignoreRestOfPinch) return true;
 	if (singleCopyFilterFn(seg1, seg2)) return true;
-	
-	bool filter = pinchCreatesCycle(seg1, seg2, pinchOrientation);
-	ignoreRestOfPinch = filter;
-	return filter;
+	return (directedWalk(seg1, seg2, _3PRIME) || directedWalk(seg1, seg2, _5PRIME));
 }
 
-void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output) {
-	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(threadSet);
-	fprintf(output, "digraph {\n");
 
-	stPinchBlock *block;
-	while ((block = stPinchThreadSetBlockIt_getNext(&blockIt)) != NULL) {
-		stPinchEnd end = stPinchEnd_constructStatic(block, 0);
-		stSet *adjacentEnds = stPinchEnd_getConnectedPinchEnds(&end);
-		stSetIterator *endIterator = stSet_getIterator(adjacentEnds);
-		stPinchEnd *adjacentEnd;
-		while((adjacentEnd = stSet_getNext(endIterator)) != NULL) {
-
-			fprintf(output, "\t%lu -> %lu\n", stHash_pointer(block), stHash_pointer(stPinchEnd_getBlock(adjacentEnd)));
-
-		}
-
-	}
-	fprintf(output, "}\n");
-}
-
-stPinchThreadSet *initializeGraph(char *sequencesFilename) {
-	FILE *sequencesFile = fopen(sequencesFilename, "r");
-	struct List *seqs = constructEmptyList(0, NULL);
-    struct List *seqLengths = constructEmptyList(0, free);
-    struct List *headers = constructEmptyList(0, free);
-	fastaRead(sequencesFile, seqs, seqLengths, headers);
-
+stPinchThreadSet *initializeGraph(stHash *sequences) {
 	stPinchThreadSet *threadSet = stPinchThreadSet_construct();
-	int64_t threadName;
-	for (int i = 0; i < seqs->length; i++) {
-		sscanf(headers->list[i], "%ld", &threadName);
-		stPinchThreadSet_addThread(threadSet, threadName, 0, strlen(seqs->list[i]));
+	stHashIterator *sequencesIt = stHash_getIterator(sequences);
+	void *threadName;
+	while((threadName = stHash_getNext(sequencesIt))) {
+		char *sequence = stHash_search(sequences, threadName);
+		stPinchThreadSet_addThread(threadSet, (int64_t) threadName, 0, strlen(sequence));
 	}
 	return threadSet;
 }
 
 void applyPinch(stPinchThreadSet *threadSet, stPinch *pinch) {
+	if (pinch->strand == 0) return;
 	stPinchThread *thread1 = stPinchThreadSet_getThread(threadSet, pinch->name1);
 	stPinchThread *thread2 = stPinchThreadSet_getThread(threadSet, pinch->name2);
-	pinchOrientation = pinch->strand;
-	ignoreRestOfPinch = false;
 	stPinchThread_filterPinch(thread1, thread2, pinch->start1, pinch->start2, pinch->length, pinch->strand, acyclicFilterFn);
 }
 
+stPinchThreadSet *buildRepeatGraph(stHash *sequences, char *alignmentsFilename) {
 
-stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFilename) {
-
-	stPinchThreadSet *threadSet = initializeGraph(sequencesFilename);
-#ifdef DEBUG_
+	stPinchThreadSet *threadSet = initializeGraph(sequences);
+#ifndef NDEBUG
 	//maintain another copy of the graph to keep track of what it looked
 	//like before applying a bad pinch
-	stPinchThreadSet *threadSet_debug = initializeGraph(sequencesFilename);
+	stPinchThreadSet *threadSet_debug = initializeGraph(sequences);
 #endif
-	
+
 	stPinchIterator *pinchIterator = stPinchIterator_constructFromFile(alignmentsFilename);
 	stPinch *pinch = NULL;
 
 	while((pinch = stPinchIterator_getNext(pinchIterator)) != NULL) {
 		applyPinch(threadSet, pinch);
 
-#ifdef DEBUG_
-		stList *ordering = getOrdering(threadSet, NULL);
-		if (!ordering) {
-			fprintf(stderr, "Pinch created cycle.\n");
-			printBiedgedGraph(threadSet, "after_bad_pinch.gvz");
-			printBiedgedGraph(threadSet_debug, "before_bad_pinch.gvz");
-			exit(1);
-		}
+#ifndef NDEBUG
+		/*
+		   stList *ordering = getOrdering(threadSet);
+		   if (!ordering) {
+		   fprintf(stderr, "Pinch created cycle.\n");
+		   printBiedgedGraph(threadSet, "after_bad_pinch.gvz");
+		   printBiedgedGraph(threadSet_debug, "before_bad_pinch.gvz");
+		   exit(1);
+		   }
+		   */
 		applyPinch(threadSet_debug, pinch);
 #endif
-
 	}
 	stPinchIterator_destruct(pinchIterator);
 	return threadSet;
+}
+
+stPinchSegment *getSegment(stPinchBlock *block, int64_t threadName) {
+	stPinchSegment *segment;
+	stPinchBlockIt blockIt = stPinchBlock_getSegmentIterator(block);
+	while((segment = stPinchBlockIt_getNext(&blockIt))) {
+		if (stPinchThread_getName(stPinchSegment_getThread(segment)) == threadName) break;
+	}
+	return segment;
+}
+
+stList *traversePath(stPinchThreadSet *threadSet, stList *endsInPath, stHash *sequences) {
+	stList *path = stList_construct();
+
+	for (int64_t i = 0; i < stList_length(endsInPath); i++) {
+		if (i > 0) {
+			//Fill in the adjacency connecting the previous block
+			//to this one
+			stPinchEnd *prevEnd = stList_get(endsInPath, i - 1);
+			stPinchEnd *end1 = stPinchEnd_construct(stPinchEnd_getBlock(prevEnd), !stPinchEnd_getOrientation(prevEnd));
+			stPinchEnd *end2 = stList_get(endsInPath, i);
+			assert(end1);
+			assert(end2);
+
+			stPinchBlock *block1 = stPinchEnd_getBlock(end1);
+			stPinchBlock *block2 = stPinchEnd_getBlock(end2);
+			stSortedSet *threads1 = 
+				getThreads(stPinchBlock_getFirst(block1));
+
+			stSortedSet *threads2 = 
+				getThreads(stPinchBlock_getFirst(block2));
+
+			stSortedSet *sharedThreadsSet = stSortedSet_getIntersection(threads1, threads2);
+			stList *sharedThreads = stSortedSet_getList(sharedThreadsSet);
+
+			stList *candidateAdjacencySeqs = stList_construct();
+			for (int j = 0; j < stList_length(sharedThreads); j++) {
+				int64_t threadName = (int64_t) stList_get(sharedThreads, j);
+
+				stPinchSegment *seg1 = getSegment(block1, threadName);
+				stPinchSegment *seg2 = getSegment(block2, threadName);
+
+				int64_t adjacencyLength = stPinchSegment_getStart(seg2) - stPinchSegment_getStart(seg1) - stPinchSegment_getLength(seg1);
+				assert(adjacencyLength > 0);
+
+				char *adj = malloc(sizeof(char)* (adjacencyLength + 1));
+				strncpy(stHash_search(sequences, (void*)threadName), adj, adjacencyLength);
+				adj[adjacencyLength] = '\0';
+				stList_append(candidateAdjacencySeqs, adj);
+
+			}
+
+			//pick the shortest one
+			int64_t minLength = INT_MAX;
+			char *adjacencySequence = NULL;
+			for (int j = 0; j < stList_length(candidateAdjacencySeqs); j++) {
+				char *adj = stList_get(candidateAdjacencySeqs, j);
+				if (strlen(adj) < minLength) {
+					minLength = strlen(adj);
+					free(adjacencySequence);
+					adjacencySequence = adj;
+				}
+				else {
+					free(adj);
+				}
+			}
+			assert(adjacencySequence);
+
+			stList_append(path, adjacencySequence);
+
+		}
+
+		stPinchEnd *end = stList_get(endsInPath, i);
+		assert(end);
+		stPinchBlock *block = stPinchEnd_getBlock(end);
+		stPinchSegment *segment = stPinchBlock_getFirst(block);
+		int64_t threadName = stPinchThread_getName(stPinchSegment_getThread(segment));
+		char *blockSequence = malloc(sizeof(char) * (stPinchSegment_getLength(segment) + 1));
+		strncpy(stHash_search(sequences, (void*)threadName), blockSequence, stPinchSegment_getLength(segment));
+		blockSequence[stPinchSegment_getLength(segment) + 1] = '\0';
+
+		stList_append(path, blockSequence);
+	}
+	return path;
+}
+
+//basic dp method for getting the consensus sequence
+//that maximizes the total weight of blocks visited
+stList *heaviestPath(stList *poGraph) {
+	int N = stList_length(poGraph);
+	int64_t *paths = (int64_t*) calloc(N, sizeof(int64_t));
+	int64_t *score = (int64_t*) calloc(N, sizeof(int64_t));
+
+	int64_t bestScore = 0;
+	int64_t bestEndpoint = -1;
+
+	for (int64_t i = 0; i < N; i++) {
+		PONode *node = stList_get(poGraph, i);
+
+		//fprintf(stderr, "Node ID: %ld, incoming nodes: %ld node weight: %ld\n", node->nodeID, node->nIncomingNodes, node->weight);
+
+		int64_t bestLeft = -1;
+		int64_t maxWeight = 0;
+
+		for (int64_t k = 0; k < node->nIncomingNodes; k++) {
+			PONode *incomingNode = stList_get(poGraph, node->incomingNodes[k]);
+			if (incomingNode->weight > maxWeight) {
+				bestLeft = incomingNode->nodeID;
+				maxWeight = incomingNode->weight;
+			}
+		}
+
+		paths[i] = bestLeft;
+		score[i] = maxWeight + score[bestLeft];
+
+		if (score[i] > bestScore) {
+			bestEndpoint = i;
+			bestScore = score[i];
+		}
+		fprintf(stderr, "Score: %ld\n", score[i]);
+	}
+
+	//traceback
+	fprintf(stderr, "Tracing back path\n");
+	stList *path = stList_construct();
+	for (int64_t i = bestEndpoint; i < N; i = paths[i]) {
+		stList_append(path, stList_get(poGraph, i));
+	}
+
+	return path;
 }

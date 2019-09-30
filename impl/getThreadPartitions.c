@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
 		do {
 			containsPosition[source->iseq] = source->ipos+1;
 		}
-		while (source = source->more);
+		while ((source = source->more) != NULL);
 
 
 		//Whether each sequence is present at this position in the group

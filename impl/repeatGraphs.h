@@ -13,11 +13,20 @@
 
 #define OP(X) ((void*)X == BLACK ? RED : BLACK)
 
-void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output);
-stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFilename);
-stList *getOrdering(stPinchThreadSet *threadSet, stHash *coloring);
-bool pinchCreatesCycle(stPinchSegment *seg1, stPinchSegment *seg2, bool pinchOrientation);
-void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
+typedef struct PONode {
+	int64_t nodeID;
+	int64_t *incomingNodes;
+	int64_t nIncomingNodes;
+	int64_t weight;
+	void *data;
+} PONode;
 
+stPinchThreadSet *buildRepeatGraph(stHash *sequences, char *alignmentsFilename);
+stList *getPartialOrderGraph(stPinchThreadSet *graph);
+bool graphIsAcyclic(stPinchThreadSet *graph);
+bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection);
+//void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
+stList *heaviestPath(stList *poGraph);
+stList *traversePath(stPinchThreadSet *graph, stList *endsInPath, stHash *sequences);
 
 #endif
