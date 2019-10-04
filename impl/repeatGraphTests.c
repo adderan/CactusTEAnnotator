@@ -43,10 +43,10 @@ static void testOrdering(CuTest *testCase) {
 	stPinchThread_pinch(thread1, thread2, 10, 10, 10, 1);
 	stPinchThread_pinch(thread1, thread2, 40, 40, 10, 1);
 
-	CuAssertTrue(testCase, getOrdering(threadSet, NULL) != NULL);
+	CuAssertTrue(testCase, getColoring(threadSet) != NULL);
 
 	stPinchThread_pinch(thread1, thread2, 70, 70, 10, 0);
-	CuAssertTrue(testCase, getOrdering(threadSet, NULL) == NULL);
+	CuAssertTrue(testCase, getColoring(threadSet) == NULL);
 }
 
 int main(int argc, char **argv) {
