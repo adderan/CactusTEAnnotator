@@ -112,6 +112,7 @@ stList *getComponentOrdering(stPinchBlock *startBlock, stHash *coloring) {
 	stSet *seen = stSet_construct();
 	
 	stList *ordering = stList_construct();
+	stSet *addedToOrdering = stSet_construct();
 
 	stPinchEnd *leftEnd = stPinchEnd_construct(startBlock, _5PRIME);
 
@@ -122,7 +123,6 @@ stList *getComponentOrdering(stPinchBlock *startBlock, stHash *coloring) {
 	stPinchEnd *end;
 	while (stList_length(stack) > 0) {
 		end = stList_pop(stack);
-		//fprintf(stderr, "Arrived at %s\n", endInfo(end));
 		block = stPinchEnd_getBlock(end);
 
 		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
@@ -137,6 +137,24 @@ stList *getComponentOrdering(stPinchBlock *startBlock, stHash *coloring) {
 			return NULL;
 		}
 		stHash_insert(coloring, oppositeEnd, OP(stHash_search(coloring, end)));
+
+		//if all the blocks with incoming adjacencies have been seen, this 
+		//block can be added to the ordering
+		stSet *incomingEnds = stPinchEnd_getConnectedPinchEnds(end);
+		stSetIterator *incomingEndIt = stSet_getIterator(incomingEnds);
+		stPinchEnd *incomingEnd;
+		bool addToOrdering = true;
+		while((incomingEnd = stSet_getNext(incomingEndIt)) != NULL) {
+			if (!stSet_search(seen, stPinchEnd_getBlock(incomingEnd))) {
+				addToOrdering = false;
+				break;
+			}
+		}
+		stSet_destruct(incomingEnds);
+		if (addToOrdering && !stSet_search(addedToOrdering, block)) {
+			stList_append(ordering, block);
+			stSet_insert(addedToOrdering, block);
+		}
 
 		if (!stSet_search(seen, block)) {
 			stSet_insert(seen, block);
@@ -176,8 +194,7 @@ stList *getComponentOrdering(stPinchBlock *startBlock, stHash *coloring) {
 
 stList *getOrdering(stPinchThreadSet *graph, stHash *coloring) {
 	stSortedSet *threadComponents = stPinchThreadSet_getThreadComponents(graph);
-	fprintf(stderr, "Found %ld components\n", stSortedSet_size(threadComponents));
-	stList *ordering = stList_construct();
+	stList *orderings = stList_construct();
 	if (!coloring) {
 		coloring = stHash_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void*)) stPinchEnd_destruct, NULL);
 	}
@@ -208,15 +225,15 @@ stList *getOrdering(stPinchThreadSet *graph, stHash *coloring) {
 		stPinchBlock *block = stPinchSegment_getBlock(segment);
 		stList *componentOrdering = getComponentOrdering(block, coloring);
 		if (!componentOrdering) {
-			ordering = NULL;
+			orderings = NULL;
 			goto out;
 		}
-		stList_appendAll(ordering, componentOrdering);
+		stList_append(orderings, componentOrdering);
 
 	}
 out:
 	stSortedSet_destructIterator(componentsIt);
-	return ordering;
+	return orderings;
 }
 
 stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
@@ -346,7 +363,7 @@ void applyPinch(stPinchThreadSet *threadSet, stPinch *pinch) {
 stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFilename) {
 
 	stPinchThreadSet *threadSet = initializeGraph(sequencesFilename);
-#ifdef DEBUG_
+#ifndef NDEBUG
 	//maintain another copy of the graph to keep track of what it looked
 	//like before applying a bad pinch
 	stPinchThreadSet *threadSet_debug = initializeGraph(sequencesFilename);
@@ -358,8 +375,7 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 	while((pinch = stPinchIterator_getNext(pinchIterator)) != NULL) {
 		applyPinch(threadSet, pinch);
 
-#ifdef DEBUG_
-		/*
+#ifndef NDEBUG
 		stList *ordering = getOrdering(threadSet, NULL);
 		if (!ordering) {
 			fprintf(stderr, "Pinch created cycle.\n");
@@ -367,11 +383,36 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 			printBiedgedGraph(threadSet_debug, "before_bad_pinch.gvz");
 			exit(1);
 		}
-		*/
 		applyPinch(threadSet_debug, pinch);
 #endif
 	}
 	assert(getOrdering(threadSet, NULL));
 	stPinchIterator_destruct(pinchIterator);
 	return threadSet;
+}
+
+//Finds the highest-weight traversal through a connected thread component
+//in an acyclic pinch graph, given an ordered listing of the nodes in 
+//the component
+char *getConsensusPath(stPinchThreadSet *graph, stList *component, stHash *coloring) {
+	char *path = malloc(sizeof(char)*stList_length(component));
+	fprintf(stderr, "Component with %ld blocks\n", stList_length(component));
+	stHash *blockIndex = stHash_construct();
+
+	for (int i = 0; i < stList_length(component); i++) {
+		stPinchBlock *block = stList_get(component, i);
+		stPinchEnd *rightEnd = stPinchEnd_construct(block, _3PRIME);
+		stPinchEnd *leftEnd = stPinchEnd_construct(block, _5PRIME);
+		stPinchEnd *blackEnd = (stHash_search(coloring, leftEnd) == BLACK) ? leftEnd : rightEnd;
+
+
+		stList *precedingEnds = stPinchEnd_getConnectedPinchEnds(blackEnd);
+		for (int j = 0; j < stList_length(precedingEnds); j++) {
+			stPinchBlock *precedingBlock = stPinchEnd_getBlock(stList_get(precedingEnds, j));
+			assert(stHash_search(blockIndex, precedingBlock) != NULL);
+			assert(stHash_search(blockIndex, precedingBlock) < i);
+		}
+	}
+
+	return NULL;
 }
