@@ -15,10 +15,9 @@
 
 void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output);
 stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFilename);
-stList *getOrdering(stPinchThreadSet *threadSet, stHash *coloring);
-stHash *getColoring(stPinchThreadSet *threadSet);
+stList *getOrdering(stPinchThreadSet *threadSet);
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection);
 void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
-char *getConsensusPath(stPinchThreadSet *graph, stList *component, stHash *coloring);
+char *getConsensusPath(stPinchThreadSet *graph, stList *ordering);
 
 #endif
