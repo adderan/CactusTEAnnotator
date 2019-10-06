@@ -58,11 +58,11 @@ bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 }
 
 void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename) {
-	stList *ordering = getOrdering(threadSet, coloring);
+	stList *ordering = getOrdering(threadSet);
 
 	stHash *blockToEnd = stHash_construct();
 	for (int i = 0; i < stList_length(ordering); i++) {
-		stPinchEnd *end = stList_get(blockToEnd, i);
+		stPinchEnd *end = stList_get(ordering, i);
 		stPinchBlock *block = stPinchEnd_getBlock(end);
 		stHash_insert(blockToEnd, block, end);
 	}
@@ -106,25 +106,6 @@ void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename) {
 	fclose(gvizFile);
 }
 
-stList *getOrdering(stPinchThreadSet *threadSet, stHash *coloring) {
-	stList *ordering = stList_construct();
-	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIterator(threadSet);
-
-	stPinchBlock *block;
-	while((stPinchThreadSetBlockIt_getNext(&blockIt)) != NULL) {
-		stSet *incomingEnds = stPinchEnd_getConnectedPinchEnds(end);
-		stSetIterator *incomingEndIt = stSet_getIterator(incomingEnds);
-		stPinchEnd *incomingEnd;
-		bool addToOrdering = true;
-		while((incomingEnd = stSet_getNext(incomingEndIt)) != NULL) {
-			if (!stSet_search(seen, stPinchEnd_getBlock(incomingEnd))) {
-				addToOrdering = false;
-				break;
-			}
-		}
-	}
-	return ordering;
-}
 
 /*If the graph is not acyclic, returns NULL. If the graph is acyclic, 
 * return a list of edges in the DAG corresponding to this pinch graph,
@@ -210,7 +191,7 @@ stList *getOrdering2(stPinchBlock *startBlock) {
 	stList_destruct(stack);
 	stSet_destruct(seen);
 	stSet_destruct(seenEnds);
-	stSet_destruct(coloring);
+	stHash_destruct(coloring);
 	return ordering;
 }
 
@@ -410,26 +391,26 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 	return threadSet;
 }
 
-//Find the highest-weight traversal through an acyclic pinch graph
 stList *getDAG(stPinchThreadSet *graph, stList *ordering) {
-	char *path = malloc(sizeof(char)*stList_length(component));
-	fprintf(stderr, "Component with %ld blocks\n", stList_length(component));
 	stList *edges = stList_construct();
 	stHash *endIndex = stHash_construct();
 
-	for (int i = 0; i < stList_length(ordering); i++) {
+	for (int64_t i = 0; i < stList_length(ordering); i++) {
 		stPinchEnd *end = stList_get(ordering, i);
 		stPinchBlock *block = stPinchEnd_getBlock(end);
 		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
 
-		stList *precedingEnds = stPinchEnd_getConnectedPinchEnds(end);
-		for (int j = 0; j < stList_length(precedingEnds); j++) {
-			stPinchBlock *precedingBlock = stPinchEnd_getBlock(stList_get(precedingEnds, j));
+		stHash_insert(endIndex, (void*)stPinchEnd_hashFn(oppositeEnd), (void*)i);
+
+		stSet *precedingEnds = stPinchEnd_getConnectedPinchEnds(end);
+		stSetIterator *endIt = stSet_getIterator(precedingEnds);
+		stPinchEnd *precedingEnd;
+		while((precedingEnd = stSet_getNext(endIt))) {
+			stPinchBlock *precedingBlock = stPinchEnd_getBlock(precedingEnd);
 			int64_t weight = stPinchBlock_getDegree(precedingBlock) * stPinchBlock_getLength(precedingBlock);
 
-			int a = stHash_search(endIndex, precedingEnd);
-			int b = i;
-			stList_append(stTuple_construct3(a, b, w);
+			int64_t x = (int64_t)stHash_search(endIndex, (void*)stPinchEnd_hashFn(precedingEnd));
+			stList_append(edges, stIntTuple_construct3(x, i, weight));
 		}
 	}
 
