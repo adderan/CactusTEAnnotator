@@ -196,7 +196,7 @@ stList *getOrdering2(stPinchBlock *startBlock) {
 }
 
 stList *getOrdering(stPinchThreadSet *graph) {
-	stList *ordering = stList_construct();
+	stList *componentOrderings = stList_construct();
 	stSortedSet *threadComponents = stPinchThreadSet_getThreadComponents(graph);
 
 	stSortedSetIterator *componentsIt = stSortedSet_getIterator(threadComponents);
@@ -224,16 +224,16 @@ stList *getOrdering(stPinchThreadSet *graph) {
 
 		stPinchBlock *block = stPinchSegment_getBlock(segment);
 		stList *componentOrdering = getOrdering2(block);
-		if (!ordering) {
-			stList_destruct(ordering);
+		if (!componentOrdering) {
+			stList_destruct(componentOrderings);
 			goto out;
 		}
-		stList_appendAll(ordering, componentOrdering);
+		stList_append(componentOrderings, componentOrdering);
 
 	}
 out:
 	stSortedSet_destructIterator(componentsIt);
-	return ordering;
+	return componentOrderings;
 }
 
 stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
@@ -391,16 +391,17 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 	return threadSet;
 }
 
-stList *getDAG(stPinchThreadSet *graph, stList *ordering) {
-	stList *edges = stList_construct();
-	stHash *endIndex = stHash_construct();
+stList *heaviestPath(stPinchThreadSet *graph, stList *ordering) {
+	stList *path = stList_construct2(stList_length(ordering));
 
-	for (int64_t i = 0; i < stList_length(ordering); i++) {
+	int N = stList_length(ordering);
+	for (int64_t i = N - 1; i >= 0; i--) {
 		stPinchEnd *end = stList_get(ordering, i);
 		stPinchBlock *block = stPinchEnd_getBlock(end);
 		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
 
-		stHash_insert(endIndex, (void*)stPinchEnd_hashFn(oppositeEnd), (void*)i);
+		int bestRight = -1;
+		int maxWeight = 0;
 
 		stSet *precedingEnds = stPinchEnd_getConnectedPinchEnds(end);
 		stSetIterator *endIt = stSet_getIterator(precedingEnds);
@@ -408,10 +409,14 @@ stList *getDAG(stPinchThreadSet *graph, stList *ordering) {
 		while((precedingEnd = stSet_getNext(endIt))) {
 			stPinchBlock *precedingBlock = stPinchEnd_getBlock(precedingEnd);
 			int64_t weight = stPinchBlock_getDegree(precedingBlock) * stPinchBlock_getLength(precedingBlock);
+			if (weight > maxWeight) {
+				bestRight = block;
+				maxWeight = weight;
+			}
 
-			int64_t x = (int64_t)stHash_search(endIndex, (void*)stPinchEnd_hashFn(precedingEnd));
-			stList_append(edges, stIntTuple_construct3(x, i, weight));
 		}
+
+		stList_set(path, i, bestRight);
 	}
 
 	return edges;

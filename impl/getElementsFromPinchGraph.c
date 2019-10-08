@@ -12,13 +12,13 @@ int main(int argc, char **argv) {
 	}
 	
 	fprintf(stderr, "Graph has %ld blocks\n", stPinchThreadSet_getTotalBlockNumber(threadSet));
-	stList *orderings = getOrdering(threadSet);
-	stListIterator *it = stList_getIterator(orderings);
+	stList *components = getOrdering(threadSet);
 	for (int i = 0; i < stList_length(components); i++) {
-		stList *component = stList_search(components, i);
-		char *path = getConsensusPath(threadSet, componentOrdering);
+		stList *component = stList_get(components, i);
+		stList *path = heaviestPath(graph, component);
+		char *consensusSeq = traversePath(threadSet, path);
 		fprintf(stdout, ">component_%d\n", i);
-		fprintf(stdout, "%s\n", path);
+		fprintf(stdout, "%s\n", consensusSeq);
 	}
 
 	stPinchThreadSet_destruct(threadSet);

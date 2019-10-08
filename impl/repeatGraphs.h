@@ -19,5 +19,6 @@ stList *getOrdering(stPinchThreadSet *threadSet);
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection);
 void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
 char *getConsensusPath(stPinchThreadSet *graph, stList *ordering);
+stList *getDAG(stPinchThreadSet *graph, stList *ordering);
 
 #endif
