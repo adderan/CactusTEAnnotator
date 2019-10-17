@@ -391,14 +391,90 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 	return threadSet;
 }
 
-stList *heaviestPath(stPinchThreadSet *graph, stList *ordering) {
-	stList *path = stList_construct2(stList_length(ordering));
+stPinchSegment *getSegment(stPinchBlock *block, int64_t threadName) {
+	stPinchSegment *segment;
+	while((segment = stPinchBlockIt_getNext(&blockIt))) {
+		if (stPinchThread_getName(stPinchSegment_getThread(segment)) == threadName) break;
+	}
+	return segment;
+}
 
+char *traversePath(stPinchThreadSet *threadSet, stList *endsInPath, char **sequences) {
+	stList *path = stList_construct();
+
+	int pos = 0;
+	for (int64_t i = 0; i < stList_length(endsInPath); i++) {
+		if (i > 0) {
+			//Fill in the adjacency connecting the previous block
+			//to this one
+			stPinchEnd *prevEnd = stList_get(endsInPath, i - 1);
+			stPinchEnd *end1 = stPinchEnd_construct(stPinchEnd_getBlock(prevEnd), !stPinchEnd_getOrientation(prevEnd));
+			stPinchEnd *end2 = stList_get(endsInPath, i);
+
+			stPinchBlock *block1 = stPinchEnd_getBlock(end1);
+			stPinchBlock *block2 = stPinchEnd_getBlock(end2);
+			stSortedSet *threads1 = 
+				getThreads(stPinchBlock_getFirst(block1));
+
+			stSortedSet *threads2 = 
+				getThreads(stPinchBlock_getFirst(block2));
+
+			stSortedSet *sharedThreadsSet = stSortedSet_getIntersection(threads1, threads2);
+			stList *sharedThread = stSortedSet_getList(sharedThreadsSet);
+
+
+			stList *candidateAdjacencySeqs = stList_construct();
+			for (int j = 0; j < stList_length(sharedThreads); j++) {
+				int64_t threadName = stList_get(sharedThreads, j);
+				stPinchBlockIt blockIt = stPinchBlock_getSegmentIterator(block2);
+
+				stPinchSegment *seg1 = getSegment(block1, threadName);
+				stPinchSegment *seg2 = getSegment(block2, threadName);
+				
+				int64_t adjacencyLength = stPinchSegment_getStart(seg2) - stPinchSegment_getEnd(seg1);
+
+				char *adjacencySeq = malloc(sizeof(char)* (adjacencyLength + 1));
+				strncpy(seqs[threadName], adjacencySeq, adjacencyLength);
+				adjacencySeq[adjacencyLength] = '\0';
+				stList_append(candidateSeqs, adjacencySeq);
+				
+			}
+
+			//pick the shortest one
+			int64_t minLength = INT_MAX;
+			for (int j = 0; j < stList_length(candidateSeqs); j++) {
+			}
+
+		}
+
+		stPinchEnd *end = stList_get(endsInPath, i);
+		stPinchSegment *segment = stPinchBlock_getFirst(block);
+		char *sequence = sequences[stPinchBlock_getThread(segment)];
+		strncpy(sequence + stPinchSegment_getStart(segment), path + pos, stPinchSegment_getLength(segment));
+		pos += stPinchSegment_getLength(segment);
+
+		stList *nextThread = 
+
+	}
+	path
+}
+
+stList *heaviestPath(stPinchThreadSet *graph, stList *ordering) {
 	int N = stList_length(ordering);
+	int64_t *paths = calloc(sizeof(int), N);
+	int64_t *score = calloc(sizeof(int), N);
+
+	stHash *blockIndex = stHash_construct();
+	for (int64_t i = 0; i < N; i++) {
+		stHash_insert(blockIndex, stList_get(ordering, i), (void*)i);
+	}
+
+	int64_t bestScore = 0;
+	int64_t bestEndpoint = -1;
+
 	for (int64_t i = N - 1; i >= 0; i--) {
 		stPinchEnd *end = stList_get(ordering, i);
 		stPinchBlock *block = stPinchEnd_getBlock(end);
-		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
 
 		int bestRight = -1;
 		int maxWeight = 0;
@@ -410,14 +486,25 @@ stList *heaviestPath(stPinchThreadSet *graph, stList *ordering) {
 			stPinchBlock *precedingBlock = stPinchEnd_getBlock(precedingEnd);
 			int64_t weight = stPinchBlock_getDegree(precedingBlock) * stPinchBlock_getLength(precedingBlock);
 			if (weight > maxWeight) {
-				bestRight = block;
+				bestRight = (int64_t) stHash_search(blockIndex, block);
 				maxWeight = weight;
 			}
 
 		}
 
-		stList_set(path, i, bestRight);
+		paths[i] = bestRight;
+
+		if (score[i] > bestScore) {
+			bestEndpoint = i;
+			bestScore = score[i];
+		}
+	}
+	
+	//traceback
+	stList *path = stList_construct2(N);
+	for (int i = bestEndpoint; i >= 0; i = paths[i]) {
+		stList_append(path, stList_get(ordering, i));
 	}
 
-	return edges;
+	return path;
 }

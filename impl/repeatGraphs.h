@@ -18,7 +18,8 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 stList *getOrdering(stPinchThreadSet *threadSet);
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection);
 void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
-char *getConsensusPath(stPinchThreadSet *graph, stList *ordering);
+stList *heaviestPath(stPinchThreadSet *graph, stList *ordering);
+char *traversePath(stPinchThreadSet *graph, stList *path);
 stList *getDAG(stPinchThreadSet *graph, stList *ordering);
 
 #endif

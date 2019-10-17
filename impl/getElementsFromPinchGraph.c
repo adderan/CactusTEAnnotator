@@ -5,21 +5,21 @@ int main(int argc, char **argv) {
 	char *alignmentsFilename = argv[2];
 	char *gvizDebugFilename = argv[3];
 
-	stPinchThreadSet *threadSet = buildRepeatGraph(sequencesFilename, alignmentsFilename);
+	stPinchThreadSet *graph = buildRepeatGraph(sequencesFilename, alignmentsFilename);
 
 	if (gvizDebugFilename) {
-		printBiedgedGraph(threadSet, gvizDebugFilename);
+		printBiedgedGraph(graph, gvizDebugFilename);
 	}
 	
-	fprintf(stderr, "Graph has %ld blocks\n", stPinchThreadSet_getTotalBlockNumber(threadSet));
-	stList *components = getOrdering(threadSet);
+	fprintf(stderr, "Graph has %ld blocks\n", stPinchThreadSet_getTotalBlockNumber(graph));
+	stList *components = getOrdering(graph);
 	for (int i = 0; i < stList_length(components); i++) {
 		stList *component = stList_get(components, i);
 		stList *path = heaviestPath(graph, component);
-		char *consensusSeq = traversePath(threadSet, path);
+		//char *consensusSeq = traversePath(threadSet, path);
 		fprintf(stdout, ">component_%d\n", i);
-		fprintf(stdout, "%s\n", consensusSeq);
+		fprintf(stdout, "%ld\n", stList_length(path));
 	}
 
-	stPinchThreadSet_destruct(threadSet);
+	stPinchThreadSet_destruct(graph);
 }

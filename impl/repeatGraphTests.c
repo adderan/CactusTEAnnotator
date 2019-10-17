@@ -49,9 +49,31 @@ static void testOrdering(CuTest *testCase) {
 	CuAssertTrue(testCase, getOrdering(threadSet) == NULL);
 }
 
+static void testHeaviestPath(CuTest *testCase) {
+	stPinchThreadSet *graph = stPinchThreadSet_construct();
+	stPinchThread *thread1 = stPinchThreadSet_addThread(graph, 1, 0, 100);
+	stPinchThread *thread2 = stPinchThreadSet_addThread(graph, 2, 0, 100);
+
+	stPinchThread_pinch(thread1, thread2, 50, 50, 10, 1);
+	stPinchThread_pinch(thread1, thread2, 70, 70, 10, 1);
+	stPinchBlock *block1 = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 50));
+	stPinchBlock *block2 = stPinchSegment_getBlock(stPinchThread_getSegment(thread2, 70));
+	stPinchEnd *end1 = stPinchEnd_construct(block1, 0);
+	stPinchEnd *end2 = stPinchEnd_construct(block2, 1);
+
+	stList *subsequences = stPinchEnd_getSubSequenceLengthsConnectingEnds(end1, end2);
+
+	fprintf(stderr, "Number of connecting adjacencies: %ld\n", stList_length(subsequences));
+	stIntTuple *adj = stList_pop(subsequences);
+	fprintf(stderr, "Tuple length: %ld\n", stIntTuple_length(adj));
+	fprintf(stderr, "tuple: %ld\n", stIntTuple_get(adj, 0));
+
+}
+
 int main(int argc, char **argv) {
 	CuSuite *suite = CuSuiteNew();
 	SUITE_ADD_TEST(suite, testDirectedWalk);
 	SUITE_ADD_TEST(suite, testOrdering);
+	SUITE_ADD_TEST(suite, testHeaviestPath);
 	CuSuiteRun(suite);
 }
