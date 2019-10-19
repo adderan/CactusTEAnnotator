@@ -20,6 +20,5 @@ bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirectio
 void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
 stList *heaviestPath(stPinchThreadSet *graph, stList *ordering);
 stList *traversePath(stPinchThreadSet *graph, stList *endsInPath, stList *sequences);
-stList *getDAG(stPinchThreadSet *graph, stList *ordering);
 
 #endif

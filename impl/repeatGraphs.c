@@ -378,7 +378,7 @@ stPinchThreadSet *buildRepeatGraph(stList *sequences, char *alignmentsFilename) 
 		applyPinch(threadSet_debug, pinch);
 #endif
 	}
-	assert(getOrdering(threadSet, NULL));
+	assert(getOrdering(threadSet));
 	stPinchIterator_destruct(pinchIterator);
 	return threadSet;
 }
