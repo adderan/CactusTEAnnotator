@@ -336,18 +336,11 @@ void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output) {
 	fprintf(output, "}\n");
 }
 
-stPinchThreadSet *initializeGraph(char *sequencesFilename) {
-	FILE *sequencesFile = fopen(sequencesFilename, "r");
-	struct List *seqs = constructEmptyList(0, NULL);
-    struct List *seqLengths = constructEmptyList(0, free);
-    struct List *headers = constructEmptyList(0, free);
-	fastaRead(sequencesFile, seqs, seqLengths, headers);
-
+stPinchThreadSet *initializeGraph(stList *sequences) {
+	
 	stPinchThreadSet *threadSet = stPinchThreadSet_construct();
-	int64_t threadName;
-	for (int i = 0; i < seqs->length; i++) {
-		sscanf(headers->list[i], "%ld", &threadName);
-		stPinchThreadSet_addThread(threadSet, threadName, 0, strlen(seqs->list[i]));
+	for (int i = 0; i < stList_length(sequences); i++) {
+		stPinchThreadSet_addThread(threadSet, i, 0, strlen(stList_get(sequences, i)));
 	}
 	return threadSet;
 }
@@ -359,14 +352,13 @@ void applyPinch(stPinchThreadSet *threadSet, stPinch *pinch) {
 	stPinchThread_filterPinch(thread1, thread2, pinch->start1, pinch->start2, pinch->length, pinch->strand, acyclicFilterFn);
 }
 
+stPinchThreadSet *buildRepeatGraph(stList *sequences, char *alignmentsFilename) {
 
-stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFilename) {
-
-	stPinchThreadSet *threadSet = initializeGraph(sequencesFilename);
+	stPinchThreadSet *threadSet = initializeGraph(sequences);
 #ifndef NDEBUG
 	//maintain another copy of the graph to keep track of what it looked
 	//like before applying a bad pinch
-	stPinchThreadSet *threadSet_debug = initializeGraph(sequencesFilename);
+	stPinchThreadSet *threadSet_debug = initializeGraph(sequences);
 #endif
 	
 	stPinchIterator *pinchIterator = stPinchIterator_constructFromFile(alignmentsFilename);
@@ -393,16 +385,16 @@ stPinchThreadSet *buildRepeatGraph(char *sequencesFilename, char *alignmentsFile
 
 stPinchSegment *getSegment(stPinchBlock *block, int64_t threadName) {
 	stPinchSegment *segment;
+	stPinchBlockIt blockIt = stPinchBlock_getSegmentIterator(block);
 	while((segment = stPinchBlockIt_getNext(&blockIt))) {
 		if (stPinchThread_getName(stPinchSegment_getThread(segment)) == threadName) break;
 	}
 	return segment;
 }
 
-char *traversePath(stPinchThreadSet *threadSet, stList *endsInPath, char **sequences) {
+stList *traversePath(stPinchThreadSet *threadSet, stList *endsInPath, stList *sequences) {
 	stList *path = stList_construct();
 
-	int pos = 0;
 	for (int64_t i = 0; i < stList_length(endsInPath); i++) {
 		if (i > 0) {
 			//Fill in the adjacency connecting the previous block
@@ -420,43 +412,56 @@ char *traversePath(stPinchThreadSet *threadSet, stList *endsInPath, char **seque
 				getThreads(stPinchBlock_getFirst(block2));
 
 			stSortedSet *sharedThreadsSet = stSortedSet_getIntersection(threads1, threads2);
-			stList *sharedThread = stSortedSet_getList(sharedThreadsSet);
-
+			stList *sharedThreads = stSortedSet_getList(sharedThreadsSet);
 
 			stList *candidateAdjacencySeqs = stList_construct();
 			for (int j = 0; j < stList_length(sharedThreads); j++) {
-				int64_t threadName = stList_get(sharedThreads, j);
-				stPinchBlockIt blockIt = stPinchBlock_getSegmentIterator(block2);
+				int64_t threadName = (int64_t) stList_get(sharedThreads, j);
 
 				stPinchSegment *seg1 = getSegment(block1, threadName);
 				stPinchSegment *seg2 = getSegment(block2, threadName);
 				
-				int64_t adjacencyLength = stPinchSegment_getStart(seg2) - stPinchSegment_getEnd(seg1);
+				int64_t adjacencyLength = stPinchSegment_getStart(seg2) - stPinchSegment_getStart(seg1) - stPinchSegment_getLength(seg1);
+				assert(adjacencyLength > 0);
 
-				char *adjacencySeq = malloc(sizeof(char)* (adjacencyLength + 1));
-				strncpy(seqs[threadName], adjacencySeq, adjacencyLength);
-				adjacencySeq[adjacencyLength] = '\0';
-				stList_append(candidateSeqs, adjacencySeq);
+				char *adj = malloc(sizeof(char)* (adjacencyLength + 1));
+				strncpy(stList_get(sequences, threadName), adj, adjacencyLength);
+				adj[adjacencyLength] = '\0';
+				stList_append(candidateAdjacencySeqs, adj);
 				
 			}
 
 			//pick the shortest one
 			int64_t minLength = INT_MAX;
-			for (int j = 0; j < stList_length(candidateSeqs); j++) {
+			char *adjacencySequence = NULL;
+			for (int j = 0; j < stList_length(candidateAdjacencySeqs); j++) {
+				char *adj = stList_get(candidateAdjacencySeqs, j);
+				if (strlen(adj) < minLength) {
+					minLength = strlen(adj);
+					free(adjacencySequence);
+					adjacencySequence = adj;
+				}
+				else {
+					free(adj);
+				}
 			}
+			assert(adjacencySequence);
+
+			stList_append(path, adjacencySequence);
 
 		}
 
 		stPinchEnd *end = stList_get(endsInPath, i);
+		stPinchBlock *block = stPinchEnd_getBlock(end);
 		stPinchSegment *segment = stPinchBlock_getFirst(block);
-		char *sequence = sequences[stPinchBlock_getThread(segment)];
-		strncpy(sequence + stPinchSegment_getStart(segment), path + pos, stPinchSegment_getLength(segment));
-		pos += stPinchSegment_getLength(segment);
+		int64_t threadName = stPinchThread_getName(stPinchSegment_getThread(segment));
+		char *blockSequence = malloc(sizeof(char) * (stPinchSegment_getLength(segment) + 1));
+		strncpy(stList_get(sequences, threadName), blockSequence, stPinchSegment_getLength(segment));
+		blockSequence[stPinchSegment_getLength(segment) + 1] = '\0';
 
-		stList *nextThread = 
-
+		stList_append(path, blockSequence);
 	}
-	path
+	return path;
 }
 
 stList *heaviestPath(stPinchThreadSet *graph, stList *ordering) {
