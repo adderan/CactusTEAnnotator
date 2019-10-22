@@ -19,9 +19,11 @@ int main(int argc, char **argv) {
 	FILE *sequencesFile = fopen(sequencesFilename, "r");
 	fastaRead(sequencesFile, seqs, seqLengths, headers);
 	fclose(sequencesFile);
-	stList *sequences = stList_construct();
+	stHash *sequences = stHash_construct();
+	int64_t threadName;
 	for (int i = 0; i < seqs->length; i++) {
-		stList_append(sequences, seqs->list[i]);
+		sscanf(headers->list[i], "%ld", &threadName);
+		stHash_insert(sequences, (void*) threadName, seqs->list[i]);
 	}
 
 	stPinchThreadSet *graph = buildRepeatGraph(sequences, alignmentsFilename);
@@ -34,9 +36,12 @@ int main(int argc, char **argv) {
 	stList *components = getOrdering(graph);
 	for (int i = 0; i < stList_length(components); i++) {
 		stList *component = stList_get(components, i);
+		fprintf(stderr, "Component ordering: %ld blocks\n", stList_length(component));
 		stList *path = heaviestPath(graph, component);
+		fprintf(stderr, "path length: %ld blocks\n", stList_length(path));
 		stList *consensusSeq = traversePath(graph, path, sequences);
 		fprintf(stdout, ">component_%d\n", i);
+		fprintf(stderr, "Number of segments: %ld\n", stList_length(consensusSeq));
 		printSeqList(consensusSeq);
 		printf("\n");
 	}

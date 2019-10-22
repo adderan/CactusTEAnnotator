@@ -14,11 +14,11 @@
 #define OP(X) ((void*)X == BLACK ? RED : BLACK)
 
 void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output);
-stPinchThreadSet *buildRepeatGraph(stList *sequences, char *alignmentsFilename);
+stPinchThreadSet *buildRepeatGraph(stHash *sequences, char *alignmentsFilename);
 stList *getOrdering(stPinchThreadSet *threadSet);
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection);
 void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
 stList *heaviestPath(stPinchThreadSet *graph, stList *ordering);
-stList *traversePath(stPinchThreadSet *graph, stList *endsInPath, stList *sequences);
+stList *traversePath(stPinchThreadSet *graph, stList *endsInPath, stHash *sequences);
 
 #endif

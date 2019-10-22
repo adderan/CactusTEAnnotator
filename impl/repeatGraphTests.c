@@ -3,12 +3,12 @@
 
 void testDirectedWalk(CuTest *testCase) {
 	stPinchThreadSet *threadSet = stPinchThreadSet_construct();
+	stPinchThreadSet_addThread(threadSet, 0, 0, 100);
 	stPinchThreadSet_addThread(threadSet, 1, 0, 100);
-	stPinchThreadSet_addThread(threadSet, 2, 0, 100);
 
 
-	stPinchThread *thread1 = stPinchThreadSet_getThread(threadSet, 1);
-	stPinchThread *thread2 = stPinchThreadSet_getThread(threadSet, 2);
+	stPinchThread *thread1 = stPinchThreadSet_getThread(threadSet, 0);
+	stPinchThread *thread2 = stPinchThreadSet_getThread(threadSet, 1);
 
 	stPinchThread_pinch(thread1, thread2, 10, 10, 10, 1);
 
