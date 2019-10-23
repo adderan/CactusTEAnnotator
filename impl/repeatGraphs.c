@@ -198,25 +198,33 @@ stList *getOrdering2(stPinchBlock *startBlock) {
 stList *getOrdering(stPinchThreadSet *graph) {
 	stList *componentOrderings = stList_construct();
 	stSortedSet *threadComponents = stPinchThreadSet_getThreadComponents(graph);
+	fprintf(stderr, "found %ld components\n", stSortedSet_size(threadComponents));
 
 	stSortedSetIterator *componentsIt = stSortedSet_getIterator(threadComponents);
 	stList *component;
 	while ((component = stSortedSet_getNext(componentsIt))) {
+		fprintf(stderr, "Component size: %ld threads\n", stList_length(component));
 		//get any block in the component
-		stPinchSegment *segment = stPinchThread_getFirst(stList_peek(component));
+		stPinchSegment *startSegment = stPinchThread_getFirst(stList_peek(component));
+		assert(startSegment);
+		stPinchSegment *segment = startSegment;
 		while (segment && (stPinchSegment_getBlock(segment) == NULL)) segment = stPinchSegment_get3Prime(segment);
 		if (segment == NULL) {
 			//try other direction
-			segment = stPinchThread_getFirst(stList_peek(component));
+			segment = startSegment;
 			while (segment && (stPinchSegment_getBlock(segment) == NULL)) {
 				segment = stPinchSegment_get5Prime(segment);
 			}
 		}
 		//ignore single threads with no blocks
-		if (!segment) continue;
+		if (!segment) {
+			fprintf(stderr, "Found no blocks\n");
+			continue;
+		}
 
 		stPinchBlock *block = stPinchSegment_getBlock(segment);
 		stList *componentOrdering = getOrdering2(block);
+		fprintf(stderr, "Ordering length: %ld\n", stList_length(componentOrdering));
 		if (!componentOrdering) {
 			stList_destruct(componentOrderings);
 			goto out;
@@ -450,9 +458,8 @@ stList *traversePath(stPinchThreadSet *threadSet, stList *endsInPath, stHash *se
 
 		}
 
-		assert(stList_length(endsInPath) > 0);
 		stPinchEnd *end = stList_get(endsInPath, i);
-		assert(end != NULL);
+		assert(end);
 		stPinchBlock *block = stPinchEnd_getBlock(end);
 		stPinchSegment *segment = stPinchBlock_getFirst(block);
 		int64_t threadName = stPinchThread_getName(stPinchSegment_getThread(segment));
@@ -507,8 +514,9 @@ stList *heaviestPath(stPinchThreadSet *graph, stList *ordering) {
 	}
 	
 	//traceback
-	stList *path = stList_construct2(N);
+	stList *path = stList_construct();
 	for (int i = bestEndpoint; i >= 0; i = paths[i]) {
+		assert(stList_get(ordering, i));
 		stList_append(path, stList_get(ordering, i));
 	}
 
