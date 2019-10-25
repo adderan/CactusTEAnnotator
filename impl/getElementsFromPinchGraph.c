@@ -33,17 +33,25 @@ int main(int argc, char **argv) {
 	}
 	
 	fprintf(stderr, "Graph has %ld blocks\n", stPinchThreadSet_getTotalBlockNumber(graph));
-	stList *components = getOrdering(graph);
-	for (int i = 0; i < stList_length(components); i++) {
-		stList *component = stList_get(components, i);
-		fprintf(stderr, "Component ordering: %ld blocks\n", stList_length(component));
-		stList *path = heaviestPath(graph, component);
+
+	stSortedSet *components = stPinchThreadSet_getThreadComponents(graph);
+	stSortedSetIterator *componentsIt = stSortedSet_getIterator(components);
+	stList *component;
+	int i = 0;
+	while((component = stSortedSet_getNext(componentsIt)) != NULL) {
+		stPinchBlock *startBlock = getFirstBlock(stList_peek(component));
+		if (!startBlock) continue;
+		stList *ordering = getOrdering2(startBlock);
+		fprintf(stderr, "Ordering length: %ld\n", stList_length(ordering));
+		if (stList_length(ordering) < 2) continue;
+		stList *path = heaviestPath(graph, ordering);
 		fprintf(stderr, "path length: %ld blocks\n", stList_length(path));
 		stList *consensusSeq = traversePath(graph, path, sequences);
 		fprintf(stdout, ">component_%d\n", i);
 		fprintf(stderr, "Number of segments: %ld\n", stList_length(consensusSeq));
 		printSeqList(consensusSeq);
 		printf("\n");
+		i++;
 	}
 
 	stPinchThreadSet_destruct(graph);

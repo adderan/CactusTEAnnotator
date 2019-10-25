@@ -16,6 +16,8 @@
 void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output);
 stPinchThreadSet *buildRepeatGraph(stHash *sequences, char *alignmentsFilename);
 stList *getOrdering(stPinchThreadSet *threadSet);
+stList *getOrdering2(stPinchBlock *block);
+stPinchBlock *getFirstBlock(stPinchThread *thread);
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection);
 void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
 stList *heaviestPath(stPinchThreadSet *graph, stList *ordering);

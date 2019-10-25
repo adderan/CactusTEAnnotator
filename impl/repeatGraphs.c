@@ -115,7 +115,7 @@ stList *getOrdering2(stPinchBlock *startBlock) {
 	stList *stack = stList_construct();
 
 	stSet *seen = stSet_construct();
-	stSet *seenEnds = stSet_construct();
+	stSet *seenEnds = stSet_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void*)stPinchEnd_destruct);
 
 	stHash *coloring = stHash_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void*)) stPinchEnd_destruct, NULL);
 
@@ -151,18 +151,18 @@ stList *getOrdering2(stPinchBlock *startBlock) {
 				break;
 			}
 		}
-		if (addToOrdering && !stSet_search(seenEnds, end)) {
+		if (addToOrdering) {
+			fprintf(stderr, "Adding end to ordering\n");
 			stList_append(ordering, end);
 			stSet_insert(seenEnds, end);
 		}
 		
 		if (!stSet_search(seen, block)) {
 			stSet_insert(seen, block);
-			stSet *nearAdjacentEnds = stPinchEnd_getConnectedPinchEnds(end);
 			//fprintf(stderr, "Found %ld connected ends on near side\n", stSet_size(nearAdjacentEnds));
-			stSetIterator *adjEndIt = stSet_getIterator(nearAdjacentEnds);
+			stSetIterator *incomingEndIt = stSet_getIterator(incomingEnds);
 			stPinchEnd *adjEnd;
-			while((adjEnd = stSet_getNext(adjEndIt))) {
+			while((adjEnd = stSet_getNext(incomingEndIt))) {
 				void *colorToTagEnd = OP(stHash_search(coloring, end));
 				if (stHash_search(coloring, adjEnd) == OP(colorToTagEnd)) {
 					fprintf(stderr, "About to encounter cycle\n");
@@ -172,11 +172,11 @@ stList *getOrdering2(stPinchBlock *startBlock) {
 				stList_append(stack, adjEnd);
 			}
 
-			stSet_destructIterator(adjEndIt);
-			stSet *farAdjacentEnds = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
-			//fprintf(stderr, "Found %ld connected ends on far side.\n", stSet_size(farAdjacentEnds));
-			adjEndIt = stSet_getIterator(farAdjacentEnds);
-			while((adjEnd = stSet_getNext(adjEndIt))) {
+			stSet_destructIterator(incomingEndIt);
+			stSet *outgoingEnds = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
+			stSetIterator *outgoingEndIt = stSet_getIterator(outgoingEnds);
+			outgoingEndIt = stSet_getIterator(outgoingEnds);
+			while((adjEnd = stSet_getNext(outgoingEndIt))) {
 				void *colorToTagEnd = OP(stHash_search(coloring, oppositeEnd));
 				if (stHash_search(coloring, adjEnd) == OP(colorToTagEnd)) {
 					fprintf(stderr, "About to encounter cycle\n");
@@ -185,7 +185,7 @@ stList *getOrdering2(stPinchBlock *startBlock) {
 				stHash_insert(coloring, adjEnd, colorToTagEnd);
 				stList_append(stack, adjEnd);
 			}
-			stSet_destructIterator(adjEndIt);
+			stSet_destructIterator(outgoingEndIt);
 		}
 	}
 	stList_destruct(stack);
@@ -195,8 +195,23 @@ stList *getOrdering2(stPinchBlock *startBlock) {
 	return ordering;
 }
 
+stPinchBlock *getFirstBlock(stPinchThread *thread) {
+	stPinchSegment *segment = stPinchThread_getFirst(thread);
+	while(segment && (stPinchSegment_getBlock(segment) == NULL)) {
+		segment = stPinchSegment_get3Prime(segment);
+	}
+	if (!segment) {
+		segment = stPinchThread_getFirst(thread);
+		while(segment && (stPinchSegment_getBlock(segment) == NULL)) {
+			segment = stPinchSegment_get3Prime(segment);
+		}
+	}
+	if (!segment) return NULL;
+	return stPinchSegment_getBlock(segment);
+}
+
 stList *getOrdering(stPinchThreadSet *graph) {
-	stList *componentOrderings = stList_construct();
+	stList *ordering = stList_construct();
 	stSortedSet *threadComponents = stPinchThreadSet_getThreadComponents(graph);
 	fprintf(stderr, "found %ld components\n", stSortedSet_size(threadComponents));
 
@@ -205,36 +220,26 @@ stList *getOrdering(stPinchThreadSet *graph) {
 	while ((component = stSortedSet_getNext(componentsIt))) {
 		fprintf(stderr, "Component size: %ld threads\n", stList_length(component));
 		//get any block in the component
-		stPinchSegment *startSegment = stPinchThread_getFirst(stList_peek(component));
-		assert(startSegment);
-		stPinchSegment *segment = startSegment;
-		while (segment && (stPinchSegment_getBlock(segment) == NULL)) segment = stPinchSegment_get3Prime(segment);
-		if (segment == NULL) {
-			//try other direction
-			segment = startSegment;
-			while (segment && (stPinchSegment_getBlock(segment) == NULL)) {
-				segment = stPinchSegment_get5Prime(segment);
-			}
-		}
+		stPinchBlock *startBlock = getFirstBlock(stList_peek(component));
 		//ignore single threads with no blocks
-		if (!segment) {
+		if (!startBlock) {
 			fprintf(stderr, "Found no blocks\n");
 			continue;
 		}
 
-		stPinchBlock *block = stPinchSegment_getBlock(segment);
-		stList *componentOrdering = getOrdering2(block);
+		stList *componentOrdering = getOrdering2(startBlock);
 		fprintf(stderr, "Ordering length: %ld\n", stList_length(componentOrdering));
 		if (!componentOrdering) {
-			stList_destruct(componentOrderings);
+			stList_destruct(ordering);
+			ordering = NULL;
 			goto out;
 		}
-		stList_append(componentOrderings, componentOrdering);
+		stList_appendAll(ordering, componentOrdering);
 
 	}
 out:
 	stSortedSet_destructIterator(componentsIt);
-	return componentOrderings;
+	return ordering;
 }
 
 stPinchEnd *getAdjacentEnd(stPinchSegment *segment, bool direction) {
@@ -383,7 +388,6 @@ stPinchThreadSet *buildRepeatGraph(stHash *sequences, char *alignmentsFilename) 
 		applyPinch(threadSet_debug, pinch);
 #endif
 	}
-	assert(getOrdering(threadSet));
 	stPinchIterator_destruct(pinchIterator);
 	return threadSet;
 }
