@@ -148,6 +148,7 @@ stHash *graphIsAcyclic(stPinchBlock *startBlock) {
 	while (stList_length(stack) > 0) {
 		end = stList_pop(stack);
 		block = stPinchEnd_getBlock(end);
+		fprintf(stderr, "Arrived at block %p\n", block);
 
 		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
 

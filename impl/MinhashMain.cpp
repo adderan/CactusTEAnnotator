@@ -31,10 +31,9 @@ char **readSequences(char *sequencesFilename, char ***sequenceNames, int *nSeqs)
 int main(int argc, char **argv) {
     char *sequencesFilename = NULL;
     int kmerLength = 10;
-    int numHashes = 200;
+    //int numHashes = 200;
     bool exact = false;
-    double distanceThreshold = 0.1;
-	bool distancesOnly = false;
+	//bool distancesOnly = false;
     char *clusterAFilename = NULL;
     char *clusterBFilename = NULL;
 	int sketchSize = 100;
@@ -42,7 +41,6 @@ int main(int argc, char **argv) {
     /*
      * Parse the options.
      */
-    int i;
     while (1) {
         static struct option long_options[] = { 
             { "sequences", required_argument, 0, 'a' }, 
@@ -66,8 +64,7 @@ int main(int argc, char **argv) {
                 sequencesFilename = stString_copy(optarg);
                 break;
             case 'b':
-                i = sscanf(optarg, "%d", &kmerLength);
-                assert(i == 1);
+                sscanf(optarg, "%d", &kmerLength);
                 break;
             case 'd':
                 exact = true;
@@ -79,7 +76,7 @@ int main(int argc, char **argv) {
                 clusterBFilename = stString_copy(optarg);
                 break;
 			case 'h':
-				i = sscanf(optarg, "%d", &sketchSize);
+				sscanf(optarg, "%d", &sketchSize);
 				break;
             default:
                 return 1;

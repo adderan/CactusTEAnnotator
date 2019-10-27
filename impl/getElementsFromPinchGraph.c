@@ -39,6 +39,7 @@ int main(int argc, char **argv) {
 	stList *component;
 	int i = 0;
 	while((component = stSortedSet_getNext(componentsIt)) != NULL) {
+		fprintf(stderr, "Component size: %ld threads\n", stList_length(component));
 		stPinchBlock *startBlock = getFirstBlock(stList_peek(component));
 		if (!startBlock) continue;
 		stList *ordering = getOrdering2(startBlock);
