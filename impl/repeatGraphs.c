@@ -106,16 +106,35 @@ void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename) {
 	fclose(gvizFile);
 }
 
+stList *getOrdering(stPinchBlock *startBlock) {
+	stList *ordering = stList_construct();
+	stList *stack = stList_construct();
+
+	stSet *seen = stSet_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void*) stPinchEnd_destruct);
+	stPinchEnd *startEnd = stPinchEnd_construct(startBlock, _3PRIME);
+	stList_append(stack, startEnd);
+
+	while(stList_length(stack) > 0) {
+		stPinchEnd *end = stList_pop(stack);
+		stPinchBlock *block = stPinchEnd_getBlock(end);
+		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
+
+		stSet *incomingAdjacencies = stPinchEnd_getConnectedPinchEnds(end);
+
+		stSet *outgoingAdjacencies = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
+
+	}
+	return ordering;
+}
+
 
 /*If the graph is not acyclic, returns NULL. If the graph is acyclic, 
 * return a list of edges in the DAG corresponding to this pinch graph,
 * in ordering implied by traversing the graph. */
-stList *getOrdering2(stPinchBlock *startBlock) {
-	stList *ordering = stList_construct();
+stHash *graphIsAcyclic(stPinchBlock *startBlock) {
 	stList *stack = stList_construct();
 
 	stSet *seen = stSet_construct();
-	stSet *seenEnds = stSet_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void*)stPinchEnd_destruct);
 
 	stHash *coloring = stHash_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void(*)(void*)) stPinchEnd_destruct, NULL);
 
@@ -141,21 +160,6 @@ stList *getOrdering2(stPinchBlock *startBlock) {
 			return false;
 		}
 		stHash_insert(coloring, oppositeEnd, OP(stHash_search(coloring, end)));
-		stSet *incomingEnds = stPinchEnd_getConnectedPinchEnds(end);
-		stSetIterator *incomingEndIt = stSet_getIterator(incomingEnds);
-		stPinchEnd *incomingEnd;
-		bool addToOrdering = true;
-		while((incomingEnd = stSet_getNext(incomingEndIt)) != NULL) {
-			if (!stSet_search(seenEnds, incomingEnd)) {
-				addToOrdering = false;
-				break;
-			}
-		}
-		if (addToOrdering) {
-			fprintf(stderr, "Adding end to ordering\n");
-			stList_append(ordering, end);
-			stSet_insert(seenEnds, end);
-		}
 		
 		if (!stSet_search(seen, block)) {
 			stSet_insert(seen, block);
@@ -191,8 +195,7 @@ stList *getOrdering2(stPinchBlock *startBlock) {
 	stList_destruct(stack);
 	stSet_destruct(seen);
 	stSet_destruct(seenEnds);
-	stHash_destruct(coloring);
-	return ordering;
+	return coloring;
 }
 
 stPinchBlock *getFirstBlock(stPinchThread *thread) {
