@@ -3,11 +3,11 @@ murmurHashSources=smhasher/src/MurmurHash3.cpp
 cpp=g++
 cc=gcc
 
-cflags_opt=-Wall -Werror -DNDEBUG
-cflags_debug=-g -O0 -Wall -Werror
+cflags_opt=-Wall -DNDEBUG
+cflags_debug=-g -O0 -Wall
 
-cppflags_opt=-Wall -Werror -DNDEBUG
-cppflags_debug=-g -O0 -Wall -Werror
+cppflags_opt=-Wall -DNDEBUG
+cppflags_debug=-g -O0 -Wall
 
 ifndef TE_ANNOTATOR_DEBUG
 	cflags=${cflags_opt}
@@ -40,7 +40,7 @@ pinchesAndCactiLib = cactus/submodules/sonLib/lib/stPinchesAndCacti.a
 
 liblpo = poaV2/liblpo.a
 
-all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries local bin/lastz
+all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries bin/lastz local
 
 
 local: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs bin/getElementsFromPinchGraph bin/getCoveredSeeds bin/repeatGraphTests
