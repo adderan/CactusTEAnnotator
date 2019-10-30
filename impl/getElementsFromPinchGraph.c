@@ -34,6 +34,8 @@ int main(int argc, char **argv) {
 	
 	fprintf(stderr, "Graph has %ld blocks\n", stPinchThreadSet_getTotalBlockNumber(graph));
 
+	assert(graphIsAcyclic(graph));
+
 	stSortedSet *components = stPinchThreadSet_getThreadComponents(graph);
 	stSortedSetIterator *componentsIt = stSortedSet_getIterator(components);
 	stList *component;
@@ -41,7 +43,7 @@ int main(int argc, char **argv) {
 	while((component = stSortedSet_getNext(componentsIt)) != NULL) {
 		stPinchBlock *startBlock = getFirstBlock(stList_peek(component));
 		if (!startBlock) continue;
-		stList *ordering = getOrdering2(startBlock);
+		stList *ordering = getOrdering(startBlock);
 		fprintf(stderr, "Ordering length: %ld\n", stList_length(ordering));
 		if (stList_length(ordering) < 2) continue;
 		stList *path = heaviestPath(graph, ordering);
