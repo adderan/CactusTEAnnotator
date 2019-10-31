@@ -14,8 +14,8 @@ int main(int argc, char **argv) {
 	char *gvizDebugFilename = argv[3];
 
 	struct List *seqs = constructEmptyList(0, NULL);
-    struct List *seqLengths = constructEmptyList(0, free);
-    struct List *headers = constructEmptyList(0, free);
+	struct List *seqLengths = constructEmptyList(0, free);
+	struct List *headers = constructEmptyList(0, free);
 	FILE *sequencesFile = fopen(sequencesFilename, "r");
 	fastaRead(sequencesFile, seqs, seqLengths, headers);
 	fclose(sequencesFile);
@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
 	if (gvizDebugFilename) {
 		printBiedgedGraph(graph, gvizDebugFilename);
 	}
-	
+
 	fprintf(stderr, "Graph has %ld blocks\n", stPinchThreadSet_getTotalBlockNumber(graph));
 
 	assert(graphIsAcyclic(graph));
