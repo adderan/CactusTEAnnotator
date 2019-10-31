@@ -15,8 +15,10 @@
 
 void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output);
 stPinchThreadSet *buildRepeatGraph(stHash *sequences, char *alignmentsFilename);
-stList *getOrdering(stPinchBlock *block);
-stHash *graphIsAcyclic(stPinchBlock *startBlock);
+stList *getComponentOrdering(stPinchBlock *block);
+stList *getOrdering(stPinchThreadSet *graph);
+bool graphIsAcyclic(stPinchThreadSet *graph);
+bool componentIsAcyclic(stPinchBlock *startBlock);
 stPinchBlock *getFirstBlock(stPinchThread *thread);
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection);
 void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);

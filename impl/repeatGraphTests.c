@@ -35,7 +35,7 @@ void testDirectedWalk(CuTest *testCase) {
 	CuAssertTrue(testCase, directedWalk(seg1, seg2, _5PRIME));
 }
 
-static void testOrdering(CuTest *testCase) {
+static void testAcyclic(CuTest *testCase) {
 	stPinchThreadSet *threadSet = stPinchThreadSet_construct();
 	stPinchThread *thread1 = stPinchThreadSet_addThread(threadSet, 1, 0, 100);
 	stPinchThread *thread2 = stPinchThreadSet_addThread(threadSet, 2, 0, 100);
@@ -43,10 +43,10 @@ static void testOrdering(CuTest *testCase) {
 	stPinchThread_pinch(thread1, thread2, 10, 10, 10, 1);
 	stPinchThread_pinch(thread1, thread2, 40, 40, 10, 1);
 
-	CuAssertTrue(testCase, getOrdering(threadSet) != NULL);
+	CuAssertTrue(testCase, graphIsAcyclic(threadSet));
 
 	stPinchThread_pinch(thread1, thread2, 70, 70, 10, 0);
-	CuAssertTrue(testCase, getOrdering(threadSet) == NULL);
+	CuAssertTrue(testCase, !graphIsAcyclic(threadSet));
 }
 
 static void testHeaviestPath(CuTest *testCase) {
@@ -73,7 +73,7 @@ static void testHeaviestPath(CuTest *testCase) {
 int main(int argc, char **argv) {
 	CuSuite *suite = CuSuiteNew();
 	SUITE_ADD_TEST(suite, testDirectedWalk);
-	SUITE_ADD_TEST(suite, testOrdering);
+	SUITE_ADD_TEST(suite, testAcyclic);
 	SUITE_ADD_TEST(suite, testHeaviestPath);
 	CuSuiteRun(suite);
 }

@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
 		fprintf(stderr, "Component size: %ld threads\n", stList_length(component));
 		stPinchBlock *startBlock = getFirstBlock(stList_peek(component));
 		if (!startBlock) continue;
-		stList *ordering = getOrdering(startBlock);
+		stList *ordering = getComponentOrdering(startBlock);
 		fprintf(stderr, "Ordering length: %ld\n", stList_length(ordering));
 		if (stList_length(ordering) < 2) continue;
 		stList *path = heaviestPath(graph, ordering);
