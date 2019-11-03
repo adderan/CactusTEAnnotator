@@ -13,13 +13,17 @@
 
 #define OP(X) ((void*)X == BLACK ? RED : BLACK)
 
+typdedef struct POANode {
+	int64_t nodeID;
+	int64_t incomingNodes[];
+	int64_t weight;
+	stPinchBlock *block;
+} POANode;
+
 void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output);
 stPinchThreadSet *buildRepeatGraph(stHash *sequences, char *alignmentsFilename);
-stList *getComponentOrdering(stPinchBlock *block);
-stList *getOrdering(stPinchThreadSet *graph);
+stList *getDAG(stPinchThreadSet *graph);
 bool graphIsAcyclic(stPinchThreadSet *graph);
-bool componentIsAcyclic(stPinchBlock *startBlock);
-stPinchBlock *getFirstBlock(stPinchThread *thread);
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection);
 void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
 stList *heaviestPath(stPinchThreadSet *graph, stList *ordering);
