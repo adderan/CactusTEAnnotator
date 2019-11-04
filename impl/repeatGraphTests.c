@@ -70,7 +70,7 @@ static void testHeaviestPath(CuTest *testCase) {
 
 }
 
-static void testOrdering(CuTest *testCase) {
+static void testPoGraph(CuTest *testCase) {
     stPinchThreadSet *graph = stPinchThreadSet_construct();
 	stPinchThread *thread1 = stPinchThreadSet_addThread(graph, 1, 0, 100);
 	stPinchThread *thread2 = stPinchThreadSet_addThread(graph, 2, 0, 100);
@@ -78,10 +78,11 @@ static void testOrdering(CuTest *testCase) {
 	stPinchThread_pinch(thread1, thread2, 50, 50, 10, 1);
 	stPinchThread_pinch(thread1, thread2, 70, 70, 10, 1);
 
-    stPinchBlock *block1 = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 50));
+    //stPinchBlock *block1 = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 50));
 
-    stList *ordering = getComponentOrdering(block1);
-    CuAssertTrue(testCase, stList_length(ordering) == 2);
+	POGraph *poGraph = getPartialOrderGraph(graph);
+
+    CuAssertTrue(testCase, poGraph->length == 2);
 
 }
 
@@ -90,6 +91,6 @@ int main(int argc, char **argv) {
 	SUITE_ADD_TEST(suite, testDirectedWalk);
 	SUITE_ADD_TEST(suite, testAcyclic);
 	SUITE_ADD_TEST(suite, testHeaviestPath);
-    SUITE_ADD_TEST(suite, testOrdering);
+    SUITE_ADD_TEST(suite, testPoGraph);
 	CuSuiteRun(suite);
 }

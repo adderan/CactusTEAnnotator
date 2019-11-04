@@ -29,33 +29,18 @@ int main(int argc, char **argv) {
 	stPinchThreadSet *graph = buildRepeatGraph(sequences, alignmentsFilename);
 
 	if (gvizDebugFilename) {
-		printBiedgedGraph(graph, gvizDebugFilename);
+		//printBiedgedGraph(graph, gvizDebugFilename);
 	}
 
 	fprintf(stderr, "Graph has %ld blocks\n", stPinchThreadSet_getTotalBlockNumber(graph));
 
 	assert(graphIsAcyclic(graph));
 
-	stSortedSet *components = stPinchThreadSet_getThreadComponents(graph);
-	stSortedSetIterator *componentsIt = stSortedSet_getIterator(components);
-	stList *component;
-	int i = 0;
-	while((component = stSortedSet_getNext(componentsIt)) != NULL) {
-		fprintf(stderr, "Component size: %ld threads\n", stList_length(component));
-		stPinchBlock *startBlock = getFirstBlock(stList_peek(component));
-		if (!startBlock) continue;
-		stList *ordering = getComponentOrdering(startBlock);
-		fprintf(stderr, "Ordering length: %ld\n", stList_length(ordering));
-		if (stList_length(ordering) < 2) continue;
-		stList *path = heaviestPath(graph, ordering);
-		fprintf(stderr, "path length: %ld blocks\n", stList_length(path));
-		stList *consensusSeq = traversePath(graph, path, sequences);
-		fprintf(stdout, ">component_%d\n", i);
-		fprintf(stderr, "Number of segments: %ld\n", stList_length(consensusSeq));
-		printSeqList(consensusSeq);
-		printf("\n");
-		i++;
-	}
+	POGraph *poGraph = getPartialOrderGraph(graph);
+	stList *path = heaviestPath(poGraph);
+
+	fprintf(stderr, "Path length: %ld blocks\n", stList_length(path));
+
 
 	stPinchThreadSet_destruct(graph);
 }

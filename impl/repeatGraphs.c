@@ -38,6 +38,7 @@ bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	return filter;
 }
 
+/*
 void printBiedgedGraph(stPinchThreadSet *graph, char *gvizFilename) {
 	stList *ordering = getOrdering(graph);
 	stHash *blockToEnd = stHash_construct();
@@ -88,9 +89,9 @@ void printBiedgedGraph(stPinchThreadSet *graph, char *gvizFilename) {
 	stList_destruct(ordering);
 	fclose(gvizFile);
 }
+*/
 
-POANode *getDAG(stPinchThreadSet *graph) {
-	stList *ordering = stList_construct();
+POGraph *getPartialOrderGraph(stPinchThreadSet *graph) {
 	stList *stack = stList_construct();
 
 	stSet *seen = stSet_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void*) stPinchEnd_destruct);
@@ -100,6 +101,11 @@ POANode *getDAG(stPinchThreadSet *graph) {
 	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(graph);
 	stPinchBlock *startBlock;
 	int64_t nodeID = 0;
+
+	int64_t N = stPinchThreadSet_getTotalBlockNumber(graph);
+	POGraph *poGraph = malloc(sizeof(POGraph));
+	poGraph->nodes = malloc(sizeof(PONode*) * N);
+	poGraph->length = N;
 	while((startBlock = stPinchThreadSetBlockIt_getNext(&blockIt))) {
 
 		//doesn't matter which end
@@ -131,18 +137,20 @@ POANode *getDAG(stPinchThreadSet *graph) {
 
 			if (addToOrdering) {
 				stSet_insert(seen, end);
-				POANode *node = malloc(sizeof(POANode));
+				PONode *node = malloc(sizeof(PONode));
 				node->nodeID = nodeID;
-				node->incomingEnds = malloc(sizeof(int64_t)*stPinchEnd_getNumberOfConnectedPinchEnds(end));
-				stList *incomingEndList = stSet_getList(incomingEnds);
+				node->incomingNodes = malloc(sizeof(int64_t)*stPinchEnd_getNumberOfConnectedPinchEnds(end));
+				node->nIncomingNodes = stPinchEnd_getNumberOfConnectedPinchEnds(end);
+				stList *incomingEndList = stSet_getList(incomingAdjacencies);
 				for (int k = 0; k < stList_length(incomingEndList); k++) {
 					stPinchBlock *incomingBlock = stPinchEnd_getBlock(stList_get(incomingEndList, k));
 					//We should have already encountered this block
-					assert(stHash_search(blockIndex, incomingBlock);
-					node->incomingEnds[k] = (int64_t) stHash_search(blockIndex, incomingBlock);
+					assert(stHash_search(blockIndex, incomingBlock));
+					node->incomingNodes[k] = (int64_t) stHash_search(blockIndex, incomingBlock);
 				}
+				node->data = block;
 				stHash_insert(blockIndex, block, (void*)nodeID);
-				ordering[nodeID] == node;
+				poGraph->nodes[nodeID] = node;
 				nodeID++;
 			}
 
@@ -155,9 +163,8 @@ POANode *getDAG(stPinchThreadSet *graph) {
 			}
 			stPinchEnd_destruct(oppositeEnd);
 		}
-
 	}
-	return ordering;
+	return poGraph;
 }
 
 /*If the graph is not acyclic, returns NULL. If the graph is acyclic, 
@@ -330,25 +337,6 @@ bool acyclicFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	return (directedWalk(seg1, seg2, _3PRIME) || directedWalk(seg1, seg2, _5PRIME));
 }
 
-void pinchToGraphViz(stPinchThreadSet *threadSet, FILE *output) {
-	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(threadSet);
-	fprintf(output, "digraph {\n");
-
-	stPinchBlock *block;
-	while ((block = stPinchThreadSetBlockIt_getNext(&blockIt)) != NULL) {
-		stPinchEnd end = stPinchEnd_constructStatic(block, 0);
-		stSet *adjacentEnds = stPinchEnd_getConnectedPinchEnds(&end);
-		stSetIterator *endIterator = stSet_getIterator(adjacentEnds);
-		stPinchEnd *adjacentEnd;
-		while((adjacentEnd = stSet_getNext(endIterator)) != NULL) {
-
-			fprintf(output, "\t%lu -> %lu\n", stHash_pointer(block), stHash_pointer(stPinchEnd_getBlock(adjacentEnd)));
-
-		}
-
-	}
-	fprintf(output, "}\n");
-}
 
 stPinchThreadSet *initializeGraph(stHash *sequences) {
 	stPinchThreadSet *threadSet = stPinchThreadSet_construct();
@@ -484,35 +472,25 @@ stList *traversePath(stPinchThreadSet *threadSet, stList *endsInPath, stHash *se
 	return path;
 }
 
-stList *heaviestPath(stPinchThreadSet *graph, stList *ordering) {
-	int N = stList_length(ordering);
-	int64_t *paths = calloc(sizeof(int), N);
-	int64_t *score = calloc(sizeof(int), N);
-
-	stHash *blockIndex = stHash_construct();
-	for (int64_t i = 0; i < N; i++) {
-		stHash_insert(blockIndex, stList_get(ordering, i), (void*)i);
-	}
+stList *heaviestPath(POGraph *poGraph) {
+	int N = poGraph->length;
+	int64_t *paths = calloc(sizeof(int64_t), N);
+	int64_t *score = calloc(sizeof(int64_t), N);
 
 	int64_t bestScore = -1;
 	int64_t bestEndpoint = -1;
 
 	for (int64_t i = N - 1; i >= 0; i--) {
-		stPinchEnd *end = stList_get(ordering, i);
-		stPinchBlock *block = stPinchEnd_getBlock(end);
+		PONode *node = poGraph->nodes[i];
 
-		int bestRight = -1;
-		int maxWeight = 0;
+		int64_t bestRight = -1;
+		int64_t maxWeight = 0;
 
-		stSet *precedingEnds = stPinchEnd_getConnectedPinchEnds(end);
-		stSetIterator *endIt = stSet_getIterator(precedingEnds);
-		stPinchEnd *precedingEnd;
-		while((precedingEnd = stSet_getNext(endIt))) {
-			stPinchBlock *precedingBlock = stPinchEnd_getBlock(precedingEnd);
-			int64_t weight = stPinchBlock_getDegree(precedingBlock) * stPinchBlock_getLength(precedingBlock);
-			if (weight > maxWeight) {
-				bestRight = (int64_t) stHash_search(blockIndex, block);
-				maxWeight = weight;
+		for (int64_t k = 0; k < node->nIncomingNodes; k++) {
+			PONode *incomingNode = poGraph->nodes[node->incomingNodes[k]];
+			if (incomingNode->weight > maxWeight) {
+				bestRight = incomingNode->nodeID;
+				maxWeight = incomingNode->weight;
 			}
 
 		}
@@ -529,9 +507,8 @@ stList *heaviestPath(stPinchThreadSet *graph, stList *ordering) {
 	//traceback
 	fprintf(stderr, "Tracing back path\n");
 	stList *path = stList_construct();
-	for (int i = bestEndpoint; i >= 0; i = paths[i]) {
-		assert(stList_get(ordering, i));
-		stList_append(path, stList_get(ordering, i));
+	for (int64_t i = bestEndpoint; i >= 0; i = paths[i]) {
+		stList_append(path, poGraph->nodes[i]);
 	}
 
 	return path;
