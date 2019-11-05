@@ -61,13 +61,6 @@ static void testHeaviestPath(CuTest *testCase) {
 	stPinchEnd *end1 = stPinchEnd_construct(block1, 0);
 	stPinchEnd *end2 = stPinchEnd_construct(block2, 1);
 
-	stList *subsequences = stPinchEnd_getSubSequenceLengthsConnectingEnds(end1, end2);
-
-	fprintf(stderr, "Number of connecting adjacencies: %ld\n", stList_length(subsequences));
-	stIntTuple *adj = stList_pop(subsequences);
-	fprintf(stderr, "Tuple length: %ld\n", stIntTuple_length(adj));
-	fprintf(stderr, "tuple: %ld\n", stIntTuple_get(adj, 0));
-
 }
 
 static void testPoGraph(CuTest *testCase) {
@@ -78,11 +71,15 @@ static void testPoGraph(CuTest *testCase) {
 	stPinchThread_pinch(thread1, thread2, 50, 50, 10, 1);
 	stPinchThread_pinch(thread1, thread2, 70, 70, 10, 1);
 
-    //stPinchBlock *block1 = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 50));
+    stPinchBlock *block1 = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 50));
+	stPinchBlock *block2 = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 70));
 
 	POGraph *poGraph = getPartialOrderGraph(graph);
 
-    CuAssertTrue(testCase, poGraph->length == 2);
+    assert(poGraph->length == 2);
+	assert(poGraph->nodes[0]->data == block1);
+	assert(poGraph->nodes[1]->data == block2);
+	assert(poGraph->nodes[1]->nIncomingNodes == 1);
 
 }
 

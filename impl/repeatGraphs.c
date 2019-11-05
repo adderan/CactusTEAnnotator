@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "bioioC.h"
+#include "sonLibTypes.h"
 #include "pairwiseAlignment.h"
 
 #include "stPinchGraphs.h"
@@ -106,9 +107,9 @@ POGraph *getPartialOrderGraph(stPinchThreadSet *graph) {
 	POGraph *poGraph = malloc(sizeof(POGraph));
 	poGraph->nodes = malloc(sizeof(PONode*) * N);
 	poGraph->length = N;
+
 	while((startBlock = stPinchThreadSetBlockIt_getNext(&blockIt))) {
 
-		//doesn't matter which end
 		stPinchEnd *startEnd = stPinchEnd_construct(startBlock, _5PRIME);
 
 		if (stSet_search(seen, startEnd)) continue;
@@ -120,23 +121,28 @@ POGraph *getPartialOrderGraph(stPinchThreadSet *graph) {
 			end = stList_pop(stack);
 			block = stPinchEnd_getBlock(end);
 
-			if (stSet_search(seen, end)) continue;
+			stSet_insert(seen, end);
 
 			stSet *incomingAdjacencies = stPinchEnd_getConnectedPinchEnds(end);
 			stSetIterator *incomingEndIt = stSet_getIterator(incomingAdjacencies);
-			stPinchEnd *incomingEnd;
-			bool addToOrdering = true;
-			while((incomingEnd = stSet_getNext(incomingEndIt)) != NULL) {
-				if (!stSet_search(seen, incomingEnd)) {
-					addToOrdering = false;
-					stList_append(stack, incomingEnd);
-					break;
-				}
+			stPinchEnd *incomingRedEnd;
+			stList *unseenPredecessors = stList_construct();
+			while((incomingRedEnd = stSet_getNext(incomingEndIt)) != NULL) {
+				stPinchEnd *incomingBlackEnd = stPinchEnd_construct(stPinchEnd_getBlock(incomingRedEnd), !stPinchEnd_getOrientation(incomingRedEnd));
+				if (!stSet_search(seen, incomingBlackEnd)) 
+					stList_append(unseenPredecessors, incomingBlackEnd);
 			}
 			stSet_destructIterator(incomingEndIt);
 
-			if (addToOrdering) {
-				stSet_insert(seen, end);
+			if (stList_length(unseenPredecessors) > 0) {
+				//re-visit this block after visiting all predecessors
+				stList_append(stack, end);
+				stList_appendAll(stack, unseenPredecessors);
+			}
+
+			else {
+				//seen all the predecessors, so add this block
+				//to the partial order graph
 				PONode *node = malloc(sizeof(PONode));
 				node->nodeID = nodeID;
 				node->incomingNodes = malloc(sizeof(int64_t)*stPinchEnd_getNumberOfConnectedPinchEnds(end));
@@ -145,23 +151,24 @@ POGraph *getPartialOrderGraph(stPinchThreadSet *graph) {
 				for (int k = 0; k < stList_length(incomingEndList); k++) {
 					stPinchBlock *incomingBlock = stPinchEnd_getBlock(stList_get(incomingEndList, k));
 					//We should have already encountered this block
-					assert(stHash_search(blockIndex, incomingBlock));
 					node->incomingNodes[k] = (int64_t) stHash_search(blockIndex, incomingBlock);
 				}
 				node->data = block;
 				stHash_insert(blockIndex, block, (void*)nodeID);
 				poGraph->nodes[nodeID] = node;
 				nodeID++;
-			}
 
-			stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
-			stSet *outgoingAdjacencies = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
-			stSetIterator *outgoingEndIt = stSet_getIterator(outgoingAdjacencies);
-			stPinchEnd *outgoingEnd;
-			while((outgoingEnd = stSet_getNext(outgoingEndIt))) {
-				stList_append(stack, outgoingEnd);
+				//visit next blocks
+				stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
+				stSet *outgoingAdjacencies = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
+				stSetIterator *outgoingEndIt = stSet_getIterator(outgoingAdjacencies);
+				stPinchEnd *outgoingEnd;
+				while((outgoingEnd = stSet_getNext(outgoingEndIt))) {
+					if (!stSet_search(seen, outgoingEnd)) stList_append(stack, outgoingEnd);
+				}
+				stPinchEnd_destruct(oppositeEnd);
 			}
-			stPinchEnd_destruct(oppositeEnd);
+			stList_destruct(unseenPredecessors);
 		}
 	}
 	return poGraph;
@@ -198,7 +205,6 @@ bool graphIsAcyclic(stPinchThreadSet *graph) {
 			if (stHash_search(coloring, end) ==
 					stHash_search(coloring, oppositeEnd)) {
 				//encountered cycle
-				fprintf(stderr, "Encountered cycle at end %ld, both ends %p.\n", stPinchEnd_hashFn(end), stHash_search(coloring, end));
 				stList_destruct(stack);
 				return false;
 			}
