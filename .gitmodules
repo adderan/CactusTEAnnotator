@@ -7,3 +7,6 @@
 [submodule "smhasher"]
 	path = smhasher
 	url = https://github.com/aappleby/smhasher
+[submodule "cPecan"]
+	path = cPecan
+	url = https://github.com/adderan/cPecan
