@@ -31,48 +31,6 @@ int main(int argc, char **argv) {
 	if (gvizDebugFilename) {
 		//printBiedgedGraph(graph, gvizDebugFilename);
 	}
-<<<<<<< HEAD
-	fprintf(stderr, "Total blocks: %ld\n", stPinchThreadSet_getTotalBlockNumber(threadSet));
-
-	fprintf(stderr, "Number of components: %ld\n", stSortedSet_size(stPinchThreadSet_getThreadComponents(threadSet)));
-
-	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(threadSet);
-	//stPinchBlock *block;
-	//while((block = stPinchThreadSetBlockIt_getNext(&blockIt)) != NULL) {
-	//	printf("Block degree: %ld\n", stPinchBlock_getDegree(block));
-	//}
-	
-	stPinchBlock *firstBlock = stPinchThreadSetBlockIt_getNext(&blockIt);
-	stPinchBlockIt segmentIt = stPinchBlock_getSegmentIterator(firstBlock);
-	stPinchSegment *firstSegment = stPinchBlockIt_getNext(&segmentIt);
-	printf("First segment start %ld\n", stPinchSegment_getStart(firstSegment));
-	stPinchEnd firstEnd = stPinchEnd_constructStatic(firstBlock, 1);
-	stPinchEnd *end = &firstEnd;
-	stPinchBlock *block;
-	stSet *seen = stSet_construct();
-	while(true) {
-		block = stPinchEnd_getBlock(end);
-		printf("Arrived at %d end of block of length %ld, degree %ld\n", stPinchEnd_getOrientation(end), stPinchBlock_getLength(block), stPinchBlock_getDegree(block));
-		if (stSet_search(seen, block)) {
-			printf("Traversed cycle");
-			break;
-		}
-		stSet_insert(seen, block);
-
-		stSet *adjacentEnds = stPinchEnd_getConnectedPinchEnds(end);
-		printf("Found %ld connected blocks\n", stSet_size(adjacentEnds));
-		stPinchEnd *nextEnd = stSet_peek(adjacentEnds);
-		if (nextEnd == NULL) {
-			printf("No adjacent ends\n");
-			break;
-		}
-		printf("Number of subsequences: %ld\n", stList_length(stPinchEnd_getSubSequenceLengthsConnectingEnds(end, nextEnd)));
-		end = nextEnd;
-
-	}
-
-=======
->>>>>>> pinch-graphs-redo-ordering
 
 	fprintf(stderr, "Graph has %ld blocks\n", stPinchThreadSet_getTotalBlockNumber(graph));
 
