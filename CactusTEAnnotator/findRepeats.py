@@ -111,6 +111,15 @@ def runLastz(job, fastaID, args):
 
     return {"alignments": job.fileStore.writeGlobalFile(alignments)}
 
+def sortAlignments(job, alignmentsID, args):
+    """Sort a set of alignments in cigar format by highest to lowest
+    score.
+    """
+    alignments = job.fileStore.readGlobalFile(alignmentsID)
+    sortedAlignments = job.fileStore.getLocalTempFile()
+    runCmd(parameters=["sort", os.path.basename(alignments), "-k10", "-n", "-r"], outfile=sortedAlignments, args=args)
+    return job.fileStore.writeGlobalFile(sortedAlignments)
+
 def sampleLastzAlignments(job, fastaID, args):
     returnValues = {}
 
@@ -322,8 +331,16 @@ def lastzPipeline(job, halID, genome, args):
     else:
         lastzJob = Job.wrapJobFn(sampleLastzAlignments, fastaID=trfJob.rv(), args=args)
     trfJob.addFollowOn(lastzJob)
+    alignmentsID = lastzJob.rv('alignments')
 
-    return {"masked_candidates.fa": trfJob.rv(), "alignments.cigar": lastzJob.rv('alignments'), "alignmentFiles": lastzJob.rv()}
+
+    #Sort the alignments so that high-scoring homologies are prioritized
+    #when building the pinch graph
+    sortAlignmentsJob = Job.wrapJobFn(sortAlignments, alignmentsID=alignmentsID, args=args)
+    lastzJob.addFollowOn(sortAlignmentsJob)
+    alignmentsID = sortAlignmentsJob.rv()
+
+    return {"masked_candidates.fa": trfJob.rv(), "alignments.cigar": alignmentsID, "alignmentFiles": lastzJob.rv()}
 
 def poaPipeline(job, halID, genome, args):
     #Get candidate TE insertions from the cactus alignment

@@ -1,14 +1,32 @@
 murmurHashSources=smhasher/src/MurmurHash3.cpp
 
 cpp=g++
-cflags=-g -O0 -Wall -Werror
-cppflags=-g -O0 -Wall
+cc=gcc
+
+cflags_opt=-Wall -DNDEBUG
+cflags_debug=-g -O0 -Wall
+
+cppflags_opt=-Wall -DNDEBUG
+cppflags_debug=-g -O0 -Wall
+
+ifndef TE_ANNOTATOR_DEBUG
+	cflags=${cflags_opt}
+	cppflags=${cppflags_opt}
+else
+	cflags=${cflags_debug}
+	cppflags=${cppflags_debug}
+endif
 
 objs=Minhash.o
 sources=impl/Minhash.cpp
 
+cObjs=repeatGraph.o
+cSources=impl/repeatGraph.c
+
 libSonLib = cactus/submodules/sonLib/lib/sonLib.a
+libCu = cactus/submodules/sonLib/lib/cuTest.a
 sonLibInc = cactus/submodules/sonLib/lib/
+sonLibTestInc = cactus/submodules/sonLib/C/tests/
 
 libHal = cactus/submodules/hal/lib/halLib.a
 halInc = cactus/submodules/hal/lib/
@@ -22,10 +40,10 @@ pinchesAndCactiLib = cactus/submodules/sonLib/lib/stPinchesAndCacti.a
 
 liblpo = poaV2/liblpo.a
 
-all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries cte bin/lastz
+all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries bin/lastz local
 
 
-local: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs bin/getElementsFromPinchGraph bin/getCoveredSeeds
+local: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs bin/getElementsFromPinchGraph bin/getCoveredSeeds bin/repeatGraphTests
 
 halBinaries:
 	cd cactus && make
@@ -59,7 +77,7 @@ bin/minhash: impl/MinhashMain.cpp ${libSonLib} ${objs}
 	${cpp} ${cppflags} -I smhasher/src -I ${sonLibInc} -o ./bin/minhash impl/MinhashMain.cpp ${murmurHashSources} ${objs} ${libSonLib}
 
 bin/poToGraphViz: impl/poToGraphViz.c ${liblpo} ${libSonLib}
-	gcc ${cflags} -o bin/poToGraphViz -I poaV2/ -I ${sonLibInc} impl/poToGraphViz.c ${liblpo} ${libSonLib} -lm
+	${cc} ${cflags} -o bin/poToGraphViz -I poaV2/ -I ${sonLibInc} impl/poToGraphViz.c ${liblpo} ${libSonLib} -lm
 
 bin/getTECandidates: impl/getTECandidates.cpp ${libHal} ${libSonLib}
 	PATH=${PWD}/cactus/submodules/hdf5/bin:${PATH} h5c++ ${cppflags} -o bin/getTECandidates -I ${halInc} -I ${sonLibInc} impl/getTECandidates.cpp ${libHal} ${libSonLib} -lm
@@ -69,28 +87,35 @@ bin/getSequencesFromHAL: impl/getSequencesFromHAL.cpp ${libHal} ${libSonLib}
 
 
 bin/neighborJoining: impl/neighborJoining.c ${libSonLib}
-	gcc -g -o bin/neighborJoining -I ${sonLibInc} impl/neighborJoining.c ${libSonLib} -lm
+	${cc} ${cflags} -o bin/neighborJoining -I ${sonLibInc} impl/neighborJoining.c ${libSonLib} -lm
 
 bin/denseBundles: impl/denseBundles.c ${libSonLib}
-	gcc ${cflags} -o bin/denseBundles -I ${sonLibInc} -I poaV2/ impl/denseBundles.c ${libSonLib} ${liblpo} -lm
+	${cc} ${cflags} -o bin/denseBundles -I ${sonLibInc} -I poaV2/ impl/denseBundles.c ${libSonLib} ${liblpo} -lm
 
 bin/clusterByAlignmentDistances: impl/clusterByAlignmentDistances.cpp ${libSonLib} ${liblpo} ${objs}
 	g++ -g -o bin/clusterByAlignmentDistances -I ${sonLibInc} -I poaV2/ impl/clusterByAlignmentDistances.cpp ${objs} ${libSonLib} ${murmurHashSources} ${liblpo} -lm
 
 bin/getThreadPartitions: impl/getThreadPartitions.c ${liblpo}
-	gcc -g -o bin/getThreadPartitions -I poaV2/ impl/getThreadPartitions.c ${liblpo} -lm
+	${cc} ${cflags} -o bin/getThreadPartitions -I poaV2/ impl/getThreadPartitions.c ${liblpo} -lm
 
 bin/getHeaviestBundles: impl/getHeaviestBundles.c poaV2/liblpo.a
-	gcc ${cflags} -o bin/getHeaviestBundles -I poaV2/ impl/getHeaviestBundles.c ${liblpo} -lm
+	${cc} ${cflags} -o bin/getHeaviestBundles -I poaV2/ impl/getHeaviestBundles.c ${liblpo} -lm
 
 bin/filterNs: impl/filterNs.c ${libSonLib}
-	gcc ${cflags} -o bin/filterNs -I ${sonLibInc} impl/filterNs.c ${libSonLib} -lm
+	${cc} ${cflags} -o bin/filterNs -I ${sonLibInc} impl/filterNs.c ${libSonLib} -lm
 
-bin/getElementsFromPinchGraph: impl/getElementsFromPinchGraph.c ${libSonLib}
-	gcc ${cflags} -o bin/getElementsFromPinchGraph -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/getElementsFromPinchGraph.c ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} -lm -lz
+impl/repeatGraphs.o: impl/repeatGraphs.c
+	${cc} ${cflags} -DDEBUG_ -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} -c impl/repeatGraphs.c
+	mv repeatGraphs.o impl/repeatGraphs.o
+
+bin/repeatGraphTests: impl/repeatGraphs.o impl/repeatGraphTests.c ${libSonLib} ${pinchesAndCactiLib} ${cafLib} ${cactusLib}
+	${cc} ${cflags} -o bin/repeatGraphTests -I impl/ -I ${sonLibInc} -I ${sonLibTestInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/repeatGraphTests.c impl/repeatGraphs.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} ${libCu} -lm -lz
+
+bin/getElementsFromPinchGraph: impl/repeatGraphs.o impl/getElementsFromPinchGraph.c ${libSonLib} ${pinchesAndCactiLib} ${cafLib} ${cactusLib}
+	${cc} ${cflags} -o bin/getElementsFromPinchGraph -I impl/ -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/getElementsFromPinchGraph.c impl/repeatGraphs.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} -lm -lz
 
 bin/getCoveredSeeds: impl/getCoveredSeeds.c ${libSonLib}
-	gcc ${cflags} -o bin/getCoveredSeeds -I ${sonLibInc} impl/getCoveredSeeds.c ${libSonLib} -lm
+	${cc} ${cflags} -o bin/getCoveredSeeds -I ${sonLibInc} impl/getCoveredSeeds.c ${libSonLib} -lm
 
 bin/build_clusters: scripts/build_clusters
 	cp scripts/build_clusters bin/build_clusters

@@ -1,35 +1,37 @@
-#include <stdio.h>
+#include "repeatGraphs.h"
+#include "sonLib.h"
 #include "bioioC.h"
-#include "pairwiseAlignment.h"
 
-#include "stPinchGraphs.h"
-#include "stPinchIterator.h"
 
+void printSeqList(stList *seqs) {
+	for (int i = 0; i < stList_length(seqs); i++) {
+		printf("%s", (char*) stList_get(seqs, i));
+	}
+}
 int main(int argc, char **argv) {
-	
-	FILE *sequencesFile = fopen(argv[2], "r");
-	struct List *seqs = constructEmptyList(0, NULL);
-    struct List *seqLengths = constructEmptyList(0, free);
-    struct List *headers = constructEmptyList(0, free);
-	fastaRead(sequencesFile, seqs, seqLengths, headers);
+	char *sequencesFilename = argv[1];
+	char *alignmentsFilename = argv[2];
+	char *gvizDebugFilename = argv[3];
 
-	stPinchThreadSet *threadSet = stPinchThreadSet_construct();
+	struct List *seqs = constructEmptyList(0, NULL);
+	struct List *seqLengths = constructEmptyList(0, free);
+	struct List *headers = constructEmptyList(0, free);
+	FILE *sequencesFile = fopen(sequencesFilename, "r");
+	fastaRead(sequencesFile, seqs, seqLengths, headers);
+	fclose(sequencesFile);
+	stHash *sequences = stHash_construct();
 	int64_t threadName;
 	for (int i = 0; i < seqs->length; i++) {
 		sscanf(headers->list[i], "%ld", &threadName);
-		stPinchThreadSet_addThread(threadSet, threadName, 0, strlen(seqs->list[i]));
+		stHash_insert(sequences, (void*) threadName, seqs->list[i]);
 	}
-	
-	stPinchIterator *pinchIterator = stPinchIterator_constructFromFile(argv[1]);
-	stPinch *pinch = NULL;
-	while((pinch = stPinchIterator_getNext(pinchIterator)) != NULL) {
-		stPinchThread *thread1 = stPinchThreadSet_getThread(threadSet, pinch->name1);
-		stPinchThread *thread2 = stPinchThreadSet_getThread(threadSet, pinch->name2);
-		assert (thread1 != NULL);
-		assert (thread2 != NULL);
-		stPinchThread_pinch(thread1, thread2, pinch->start1, pinch->start2, pinch->length, pinch->strand);
 
+	stPinchThreadSet *graph = buildRepeatGraph(sequences, alignmentsFilename);
+
+	if (gvizDebugFilename) {
+		//printBiedgedGraph(graph, gvizDebugFilename);
 	}
+<<<<<<< HEAD
 	fprintf(stderr, "Total blocks: %ld\n", stPinchThreadSet_getTotalBlockNumber(threadSet));
 
 	fprintf(stderr, "Number of components: %ld\n", stSortedSet_size(stPinchThreadSet_getThreadComponents(threadSet)));
@@ -69,8 +71,19 @@ int main(int argc, char **argv) {
 
 	}
 
+=======
+>>>>>>> pinch-graphs-redo-ordering
 
-	fclose(sequencesFile);
-	stPinchIterator_destruct(pinchIterator);
-	stPinchThreadSet_destruct(threadSet);
+	fprintf(stderr, "Graph has %ld blocks\n", stPinchThreadSet_getTotalBlockNumber(graph));
+
+	assert(graphIsAcyclic(graph));
+
+	stList *poGraph = getPartialOrderGraph(graph);
+	assert(stPinchThreadSet_getTotalBlockNumber(graph) == stList_length(poGraph));
+	stList *path = heaviestPath(poGraph);
+
+	fprintf(stderr, "Path length: %ld blocks\n", stList_length(path));
+
+
+	stPinchThreadSet_destruct(graph);
 }
