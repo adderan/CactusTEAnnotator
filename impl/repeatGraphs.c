@@ -96,7 +96,6 @@ stList *getPartialOrderGraph(stPinchThreadSet *graph) {
 	stList *stack = stList_construct();
 
 	stSet *seen = stSet_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void*) stPinchEnd_destruct);
-	stSet *addedToOrdering = stSet_construct3(stPinchEnd_hashFn, stPinchEnd_equalsFn, (void*) stPinchEnd_destruct);
 
 	stHash *blockIndex = stHash_construct();
 
@@ -118,6 +117,10 @@ stList *getPartialOrderGraph(stPinchThreadSet *graph) {
 		while(stList_length(stack) > 0) {
 			end = stList_pop(stack);
 			block = stPinchEnd_getBlock(end);
+
+			//this only has to be true because negative pinches
+			//are discarded
+			assert(stPinchEnd_getOrientation(end) == _5PRIME);
 
 			if (stSet_search(seen, end)) continue;
 
@@ -153,7 +156,7 @@ stList *getPartialOrderGraph(stPinchThreadSet *graph) {
 					//We should have already encountered this block
 					node->incomingNodes[k] = (int64_t) stHash_search(blockIndex, incomingBlock);
 				}
-				node->data = block;
+				node->data = end;
 				stHash_insert(blockIndex, block, (void*)nodeID);
 				stList_append(poGraph, node);
 				nodeID++;
@@ -403,16 +406,19 @@ stPinchSegment *getSegment(stPinchBlock *block, int64_t threadName) {
 	return segment;
 }
 
-stList *traversePath(stPinchThreadSet *threadSet, stList *endsInPath, stHash *sequences) {
-	stList *path = stList_construct();
+stList *traversePath(stPinchThreadSet *threadSet, stList *path, stHash *sequences) {
+	stList *pathSeqList = stList_construct();
 
-	for (int64_t i = 0; i < stList_length(endsInPath); i++) {
+	int64_t pathLength = 0;
+	for (int64_t i = 0; i < stList_length(path); i++) {
 		if (i > 0) {
 			//Fill in the adjacency connecting the previous block
 			//to this one
-			stPinchEnd *prevEnd = stList_get(endsInPath, i - 1);
+			PONode *prevNode = stList_get(path, i - 1);
+			stPinchEnd *prevEnd = prevNode->data;
 			stPinchEnd *end1 = stPinchEnd_construct(stPinchEnd_getBlock(prevEnd), !stPinchEnd_getOrientation(prevEnd));
-			stPinchEnd *end2 = stList_get(endsInPath, i);
+			PONode *node = stList_get(path, i);
+			stPinchEnd *end2 = node->data;
 			assert(end1);
 			assert(end2);
 
@@ -435,10 +441,11 @@ stList *traversePath(stPinchThreadSet *threadSet, stList *endsInPath, stHash *se
 				stPinchSegment *seg2 = getSegment(block2, threadName);
 
 				int64_t adjacencyLength = stPinchSegment_getStart(seg2) - stPinchSegment_getStart(seg1) - stPinchSegment_getLength(seg1);
-				assert(adjacencyLength > 0);
+				assert(adjacencyLength >= 0);
 
 				char *adj = malloc(sizeof(char)* (adjacencyLength + 1));
-				strncpy(stHash_search(sequences, (void*)threadName), adj, adjacencyLength);
+				char *seq = stHash_search(sequences, (void*)threadName);
+				strncpy(seq, adj, adjacencyLength);
 				adj[adjacencyLength] = '\0';
 				stList_append(candidateAdjacencySeqs, adj);
 
@@ -460,11 +467,13 @@ stList *traversePath(stPinchThreadSet *threadSet, stList *endsInPath, stHash *se
 			}
 			assert(adjacencySequence);
 
-			stList_append(path, adjacencySequence);
+			pathLength += strlen(adjacencySequence);
+			stList_append(pathSeqList, adjacencySequence);
 
 		}
 
-		stPinchEnd *end = stList_get(endsInPath, i);
+		PONode *node = stList_get(path, i);
+		stPinchEnd *end = node->data;
 		assert(end);
 		stPinchBlock *block = stPinchEnd_getBlock(end);
 		stPinchSegment *segment = stPinchBlock_getFirst(block);
@@ -473,9 +482,23 @@ stList *traversePath(stPinchThreadSet *threadSet, stList *endsInPath, stHash *se
 		strncpy(stHash_search(sequences, (void*)threadName), blockSequence, stPinchSegment_getLength(segment));
 		blockSequence[stPinchSegment_getLength(segment) + 1] = '\0';
 
-		stList_append(path, blockSequence);
+		pathLength += strlen(blockSequence);
+		stList_append(pathSeqList, blockSequence);
 	}
-	return path;
+
+	/*
+	char *pathSequence = malloc(sizeof(char)*(pathLength + 1));
+	char *pos = pathSequence;
+	for (int i = 0; i < stList_length(pathSeqList); i++) {
+		char *pathSubsequence = stList_get(pathSeqList, i);
+		strncpy(pos, pathSubsequence, strlen(pathSubsequence));
+		pos += strlen(pathSubsequence);
+		free(pathSubsequence);
+	}
+	pathSequence[pathLength] = '\0';
+	assert(pathLength == strlen(pathSequence));
+	*/
+	return pathSeqList;
 }
 
 //basic dp method for getting the consensus sequence

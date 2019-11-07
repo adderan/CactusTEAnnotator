@@ -42,6 +42,8 @@ int main(int argc, char **argv) {
 
 	fprintf(stderr, "Path length: %ld blocks\n", stList_length(path));
 
+	stList *consensusSequence = traversePath(graph, path, sequences);
+	fprintf(stderr, "%ld subsequences in consensus sequence\n", stList_length(consensusSequence));
 
 	stPinchThreadSet_destruct(graph);
 }
