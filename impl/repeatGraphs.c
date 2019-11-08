@@ -156,7 +156,8 @@ stList *getPartialOrderGraph(stPinchThreadSet *graph) {
 					//We should have already encountered this block
 					node->incomingNodes[k] = (int64_t) stHash_search(blockIndex, incomingBlock);
 				}
-				node->data = end;
+				node->data = block;
+				node->orientation = stPinchEnd_getOrientation(end);
 				stHash_insert(blockIndex, block, (void*)nodeID);
 				stList_append(poGraph, node);
 				nodeID++;
@@ -415,15 +416,11 @@ stList *traversePath(stPinchThreadSet *threadSet, stList *path, stHash *sequence
 			//Fill in the adjacency connecting the previous block
 			//to this one
 			PONode *prevNode = stList_get(path, i - 1);
-			stPinchEnd *prevEnd = prevNode->data;
-			stPinchEnd *end1 = stPinchEnd_construct(stPinchEnd_getBlock(prevEnd), !stPinchEnd_getOrientation(prevEnd));
-			PONode *node = stList_get(path, i);
-			stPinchEnd *end2 = node->data;
-			assert(end1);
-			assert(end2);
+			stPinchBlock *block1 = prevNode->data;
 
-			stPinchBlock *block1 = stPinchEnd_getBlock(end1);
-			stPinchBlock *block2 = stPinchEnd_getBlock(end2);
+			PONode *node = stList_get(path, i);
+			stPinchBlock *block2 = node->data;
+
 			stSortedSet *threads1 = 
 				getThreads(stPinchBlock_getFirst(block1));
 
@@ -473,9 +470,9 @@ stList *traversePath(stPinchThreadSet *threadSet, stList *path, stHash *sequence
 		}
 
 		PONode *node = stList_get(path, i);
-		stPinchEnd *end = node->data;
-		assert(end);
-		stPinchBlock *block = stPinchEnd_getBlock(end);
+		stPinchBlock *block = node->data;
+		assert(block);
+		stPinchEnd *end = stPinchEnd_construct(block, node->orientation);
 		stPinchSegment *segment = stPinchBlock_getFirst(block);
 		int64_t threadName = stPinchThread_getName(stPinchSegment_getThread(segment));
 		char *blockSequence = malloc(sizeof(char) * (stPinchSegment_getLength(segment) + 1));
@@ -543,6 +540,7 @@ stList *heaviestPath(stList *poGraph) {
 	for (int64_t i = bestEndpoint; i < N; i = paths[i]) {
 		stList_append(path, stList_get(poGraph, i));
 	}
+	stList_reverse(path);
 
 	return path;
 }
