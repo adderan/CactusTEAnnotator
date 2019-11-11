@@ -470,7 +470,7 @@ stList *traversePath(stPinchThreadSet *threadSet, stList *path, stHash *sequence
 		}
 
 		PONode *node = stList_get(path, i);
-		stPinchBlock *block = node->data;
+		stPinchBlock *block = (stPinchBlock*) node->data;
 		assert(block);
 		stPinchEnd *end = stPinchEnd_construct(block, node->orientation);
 		stPinchSegment *segment = stPinchBlock_getFirst(block);
@@ -537,10 +537,12 @@ stList *heaviestPath(stList *poGraph) {
 	//traceback
 	fprintf(stderr, "Tracing back path\n");
 	stList *path = stList_construct();
-	for (int64_t i = bestEndpoint; i < N; i = paths[i]) {
+	for (int64_t i = bestEndpoint; i >= 0; i = paths[i]) {
+		fprintf(stderr, "Arrived at node %ld\n", i);
+		PONode *node = stList_get(poGraph, i);
+		assert(node->data);
 		stList_append(path, stList_get(poGraph, i));
 	}
 	stList_reverse(path);
-
 	return path;
 }
