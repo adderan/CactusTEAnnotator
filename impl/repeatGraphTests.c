@@ -85,11 +85,27 @@ static void testPoGraph(CuTest *testCase) {
 
 }
 
+static void testGetPathSequence(CuTest *testCase) {
+	stPinchThreadSet *graph = stPinchThreadSet_construct();
+	stPinchThread *thread1 = stPinchThreadSet_addThread(graph, 1, 0, 100);
+	stPinchThread *thread2 = stPinchThreadSet_addThread(graph, 2, 0, 100);
+
+	stPinchThread_pinch(thread1, thread2, 50, 50, 10, 1);
+	stPinchThread_pinch(thread1, thread2, 70, 70, 10, 1);
+
+    stPinchBlock *block1 = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 50));
+	stPinchBlock *block2 = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 70));
+
+	stPinchEnd *end1 = stPinchEnd_construct(block1, _3PRIME);
+	stPinchEnd *end2 = stPinchEnd_construct(block2, _5PRIME);
+}
+
 int main(int argc, char **argv) {
 	CuSuite *suite = CuSuiteNew();
 	SUITE_ADD_TEST(suite, testDirectedWalk);
 	SUITE_ADD_TEST(suite, testAcyclic);
 	SUITE_ADD_TEST(suite, testHeaviestPath);
     SUITE_ADD_TEST(suite, testPoGraph);
+	SUITE_ADD_TEST(suite, testGetPathSequence);
 	CuSuiteRun(suite);
 }

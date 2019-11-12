@@ -407,10 +407,9 @@ stPinchSegment *getSegment(stPinchBlock *block, int64_t threadName) {
 	return segment;
 }
 
-stList *traversePath(stPinchThreadSet *threadSet, stList *path, stHash *sequences) {
+stList *traversePath(stPinchThreadSet *graph, stList *path, stHash *sequences) {
 	stList *pathSeqList = stList_construct();
 
-	int64_t pathLength = 0;
 	for (int64_t i = 0; i < stList_length(path); i++) {
 		if (i > 0) {
 			//Fill in the adjacency connecting the previous block
@@ -430,41 +429,38 @@ stList *traversePath(stPinchThreadSet *threadSet, stList *path, stHash *sequence
 			stSortedSet *sharedThreadsSet = stSortedSet_getIntersection(threads1, threads2);
 			stList *sharedThreads = stSortedSet_getList(sharedThreadsSet);
 
-			stList *candidateAdjacencySeqs = stList_construct();
-			for (int j = 0; j < stList_length(sharedThreads); j++) {
-				int64_t threadName = (int64_t) stList_get(sharedThreads, j);
-
+			stPinchEnd *end1 = stPinchEnd_construct(block1, _3PRIME);
+			stPinchEnd *end2 = stPinchEnd_construct(block2, _5PRIME);
+			stList *seqLengths = stPinchEnd_getSubSequenceLengthsConnectingEnds(end1, end2);
+			
+			assert (stList_length(seqLengths) == stList_length(sharedThreads));
+			
+			assert(stList_length(sharedThreads) > 0);
+			int64_t bestAdjLength = INT_MAX;
+			int bestAdjStart;
+			int64_t adjThreadName;
+			for (int64_t k = 0; k < stList_length(sharedThreads); k++) {
+				int64_t threadName = stList_get(sharedThreads, k);
 				stPinchSegment *seg1 = getSegment(block1, threadName);
 				stPinchSegment *seg2 = getSegment(block2, threadName);
 
-				int64_t adjacencyLength = stPinchSegment_getStart(seg2) - stPinchSegment_getStart(seg1) - stPinchSegment_getLength(seg1);
-				assert(adjacencyLength >= 0);
-
-				char *adj = malloc(sizeof(char)* (adjacencyLength + 1));
-				char *seq = stHash_search(sequences, (void*)threadName);
-				strncpy(seq, adj, adjacencyLength);
-				adj[adjacencyLength] = '\0';
-				stList_append(candidateAdjacencySeqs, adj);
-
-			}
-
-			//pick the shortest one
-			int64_t minLength = INT_MAX;
-			char *adjacencySequence = NULL;
-			for (int j = 0; j < stList_length(candidateAdjacencySeqs); j++) {
-				char *adj = stList_get(candidateAdjacencySeqs, j);
-				if (strlen(adj) < minLength) {
-					minLength = strlen(adj);
-					free(adjacencySequence);
-					adjacencySequence = adj;
-				}
-				else {
-					free(adj);
+				int64_t adjLength = stPinchSegment_getStart(seg2) - 
+					stPinchSegment_getStart(seg1) - stPinchSegment_getLength(seg1);
+				assert(adjLength >= 0);
+				if (adjLength < bestAdjLength) {
+					bestAdjLength = adjLength;
+					bestAdjStart = stPinchSegment_getStart(seg1) + stPinchSegment_getLength(seg1);
+					adjThreadName = threadName;
 				}
 			}
+			char *adjacencySequence = malloc(sizeof(char) * (bestAdjLength + 1));
+			char *sequence = stHash_search(sequences, adjThreadName);
+			assert(sequence);
+			assert(strlen(sequence) >= bestAdjStart + bestAdjLength);
+
+			strncpy(adjacencySequence, sequence + bestAdjStart, bestAdjLength);
 			assert(adjacencySequence);
 
-			pathLength += strlen(adjacencySequence);
 			stList_append(pathSeqList, adjacencySequence);
 
 		}
@@ -475,26 +471,12 @@ stList *traversePath(stPinchThreadSet *threadSet, stList *path, stHash *sequence
 		stPinchEnd *end = stPinchEnd_construct(block, node->orientation);
 		stPinchSegment *segment = stPinchBlock_getFirst(block);
 		int64_t threadName = stPinchThread_getName(stPinchSegment_getThread(segment));
-		char *blockSequence = malloc(sizeof(char) * (stPinchSegment_getLength(segment) + 1));
-		strncpy(stHash_search(sequences, (void*)threadName), blockSequence, stPinchSegment_getLength(segment));
-		blockSequence[stPinchSegment_getLength(segment) + 1] = '\0';
-
-		pathLength += strlen(blockSequence);
+		char *threadSequence = stHash_search(sequences, threadName);
+		int64_t blockLength = stPinchSegment_getLength(segment);
+		char *blockSequence = malloc(sizeof(char) * (blockLength + 1));
+		strncpy(blockSequence, threadSequence, blockLength);
 		stList_append(pathSeqList, blockSequence);
 	}
-
-	/*
-	char *pathSequence = malloc(sizeof(char)*(pathLength + 1));
-	char *pos = pathSequence;
-	for (int i = 0; i < stList_length(pathSeqList); i++) {
-		char *pathSubsequence = stList_get(pathSeqList, i);
-		strncpy(pos, pathSubsequence, strlen(pathSubsequence));
-		pos += strlen(pathSubsequence);
-		free(pathSubsequence);
-	}
-	pathSequence[pathLength] = '\0';
-	assert(pathLength == strlen(pathSequence));
-	*/
 	return pathSeqList;
 }
 
@@ -531,14 +513,12 @@ stList *heaviestPath(stList *poGraph) {
 			bestEndpoint = i;
 			bestScore = score[i];
 		}
-		fprintf(stderr, "Score: %ld\n", score[i]);
 	}
 
 	//traceback
 	fprintf(stderr, "Tracing back path\n");
 	stList *path = stList_construct();
 	for (int64_t i = bestEndpoint; i >= 0; i = paths[i]) {
-		fprintf(stderr, "Arrived at node %ld\n", i);
 		PONode *node = stList_get(poGraph, i);
 		assert(node->data);
 		stList_append(path, stList_get(poGraph, i));

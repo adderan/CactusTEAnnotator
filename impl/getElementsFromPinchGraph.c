@@ -45,5 +45,9 @@ int main(int argc, char **argv) {
 	stList *consensusSequence = traversePath(graph, path, sequences);
 	fprintf(stderr, "%ld subsequences in consensus sequence\n", stList_length(consensusSequence));
 
+	for (int i = 0; i < stList_length(consensusSequence); i++) {
+		fprintf(stdout, "%s", (char*)stList_get(consensusSequence, i));
+	}
+	fprintf(stdout, "\n");
 	stPinchThreadSet_destruct(graph);
 }
