@@ -17,7 +17,8 @@ typedef struct PONode {
 	int64_t nodeID;
 	int64_t *incomingNodes;
 	int64_t nIncomingNodes;
-	int64_t weight;
+	int64_t length;
+	int64_t degree;
 	bool orientation;
 	void *data;
 } PONode;

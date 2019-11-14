@@ -2,12 +2,6 @@
 #include "sonLib.h"
 #include "bioioC.h"
 
-
-void printSeqList(stList *seqs) {
-	for (int i = 0; i < stList_length(seqs); i++) {
-		printf("%s", (char*) stList_get(seqs, i));
-	}
-}
 int main(int argc, char **argv) {
 	char *sequencesFilename = argv[1];
 	char *alignmentsFilename = argv[2];
@@ -38,16 +32,25 @@ int main(int argc, char **argv) {
 
 	stList *poGraph = getPartialOrderGraph(graph);
 	assert(stPinchThreadSet_getTotalBlockNumber(graph) == stList_length(poGraph));
-	stList *path = heaviestPath(poGraph);
+	
+	int64_t i = 0;
+	int64_t pathLength;
+	do {
+		stList *path = heaviestPath(poGraph);
 
-	fprintf(stderr, "Path length: %ld blocks\n", stList_length(path));
+		stList *consensusSequence = traversePath(graph, path, sequences);
 
-	stList *consensusSequence = traversePath(graph, path, sequences);
-	fprintf(stderr, "%ld subsequences in consensus sequence\n", stList_length(consensusSequence));
-
-	for (int i = 0; i < stList_length(consensusSequence); i++) {
-		fprintf(stdout, "%s", (char*)stList_get(consensusSequence, i));
+		fprintf(stdout, ">consensus_%ld\n", i);
+		pathLength = 0;
+		for (int i = 0; i < stList_length(consensusSequence); i++) {
+			char *subsequence = (char*)stList_get(consensusSequence, i);
+			pathLength += strlen(subsequence);
+			fprintf(stdout, "%s", subsequence);
+		}
+		fprintf(stdout, "\n");
+		i++;
 	}
-	fprintf(stdout, "\n");
+	while (pathLength > 50);
+
 	stPinchThreadSet_destruct(graph);
 }

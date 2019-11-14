@@ -147,7 +147,8 @@ stList *getPartialOrderGraph(stPinchThreadSet *graph) {
 				//to the partial order graph
 				PONode *node = malloc(sizeof(PONode));
 				node->nodeID = nodeID;
-				node->weight = stPinchBlock_getDegree(block) * stPinchBlock_getLength(block);
+				node->degree = stPinchBlock_getDegree(block);
+				node->length =  stPinchBlock_getLength(block);
 				node->incomingNodes = malloc(sizeof(int64_t)*stPinchEnd_getNumberOfConnectedPinchEnds(end));
 				node->nIncomingNodes = stPinchEnd_getNumberOfConnectedPinchEnds(end);
 				stList *incomingEndList = stSet_getList(incomingAdjacencies);
@@ -496,18 +497,20 @@ stList *heaviestPath(stList *poGraph) {
 		//fprintf(stderr, "Node ID: %ld, incoming nodes: %ld node weight: %ld\n", node->nodeID, node->nIncomingNodes, node->weight);
 
 		int64_t bestLeft = -1;
+		int64_t bestLeftScore = 0;
 		int64_t maxWeight = 0;
 
 		for (int64_t k = 0; k < node->nIncomingNodes; k++) {
 			PONode *incomingNode = stList_get(poGraph, node->incomingNodes[k]);
-			if (incomingNode->weight > maxWeight) {
+			int64_t leftWeight = incomingNode->degree * incomingNode->length;
+			if (leftWeight > maxWeight) {
 				bestLeft = incomingNode->nodeID;
-				maxWeight = incomingNode->weight;
+				bestLeftScore = score[incomingNode->nodeID];
 			}
 		}
-
 		paths[i] = bestLeft;
-		score[i] = maxWeight + score[bestLeft];
+		int64_t weight = node->degree * node->length;
+		score[i] = bestLeftScore + weight;
 
 		if (score[i] > bestScore) {
 			bestEndpoint = i;
@@ -516,7 +519,6 @@ stList *heaviestPath(stList *poGraph) {
 	}
 
 	//traceback
-	fprintf(stderr, "Tracing back path\n");
 	stList *path = stList_construct();
 	for (int64_t i = bestEndpoint; i >= 0; i = paths[i]) {
 		PONode *node = stList_get(poGraph, i);
@@ -524,5 +526,20 @@ stList *heaviestPath(stList *poGraph) {
 		stList_append(path, stList_get(poGraph, i));
 	}
 	stList_reverse(path);
+
+	/*Reduce block degree along the path according
+	to the number of threads at the thinnest point.
+	*/
+	int minDegree = INT_MAX;
+	for (int64_t i = 0; i < stList_length(path); i++) {
+		PONode *node = stList_get(path, i);
+		if (node->degree < minDegree)
+			minDegree = node->degree;
+	}
+	for (int64_t i = 0; i < stList_length(path); i++) {
+			PONode *node = stList_get(path, i);
+			node->degree = node->degree - minDegree;
+			//node->degree = 0;
+	}
 	return path;
 }
