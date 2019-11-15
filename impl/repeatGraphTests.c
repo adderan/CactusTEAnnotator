@@ -81,7 +81,7 @@ static void testPoGraph(CuTest *testCase) {
 	PONode *node2 = stList_get(poGraph, 1);
 	assert(node1->data == block1);
 	assert(node2->data == block2);
-	assert(node2->nIncomingNodes == 1);
+	assert(stList_length(node2->incomingNodes) == 1);
 
 }
 

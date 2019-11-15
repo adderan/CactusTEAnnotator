@@ -92,6 +92,35 @@ void printBiedgedGraph(stPinchThreadSet *graph, char *gvizFilename) {
 }
 */
 
+stSortedSet *getConnectingThreads(stPinchEnd *end1, stPinchEnd *end2) {
+	stSortedSet *connectingThreads = stSortedSet_construct();
+	stPinchBlock *block1 = stPinchEnd_getBlock(end1);
+	stPinchBlock *block2 = stPinchEnd_getBlock(end2);
+
+	stPinchBlockIt blockIt = stPinchBlock_getSegmentIterator(block1);
+	stPinchSegment *seg_block1;
+	while((seg_block1 = stPinchBlockIt_getNext(&blockIt))) {
+		stPinchSegment *seg_block2 = seg_block1;
+		bool traverse5Prime = stPinchEnd_traverse5Prime(stPinchEnd_getOrientation(end1), seg_block2);
+		do {
+			seg_block2 = (traverse5Prime) ? 
+				stPinchSegment_get5Prime(seg_block2) : stPinchSegment_get3Prime(seg_block2);
+		}
+		while(seg_block2 && (stPinchSegment_getBlock(seg_block2) == NULL));
+		if (!seg_block2) continue;
+		int64_t threadName = stPinchThread_getName(stPinchSegment_getThread(seg_block2));
+		if (stPinchSegment_getBlock(seg_block2) == block2)
+			stSortedSet_insert(connectingThreads, threadName);
+	}
+
+	//Check
+	stList *subsequences = stPinchEnd_getSubSequenceLengthsConnectingEnds(end1, end2);
+	//assert(stList_length(subsequences) == stSet_size(connectingThreads));
+	assert(stSet_size(connectingThreads) > 0);
+	return connectingThreads;
+}
+
+
 stList *getPartialOrderGraph(stPinchThreadSet *graph) {
 	stList *stack = stList_construct();
 
@@ -149,13 +178,15 @@ stList *getPartialOrderGraph(stPinchThreadSet *graph) {
 				node->nodeID = nodeID;
 				node->degree = stPinchBlock_getDegree(block);
 				node->length =  stPinchBlock_getLength(block);
-				node->incomingNodes = malloc(sizeof(int64_t)*stPinchEnd_getNumberOfConnectedPinchEnds(end));
-				node->nIncomingNodes = stPinchEnd_getNumberOfConnectedPinchEnds(end);
+				node->incomingNodes = stList_construct();
+				node->incomingThreads = stList_construct();
 				stList *incomingEndList = stSet_getList(incomingAdjacencies);
 				for (int k = 0; k < stList_length(incomingEndList); k++) {
-					stPinchBlock *incomingBlock = stPinchEnd_getBlock(stList_get(incomingEndList, k));
+					stPinchEnd *incomingEnd = stList_get(incomingEndList, k);
+					stPinchBlock *incomingBlock = stPinchEnd_getBlock(incomingEnd);
 					//We should have already encountered this block
-					node->incomingNodes[k] = (int64_t) stHash_search(blockIndex, incomingBlock);
+					stList_append(node->incomingNodes, stHash_search(blockIndex, incomingBlock));
+					stList_append(node->incomingThreads, getConnectingThreads(incomingEnd, end));
 				}
 				node->data = block;
 				node->orientation = stPinchEnd_getOrientation(end);
@@ -421,20 +452,18 @@ stList *traversePath(stPinchThreadSet *graph, stList *path, stHash *sequences) {
 			PONode *node = stList_get(path, i);
 			stPinchBlock *block2 = node->data;
 
-			stSortedSet *threads1 = 
-				getThreads(stPinchBlock_getFirst(block1));
-
-			stSortedSet *threads2 = 
-				getThreads(stPinchBlock_getFirst(block2));
-
-			stSortedSet *sharedThreadsSet = stSortedSet_getIntersection(threads1, threads2);
-			stList *sharedThreads = stSortedSet_getList(sharedThreadsSet);
-
+			//can only assume the orientations because there 
+			//are no negative pinches
 			stPinchEnd *end1 = stPinchEnd_construct(block1, _3PRIME);
 			stPinchEnd *end2 = stPinchEnd_construct(block2, _5PRIME);
-			stList *seqLengths = stPinchEnd_getSubSequenceLengthsConnectingEnds(end1, end2);
+
+			stSet *sharedThreadsSet = getConnectingThreads(end1, end2);
+			stList *sharedThreads = stSortedSet_getList(sharedThreadsSet);
+
 			
-			assert (stList_length(seqLengths) == stList_length(sharedThreads));
+			//stList *seqLengths = stPinchEnd_getSubSequenceLengthsConnectingEnds(end1, end2);
+			
+			//assert (stList_length(seqLengths) == stList_length(sharedThreads));
 			
 			assert(stList_length(sharedThreads) > 0);
 			int64_t bestAdjLength = INT_MAX;
@@ -500,8 +529,9 @@ stList *heaviestPath(stList *poGraph) {
 		int64_t bestLeftScore = 0;
 		int64_t maxWeight = 0;
 
-		for (int64_t k = 0; k < node->nIncomingNodes; k++) {
-			PONode *incomingNode = stList_get(poGraph, node->incomingNodes[k]);
+		for (int64_t k = 0; k < stList_length(node->incomingNodes); k++) {
+			int64_t incomingNodeID = stList_get(node->incomingNodes, k);
+			PONode *incomingNode = stList_get(poGraph, incomingNodeID);
 			int64_t leftWeight = incomingNode->degree * incomingNode->length;
 			if (leftWeight > maxWeight) {
 				bestLeft = incomingNode->nodeID;
