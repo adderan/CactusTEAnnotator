@@ -174,7 +174,7 @@ stList *getPartialOrderGraph(stPinchThreadSet *graph) {
 				stSet_insert(seen, end);
 				//seen all the predecessors, so add this block
 				//to the partial order graph
-				PONode *node = malloc(sizeof(PONode));
+				PartialOrderNode *node = malloc(sizeof(PartialOrderNode));
 				node->nodeID = nodeID;
 				node->degree = stPinchBlock_getDegree(block);
 				node->length =  stPinchBlock_getLength(block);
@@ -446,10 +446,10 @@ stList *traversePath(stPinchThreadSet *graph, stList *path, stHash *sequences) {
 		if (i > 0) {
 			//Fill in the adjacency connecting the previous block
 			//to this one
-			PONode *prevNode = stList_get(path, i - 1);
+			PartialOrderNode *prevNode = stList_get(path, i - 1);
 			stPinchBlock *block1 = prevNode->data;
 
-			PONode *node = stList_get(path, i);
+			PartialOrderNode *node = stList_get(path, i);
 			stPinchBlock *block2 = node->data;
 
 			//can only assume the orientations because there 
@@ -495,7 +495,7 @@ stList *traversePath(stPinchThreadSet *graph, stList *path, stHash *sequences) {
 
 		}
 
-		PONode *node = stList_get(path, i);
+		PartialOrderNode *node = stList_get(path, i);
 		stPinchBlock *block = (stPinchBlock*) node->data;
 		assert(block);
 		stPinchEnd *end = stPinchEnd_construct(block, node->orientation);
@@ -512,7 +512,7 @@ stList *traversePath(stPinchThreadSet *graph, stList *path, stHash *sequences) {
 
 //basic dp method for getting the consensus sequence
 //that maximizes the total weight of blocks visited
-stList *heaviestPath(stList *poGraph) {
+stList *getHeaviestPath(stList *poGraph) {
 	int N = stList_length(poGraph);
 	int64_t *paths = (int64_t*) calloc(N, sizeof(int64_t));
 	int64_t *score = (int64_t*) calloc(N, sizeof(int64_t));
@@ -521,7 +521,7 @@ stList *heaviestPath(stList *poGraph) {
 	int64_t bestEndpoint = -1;
 
 	for (int64_t i = 0; i < N; i++) {
-		PONode *node = stList_get(poGraph, i);
+		PartialOrderNode *node = stList_get(poGraph, i);
 
 		//fprintf(stderr, "Node ID: %ld, incoming nodes: %ld node weight: %ld\n", node->nodeID, node->nIncomingNodes, node->weight);
 
@@ -531,7 +531,7 @@ stList *heaviestPath(stList *poGraph) {
 
 		for (int64_t k = 0; k < stList_length(node->incomingNodes); k++) {
 			int64_t incomingNodeID = stList_get(node->incomingNodes, k);
-			PONode *incomingNode = stList_get(poGraph, incomingNodeID);
+			PartialOrderNode *incomingNode = stList_get(poGraph, incomingNodeID);
 			int64_t leftWeight = incomingNode->degree * incomingNode->length;
 			if (leftWeight > maxWeight) {
 				bestLeft = incomingNode->nodeID;
@@ -549,27 +549,81 @@ stList *heaviestPath(stList *poGraph) {
 	}
 
 	//traceback
-	stList *path = stList_construct();
+	stList *heaviestPath = stList_construct();
 	for (int64_t i = bestEndpoint; i >= 0; i = paths[i]) {
-		PONode *node = stList_get(poGraph, i);
+		PartialOrderNode *node = stList_get(poGraph, i);
 		assert(node->data);
-		stList_append(path, stList_get(poGraph, i));
+		stList_append(heaviestPath, stList_get(poGraph, i));
 	}
-	stList_reverse(path);
+	stList_reverse(heaviestPath);
 
 	/*Reduce block degree along the path according
 	to the number of threads at the thinnest point.
 	*/
 	int minDegree = INT_MAX;
-	for (int64_t i = 0; i < stList_length(path); i++) {
-		PONode *node = stList_get(path, i);
+	for (int64_t i = 0; i < stList_length(heaviestPath); i++) {
+		PartialOrderNode *node = stList_get(heaviestPath, i);
 		if (node->degree < minDegree)
 			minDegree = node->degree;
 	}
-	for (int64_t i = 0; i < stList_length(path); i++) {
-			PONode *node = stList_get(path, i);
+	for (int64_t i = 0; i < stList_length(heaviestPath); i++) {
+			PartialOrderNode *node = stList_get(heaviestPath, i);
 			node->degree = node->degree - minDegree;
 			//node->degree = 0;
 	}
-	return path;
+	return heaviestPath;
+}
+
+stList *getHeaviestPath2(stList *graph) {
+	int64_t N = stList_length(graph);
+	int64_t *score = calloc(N, sizeof(int64_t));
+	int64_t *paths = calloc(N, sizeof(int64_t));
+	int64_t *edges = calloc(N, sizeof(int64_t));
+	memset(paths, -1, N);
+
+	int64_t bestScore = 0;
+	int64_t endpoint = -1;
+	for (int64_t i = 0; i < N; i++) {
+		PartialOrderNode *node = stList_get(graph, i);
+		int64_t blockWeight = node->degree * node->length;
+
+		int64_t maxEdgeWeight = 0;
+		for (int k = 0; k < stList_length(node->incomingNodes); k++) {
+			PartialOrderNode *incomingNode = 
+				stList_get(graph, stList_get(node->incomingNodes, k));
+			
+			stSortedSet *incomingThreads = stList_get(node->incomingThreads, k);
+
+			int64_t edgeWeight = stSet_size(incomingThreads);
+
+			if (edgeWeight > maxEdgeWeight) {
+				maxEdgeWeight = edgeWeight;
+				paths[i] = incomingNode->nodeID;
+				edges[i] = k;
+				score[i] = score[incomingNode->nodeID] + blockWeight;
+			}
+		}
+
+		if (score[i] > bestScore) {
+			bestScore = score[i];
+			endpoint = i;
+		}
+	}
+
+	//traceback and adjust weights
+	stList *heaviestPath = stList_construct();
+	for (int64_t i = endpoint; i >= 0; i = paths[i]) {
+		PartialOrderNode *node = stList_get(graph, i);
+		int k = edges[i];
+
+		stList_append(heaviestPath, node);
+
+		//Delete the edges traversed by the path
+		stSortedSet *incomingThreads = stList_get(node->incomingThreads, k);
+		stSortedSet_destruct(incomingThreads);
+		stList_set(node->incomingThreads, k, stSortedSet_construct());
+	}
+
+	stList_reverse(heaviestPath);
+	return heaviestPath;
 }
