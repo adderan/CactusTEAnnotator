@@ -16,7 +16,7 @@
 typedef struct PartialOrderNode {
 	int64_t nodeID;
 	stList *incomingNodes;
-	stList *incomingThreads;
+	stList *incomingEdgeWeights;
 	int64_t length;
 	int64_t degree;
 	bool orientation;
@@ -29,6 +29,7 @@ bool graphIsAcyclic(stPinchThreadSet *graph);
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection);
 //void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
 stList *getHeaviestPath(stList *poGraph);
+stList *getHeaviestPath2(stList *graph);
 stList *traversePath(stPinchThreadSet *graph, stList *endsInPath, stHash *sequences);
-
+stSortedSet *getConnectingThreads(stPinchEnd *end1, stPinchEnd *end2);
 #endif

@@ -3,8 +3,8 @@ murmurHashSources=smhasher/src/MurmurHash3.cpp
 cpp=g++
 cc=gcc
 
-cflags_opt=-Wall -DNDEBUG
-cflags_debug=-g -O0 -Wall
+cflags_opt=-Wall -Werror -DNDEBUG
+cflags_debug=-g -O0 -Wall -Werror
 
 cppflags_opt=-Wall -DNDEBUG
 cppflags_debug=-g -O0 -Wall
