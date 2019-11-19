@@ -82,7 +82,7 @@ static void testPoGraph(CuTest *testCase) {
 	PartialOrderNode *node2 = stList_get(poGraph, 1);
 	assert(node1->data == block1);
 	assert(node2->data == block2);
-	assert(stList_length(node2->incomingNodes) == 1);
+	assert(node2->nIncomingNodes == 1);
 
 }
 
@@ -123,6 +123,7 @@ static void testConnectingThreads(CuTest *testCase) {
 	assert(stSortedSet_size(getConnectingThreads(end1, end2)) == 2);
 	assert(stSortedSet_size(getConnectingThreads(end1, end3)) == 0);
 
+	assert(stPinchEnd_getNumberOfConnectedPinchEnds(end1) == 1);
 	assert(stList_length(stPinchEnd_getSubSequenceLengthsConnectingEnds(end1, end2)) == 2);
 	
 	//why?
