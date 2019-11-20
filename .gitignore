@@ -1,0 +1,9 @@
+env/*
+poaV2/*
+RepeatMasker/*
+bin/*
+CactusTEAnnotator.egg-info/*
+rmblast-2.9.0/*
+*.pyc
+*.o
+*.json
