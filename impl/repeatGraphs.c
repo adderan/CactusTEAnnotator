@@ -557,7 +557,6 @@ stList *getHeaviestPath(stList *graph) {
 
 	//traceback and adjust weights
 	stList *heaviestPath = stList_construct();
-	stSortedSet *seenThreads = stSortedSet_construct();
 	int64_t i = endpoint;
 	while(true) {
 		PartialOrderNode *node = stList_get(graph, i);
@@ -572,7 +571,6 @@ stList *getHeaviestPath(stList *graph) {
 
 		i = node->incomingNodes[k];
 	}
-	stSortedSet_destruct(seenThreads);
 	free(paths);
 	free(score);
 	stList_reverse(heaviestPath);

@@ -126,15 +126,15 @@ def sampleLastzAlignments(job, fastaID, args):
     #calculate how shallow we should begin sampling the alignments based on
     #an estimate of the largest repeat family size
     fasta = job.fileStore.readGlobalFile(fastaID)
-    largestFamilySize = 0.0
+    
+    counts = []
     for line in runCmd(parameters=["lastz", "--tableonly=count", "%s[multiple]" % os.path.basename(fasta)], args=args).split("\n"):
-        if line.split() != 2:
+        if len(line.split()) != 2:
             continue
         other, count = line.split()
-        count = float(count)
-        if count > largestFamilySize:
-            largestFamilySize = count
+        counts.append(float(count))
 
+    largestFamilySize = max(counts)
     #assume an average family length (in number of seeds covered)
     averageFamilyLength = 5000.0
     lowestSamplingLevel = 1.0/((largestFamilySize*largestFamilySize) * averageFamilyLength)
@@ -330,9 +330,9 @@ def lastzPipeline(job, halID, genome, args):
         lastzJob = Job.wrapJobFn(runLastz, fastaID=trfJob.rv(), args=args)
     else:
         lastzJob = Job.wrapJobFn(sampleLastzAlignments, fastaID=trfJob.rv(), args=args)
+    
     trfJob.addFollowOn(lastzJob)
     alignmentsID = lastzJob.rv('alignments')
-
 
     #Sort the alignments so that high-scoring homologies are prioritized
     #when building the pinch graph
@@ -383,8 +383,6 @@ def poaPipeline(job, halID, genome, args):
 
 
 def repeatScoutPipeline(job, halID, args):
-    hal = job.fileStore.readGlobalFile(halID)
-
     #genomeFile = getFasta(job=job, hal=hal, genome=args.genome, chrom=args.chrom, start=args.start, end=args.end, args=args)
     genomeID = job.fileStore.writeGlobalFile(genomeFile)
     getTECandidatesJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, genome=args.genome, args=args)
@@ -435,6 +433,7 @@ def main():
 
     parser.add_argument("--usePoa", action="store_true", default=False, help="Use the POA pipeline")
     parser.add_argument("--useLastz", action="store_true", default=False, help="")
+    parser.add_argument("--getCandidateTEsOnly", action="store_true", default=False, help="")
     parser.add_argument("--lastzExact", action="store_true", default=False)
     parser.add_argument("--skipRepeatMasker", action="store_true", default=False)
 
@@ -459,6 +458,9 @@ def main():
             rootJob = Job.wrapJobFn(poaPipeline, halID=halID, genome=args.genome, args=args)
         elif args.useLastz:
             rootJob = Job.wrapJobFn(lastzPipeline, halID=halID, genome=args.genome, args=args)
+        
+        elif args.getCandidateTEsOnly:
+            rootJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, args=args, genome=args.genome)
         else:
             rootJob = Job.wrapJobFn(repeatScoutPipeline, halID=halID, args=args)
 
