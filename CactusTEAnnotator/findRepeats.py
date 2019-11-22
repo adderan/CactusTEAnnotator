@@ -153,7 +153,7 @@ def sampleLastzAlignments(job, fastaID, args):
     levelsFile = job.fileStore.getLocalTempFile()
     with open(levelsFile, "w") as f:
         f.write("Largest family size = %d\n" % largestFamilySize)
-        f.write(" ".join(levels) + "\n")
+        f.write(" ".join([str(x) for x in levels]) + "\n")
     returnValues["levels.txt"] = job.fileStore.writeGlobalFile(levelsFile)
 
     #Start with every seed treated equally
@@ -165,10 +165,10 @@ def sampleLastzAlignments(job, fastaID, args):
         alignmentJobs.append(Job.wrapJobFn(runLastzAndGetCoveredSeeds, fastaID=fastaID, seedWeightsID = seedWeightsID, baseSamplingRate = levels[i], args=args))
 
         alignmentsID = alignmentJobs[i].rv('alignments')
-        seedWeightsID = alignmentJobs[i].rv('seedWeightsRates')
+        seedWeightsID = alignmentJobs[i].rv('seedWeights')
 
         returnValues["alignments_%f.cigar" % levels[i]] = alignmentsID
-        returnValues["seedWeightsRates_%f.txt" % levels[i]] = seedWeightsID
+        returnValues["seedWeights_%f.txt" % levels[i]] = seedWeightsID
 
         if i > 0:
             alignmentJobs[i-1].addFollowOn(alignmentJobs[i])
@@ -183,7 +183,7 @@ def runLastzAndGetCoveredSeeds(job, fastaID, seedWeightsID, baseSamplingRate, ar
     seedWeightsFile = job.fileStore.readGlobalFile(seedWeightsID)
 
     alignments = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["lastz", "--format=cigar", "--notrivial", "--seedWeights=%s" % os.path.basename(seedWeightsFile), "--baseSamplingRate=%f" % baseSamplingRate, "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
+    runCmd(parameters=["lastz", "--format=cigar", "--notrivial", "--samplingRates=%s" % os.path.basename(seedWeightsFile), "--baseSamplingRate=%f" % baseSamplingRate, "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
 
     alignmentsID = job.fileStore.writeGlobalFile(alignments)
 
