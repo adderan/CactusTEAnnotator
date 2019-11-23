@@ -15,14 +15,14 @@ def makeURL(path):
 
 dockerImage = "cactus-te-annotator:latest"
 
-def runCmd(parameters, args, outfile=None):
+def runCmd(parameters, args, outfile=None, mode="w"):
     if args.localBinaries:
         cmd = parameters
     else:
         cmd = ["docker", "run", "-it", "--rm", "-v", "%s:/data" % os.getcwd(), dockerImage] + parameters
        
     if outfile:
-        with open(outfile, "w") as outfileWrite:
+        with open(outfile, mode=mode) as outfileWrite:
             subprocess.check_call(cmd, stdout=outfileWrite)
     else:
         output = subprocess.check_output(cmd)
@@ -157,72 +157,49 @@ def sampleLastzAlignments(job, fastaID, args):
     returnValues["levels.txt"] = job.fileStore.writeGlobalFile(levelsFile)
 
     #Start with every seed treated equally
-    seedWeightsID = job.fileStore.writeGlobalFile(job.fileStore.getLocalTempFile())
+    ignoredSeedsID = job.fileStore.writeGlobalFile(job.fileStore.getLocalTempFile())
     alignmentsID = None
     nLevels = len(levels)
     alignmentJobs = []
+    alignmentFileIDs = []
     for i in range(nLevels):
-        alignmentJobs.append(Job.wrapJobFn(runLastzAndGetCoveredSeeds, fastaID=fastaID, seedWeightsID = seedWeightsID, baseSamplingRate = levels[i], args=args))
+        alignmentJobs.append(Job.wrapJobFn(runLastzAndGetCoveredSeeds, fastaID=fastaID, ignoredSeedsID = ignoredSeedsID, baseSamplingRate = levels[i], args=args))
 
         alignmentsID = alignmentJobs[i].rv('alignments')
-        seedWeightsID = alignmentJobs[i].rv('seedWeights')
+        ignoredSeedsID = alignmentJobs[i].rv('ignoredSeeds')
 
         returnValues["alignments_%f.cigar" % levels[i]] = alignmentsID
-        returnValues["seedWeights_%f.txt" % levels[i]] = seedWeightsID
-
+        returnValues["ignoredSeeds_%f.txt" % levels[i]] = ignoredSeedsID
+        alignmentFileIDs.append(alignmentsID)
         if i > 0:
             alignmentJobs[i-1].addFollowOn(alignmentJobs[i])
     job.addChild(alignmentJobs[0])
 
-    returnValues["alignments"] = alignmentsID
+    catFilesJob = Job.wrapJobFn(catFilesJobFn, alignmentFileIDs)
+    job.addChild(catFilesJob)
+    alignmentJobs[i].addFollowOn(catFilesJob)
+
+    returnValues["alignments"] = catFilesJob.rv()
     return returnValues
 
-def runLastzAndGetCoveredSeeds(job, fastaID, seedWeightsID, baseSamplingRate, args):
+def runLastzAndGetCoveredSeeds(job, fastaID, ignoredSeedsID, baseSamplingRate, args):
     fasta = job.fileStore.readGlobalFile(fastaID)
 
-    seedWeightsFile = job.fileStore.readGlobalFile(seedWeightsID)
+    ignoredSeeds = job.fileStore.readGlobalFile(ignoredSeedsID)
 
     alignments = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["lastz", "--format=cigar", "--notrivial", "--samplingRates=%s" % os.path.basename(seedWeightsFile), "--baseSamplingRate=%f" % baseSamplingRate, "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
+    runCmd(parameters=["lastz", "--format=cigar", "--notrivial", "--ignoredSeeds=%s" % os.path.basename(ignoredSeeds), "--baseSamplingRate=%f" % baseSamplingRate, "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
 
     alignmentsID = job.fileStore.writeGlobalFile(alignments)
 
-    seedWeights = {}
-    with open(seedWeightsFile, 'r') as f:
-        for line in f:
-            seed, rate = line.split()
-            seedWeights[seed] = float(rate)
-
     seedCountsFile = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["lastz", "--tableonly=count", "%s[multiple]" % os.path.basename(fasta)], outfile=seedCountsFile, args=args)
+    runCmd(parameters=["lastz", "--tableonly=count", "%s[multiple]" % fasta], outfile=seedCountsFile, args=args)
+    
+    runCmd(parameters=["getCoveredSeeds", "--seeds", os.path.basename(seedCountsFile), "--alignments", os.path.basename(alignments), "--sequences", os.path.basename(fasta)], outfile=ignoredSeeds, mode="a", args=args)
 
-    for line in runCmd(parameters=["getCoveredSeeds", "--seeds", os.path.basename(seedCountsFile), "--alignments", os.path.basename(alignments), "--sequences", os.path.basename(fasta)], args=args).split("\n"):
-        if len(line.split()) != 3:
-            continue
-        seed, count, length = line.split()
-        count = float(count)
-        length = float(length)
+    ignoredSeedsID = job.fileStore.writeGlobalFile(ignoredSeeds)
 
-        #Percentage of the n*(n-1)/2 pairwise alignments between a 
-        #family of n repeat copies that will be sampled
-        #in order to build a transitively complete set of 
-        #alignments representing the family
-        alignmentSampleFraction = 0.1
-
-        #Adjust for the fact that lastz will explore the entire alignment
-        #if any of the seeds contained within it is matched.
-        updatedSeedWeight = alignmentSampleFraction * (1.0/(count*length))
-
-        if not seed in seedWeights or seedWeights[seed] > updatedSeedWeight:
-            seedWeights[seed] = updatedSeedWeight
-
-    newSeedWeightsFile = job.fileStore.getLocalTempFile()
-    with open(newSeedWeightsFile, "w") as fh:
-        for seed in seedWeights:
-            fh.write("%s %lf\n" % (seed, seedWeights[seed]))
-    seedWeightsID = job.fileStore.writeGlobalFile(newSeedWeightsFile)
-
-    return {"alignments": alignmentsID, "seedWeights": seedWeightsID}
+    return {"alignments": alignmentsID, "ignoredSeeds": ignoredSeedsID}
 
 def repeatLibraryFromPinchGraph(job, alignmentsID, sequencesID, args):
     """Construct a pinch graph from the set of pairwise alignments

@@ -91,9 +91,9 @@ int main(int argc, char **argv) {
 			}
 			uint64_t *seedWindowHash = (uint64_t*) stHash_search(seedToLastzHash, (void*) stHash_stringKey(seedWindow));
 			if (!seedWindowHash) continue;
-			uint64_t *seedMultiplicity = (uint64_t*) stHash_search(seedCounts, (void*) stHash_stringKey(seedWindow));
+			//uint64_t *seedMultiplicity = (uint64_t*) stHash_search(seedCounts, (void*) stHash_stringKey(seedWindow));
 
-			printf("%.6lx\t%lu\t%lu\n", *seedWindowHash, *seedMultiplicity, strlen(seq) - seedLength);
+			printf("%.6lx\n", *seedWindowHash);
 		}
 	}
 
