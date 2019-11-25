@@ -188,7 +188,7 @@ def runLastzAndGetCoveredSeeds(job, fastaID, ignoredSeedsID, baseSamplingRate, a
     ignoredSeeds = job.fileStore.readGlobalFile(ignoredSeedsID)
 
     alignments = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["lastz", "--format=cigar", "--notrivial", "--ignoredSeeds=%s" % os.path.basename(ignoredSeeds), "--baseSamplingRate=%f" % baseSamplingRate, "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
+    runCmd(parameters=["lastz", "--format=cigar", "--notrivial", "--ignoredSeeds=%s" % os.path.basename(ignoredSeeds), "--baseSamplingRate=%E" % baseSamplingRate, "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
 
     alignmentsID = job.fileStore.writeGlobalFile(alignments)
 
