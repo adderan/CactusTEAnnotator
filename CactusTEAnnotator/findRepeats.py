@@ -134,10 +134,17 @@ def sampleLastzAlignments(job, fastaID, args):
         other, count = line.split()
         counts.append(float(count))
 
-    largestFamilySize = max(counts)
+    n = max(counts)
     #assume an average family length (in number of seeds covered)
-    averageFamilyLength = 5000.0
-    lowestSamplingLevel = 1.0/((largestFamilySize*largestFamilySize) * averageFamilyLength)
+    L = 5000.0
+    N = 10
+    #N : number of alignments sampled per family
+    #p : probability of starting an alignment at any given 
+    #    seed hit
+    #n : size of repeat family
+    #N = n*(n-1) * (1 - (1 - p)^L)
+    #p = 1 - (1 - N/(n*(n-1))) ^ (1/L)
+    lowestSamplingLevel = 1.0 - (1.0 - N/(n*(n-1.0)))**(1.0/L)
     
     #Fill out the other levels, incrementing by an order of magnitude
     levels = []
@@ -152,7 +159,7 @@ def sampleLastzAlignments(job, fastaID, args):
     #Store the levels for debugging
     levelsFile = job.fileStore.getLocalTempFile()
     with open(levelsFile, "w") as f:
-        f.write("Largest family size = %d\n" % largestFamilySize)
+        f.write("Largest family size = %d\n" % n)
         f.write(" ".join([str(x) for x in levels]) + "\n")
     returnValues["levels.txt"] = job.fileStore.writeGlobalFile(levelsFile)
 
