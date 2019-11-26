@@ -310,6 +310,9 @@ def lastzPipeline(job, halID, genome, args):
     trfJob = Job.wrapJobFn(runTRF, fastaID=getTECandidatesJob.rv('fasta'), args=args)
     getTECandidatesJob.addFollowOn(trfJob)
 
+    if args.getCandidateTEsOnly:
+        return {"masked_candidates.fa": trfJob.rv()}
+
     if args.lastzExact:
         lastzJob = Job.wrapJobFn(runLastz, fastaID=trfJob.rv(), args=args)
     else:
@@ -442,9 +445,6 @@ def main():
             rootJob = Job.wrapJobFn(poaPipeline, halID=halID, genome=args.genome, args=args)
         elif args.useLastz:
             rootJob = Job.wrapJobFn(lastzPipeline, halID=halID, genome=args.genome, args=args)
-        
-        elif args.getCandidateTEsOnly:
-            rootJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, args=args, genome=args.genome)
         else:
             rootJob = Job.wrapJobFn(repeatScoutPipeline, halID=halID, args=args)
 
