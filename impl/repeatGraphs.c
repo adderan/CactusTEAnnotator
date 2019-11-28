@@ -422,6 +422,7 @@ stPinchThreadSet *buildRepeatGraph(stHash *sequences, char *alignmentsFilename) 
 	stPinch *pinch = NULL;
 
 	while((pinch = stPinchIterator_getNext(pinchIterator)) != NULL) {
+		fprintf(stderr, "Applying pinch %ld to %ld\n", pinch->name1, pinch->name2);
 		applyPinch(threadSet, pinch);
 
 #ifndef NDEBUG
@@ -469,8 +470,6 @@ stList *traversePath(stPinchThreadSet *graph, stList *path, stHash *sequences) {
 			stPinchEnd *end2 = stPinchEnd_construct(block2, _5PRIME);
 
 			stSortedSet *adjacencies = getConnectingThreads(end1, end2);
-			stSet *connectedEnds = stPinchEnd_getConnectedPinchEnds(end1);
-			assert(stSet_size(connectedEnds) > 0);
 			assert(stSortedSet_size(adjacencies) > 0);
 
 			stSortedSetIterator *adjIt = stSortedSet_getIterator(adjacencies);

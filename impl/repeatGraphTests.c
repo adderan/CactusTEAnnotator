@@ -62,12 +62,12 @@ static void testPoGraph(CuTest *testCase) {
 
 	stList *poGraph = getPartialOrderGraph(graph);
 
-    assert(stList_length(poGraph) == 2);
+    CuAssertTrue(testCase, stList_length(poGraph) == 2);
 	PartialOrderNode *node1 = stList_get(poGraph, 0);
 	PartialOrderNode *node2 = stList_get(poGraph, 1);
-	assert(node1->data == block1);
-	assert(node2->data == block2);
-	assert(node2->nIncomingNodes == 1);
+	CuAssertTrue(testCase, node1->data == block1);
+	CuAssertTrue(testCase, node2->data == block2);
+	CuAssertTrue(testCase, node2->nIncomingNodes == 1);
 
 }
 
@@ -91,13 +91,13 @@ static void testHeaviestPath(CuTest *testCase) {
 	stList *poGraph = getPartialOrderGraph(graph);
 
 	stList *heaviestPath = getHeaviestPath(poGraph);
-	assert(stList_length(heaviestPath) == 2);
+	CuAssertTrue(testCase, stList_length(heaviestPath) == 2);
 
 	PartialOrderNode *node1 = stList_get(heaviestPath, 0);
 	PartialOrderNode *node2 = stList_get(heaviestPath, 1);
 
-	assert(node1->data == block1);
-	assert(node2->data == block2);
+	CuAssertTrue(testCase, node1->data == block1);
+	CuAssertTrue(testCase, node2->data == block2);
 
 
 
@@ -120,14 +120,14 @@ static void testConnectingThreads(CuTest *testCase) {
 	stPinchEnd *end2 = stPinchEnd_construct(block2, _5PRIME);
 	stPinchEnd *end3 = stPinchEnd_construct(block3, _5PRIME);
 
-	assert(stSortedSet_size(getConnectingThreads(end1, end2)) == 2);
-	assert(stSortedSet_size(getConnectingThreads(end1, end3)) == 0);
+	CuAssertTrue(testCase, stSortedSet_size(getConnectingThreads(end1, end2)) == 2);
+	CuAssertTrue(testCase, stSortedSet_size(getConnectingThreads(end1, end3)) == 0);
 
-	assert(stPinchEnd_getNumberOfConnectedPinchEnds(end1) == 1);
-	assert(stList_length(stPinchEnd_getSubSequenceLengthsConnectingEnds(end1, end2)) == 2);
+	CuAssertTrue(testCase, stPinchEnd_getNumberOfConnectedPinchEnds(end1) == 1);
+	CuAssertTrue(testCase, stList_length(stPinchEnd_getSubSequenceLengthsConnectingEnds(end1, end2)) == 2);
 	
 	//why?
-	assert(stList_length(stPinchEnd_getSubSequenceLengthsConnectingEnds(end1, end3)) == 2);
+	CuAssertTrue(testCase, stList_length(stPinchEnd_getSubSequenceLengthsConnectingEnds(end1, end3)) == 2);
 }
 
 int main(int argc, char **argv) {
