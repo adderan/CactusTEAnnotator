@@ -43,7 +43,7 @@ liblpo = poaV2/liblpo.a
 all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries bin/lastz local
 
 
-local: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs bin/getElementsFromPinchGraph bin/getCoveredSeeds bin/repeatGraphTests
+local: bin/neighborJoining bin/denseBundles bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs bin/getElementsFromPinchGraph bin/getCoveredSeeds bin/repeatGraphTests bin/getAlignmentDistances
 
 halBinaries:
 	cd cactus && make
@@ -116,6 +116,9 @@ bin/getElementsFromPinchGraph: impl/repeatGraphs.o impl/getElementsFromPinchGrap
 
 bin/getCoveredSeeds: impl/getCoveredSeeds.c ${libSonLib}
 	${cc} ${cflags} -o bin/getCoveredSeeds -I ${sonLibInc} impl/getCoveredSeeds.c ${libSonLib} -lm
+
+bin/getAlignmentDistances: impl/getAlignmentDistances.c ${libSonLib}
+	${cc} ${cflags} -o bin/getAlignmentDistances -I ${sonLibInc} impl/getAlignmentDistances.c ${libSonLib} -lm
 
 bin/build_clusters: scripts/build_clusters
 	cp scripts/build_clusters bin/build_clusters
