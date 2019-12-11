@@ -90,12 +90,12 @@ int main(int argc, char **argv) {
 		if (fastaFile) {
 			string seqBuffer;
 			sequence->getSubString(seqBuffer, start, topSeg->getLength());
-			fprintf(fastaFile, ">%d\n", i);
+			fprintf(fastaFile, ">te_candidate_%d\n", i);
 			fprintf(fastaFile, "%s\n", seqBuffer.c_str());
 
 			if (!ignoreReverse) {
 				char *reverseCompSeq = stString_reverseComplementString(seqBuffer.c_str());
-				fprintf(fastaFile, ">%d_comp\n", i);
+				fprintf(fastaFile, ">te_candidate_%d_comp\n", i);
 				fprintf(fastaFile, "%s\n", reverseCompSeq);
 				free(reverseCompSeq);
 			}

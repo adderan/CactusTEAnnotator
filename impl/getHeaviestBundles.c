@@ -27,14 +27,16 @@ int is_consensus(char *seqName) {
 
 int main(int argc, char **argv) {
 	char *lpoFilename = NULL;
+	char *namePrefix = NULL;
     while (1) {
         static struct option long_options[] = {
             { "lpo", required_argument, 0, 'a' }, 
+			{ "namePrefix", required_argument, 0, 'b'},
             { 0, 0, 0, 0 } };
 
         int option_index = 0;
 
-        int key = getopt_long(argc, argv, "a:", long_options, &option_index);
+        int key = getopt_long(argc, argv, "a:b:", long_options, &option_index);
 
         if (key == -1) {
             break;
@@ -44,6 +46,9 @@ int main(int argc, char **argv) {
             case 'a':
                 lpoFilename = strdup(optarg);
                 break;
+			case 'b':
+				namePrefix = strdup(optarg);
+				break;
             default:
                 return 1;
         }
@@ -55,7 +60,7 @@ int main(int argc, char **argv) {
 
 	for (int i = 0; i < graph->nsource_seq; i++) {
 		if (is_consensus(graph->source_seq[i].name)) {
-			printf(">%s\n", graph->source_seq[i].name);
+			printf(">Consensus_%s_%s\n", namePrefix, graph->source_seq[i].name);
 			printSequence(graph, i, stdout);
 			printf("\n");
 		}

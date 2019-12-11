@@ -37,10 +37,10 @@ int main(int argc, char **argv) {
     struct List *seqs = constructEmptyList(0, NULL);
     struct List *seqLengths = constructEmptyList(0, free);
     struct List *headers = constructEmptyList(0, free);
-
-    FILE *alignmentsFile = fopen(alignmentsFilename, "r");
     fastaRead(sequencesFile, seqs, seqLengths, headers);
     fclose(sequencesFile);
+
+    FILE *alignmentsFile = fopen(alignmentsFilename, "r");
     int N = seqs->length;
 
     stHash *headerToID = stHash_construct();
@@ -53,12 +53,10 @@ int main(int argc, char **argv) {
     while((alignment = cigarRead(alignmentsFile)) != NULL) {
         int64_t a = (int64_t) stHash_search(headerToID, (void*)stHash_stringKey(alignment->contig1));
         int64_t b = (int64_t) stHash_search(headerToID, (void*)stHash_stringKey(alignment->contig2));
+        if (a == b) continue;
         int64_t seq1ID = (a < b) ? a : b;
         int64_t seq2ID = (a < b) ? b : a;
         
-        //char *seq1 = seqs->list[seq1ID];
-        //char *seq2 = seqs->list[seq2ID];
-
         int64_t matches = 0;
         for (int i = 0; i < alignment->operationList->length; i++) {
             struct AlignmentOperation *op = alignment->operationList->list[i];
@@ -67,16 +65,20 @@ int main(int argc, char **argv) {
             }
         }
         sharedPositions[seq1ID][seq2ID] += matches;
+        free(alignment);
         
     }
+    fclose(alignmentsFile);
 
-    for (int64_t i = 0; i < N; i++) {
-        for (int64_t j = 0; j < i; j++) {
+    for (int64_t j = 0; j < N; j++) {
+        for (int64_t i = 0; i < j; i++) {
             int64_t len_i = strlen(seqs->list[i]);
             int64_t len_j = strlen(seqs->list[j]);
+            if (sharedPositions[i][j] == 0) continue;
             double p = 2*sharedPositions[i][j]/(double)(len_i + len_j);
+            if (p <= 0.25) continue;
             double d =  (-3.0/4.0)*log(1.0 - (4.0/3.0)*(1.0 - p));
-            fprintf(stdout, "%s %s %lf %ld\n", (char*) headers->list[i], (char*) headers->list[j], d, sharedPositions[i][j]);
+            fprintf(stdout, "%s %s %lf\n", (char*) headers->list[i], (char*) headers->list[j], d);
         }
     }
     

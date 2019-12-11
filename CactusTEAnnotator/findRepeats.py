@@ -232,18 +232,25 @@ def runRepeatMasker(job, repeatLibraryID, seqID, args):
 
     return outputGffID
 
-def minhashClustering(job, fastaID, args):
-    """Cluster a set of candidate repeat annotations
-    by their pairwise Jaccard distances, estimated
-    with minhash.
-    """
+def minhashDistances(job, fastaID, args):
     fasta = job.fileStore.readGlobalFile(fastaID)
+
     distances = job.fileStore.getLocalTempFile()
-
     runCmd(parameters=["minhash", "--kmerLength", str(args.kmerLength), "--sequences", os.path.basename(fasta)], outfile=distances, args=args)
+    return job.fileStore.writeGlobalFile(distances)
 
+def alignmentDistances(job, sequencesID, alignmentsID, args):
+    alignments = job.fileStore.readGlobalFile(alignmentsID)
+    sequences = job.fileStore.readGlobalFile(sequencesID)
+
+    distances = job.fileStore.getLocalTempFile()
+    runCmd(parameters=["getAlignmentDistances", "--sequences", sequences, "--alignments", alignments], outfile=distances, args=args)
+    return job.fileStore.writeGlobalFile(distances)
+
+def clusterByDistance(job, distancesID, args):
+    distances = job.fileStore.readGlobalFile(distancesID)
     clusters = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["build_clusters", os.path.basename(distances), "--distanceThreshold", str(args.distanceThreshold)], outfile=clusters, args=args)
+    runCmd(parameters=["buildClusters", "--distances", os.path.basename(distances), "--distanceThreshold", str(args.distanceThreshold)], outfile=clusters, args=args)
 
     return job.fileStore.writeGlobalFile(clusters)
 
@@ -260,12 +267,14 @@ def buildLibrary_poa(job, fastaID, clustersID, args):
 
     elementsJobs = []
     for i, seqList in enumerate(clusters):
+        if len(seqList) < args.minClusterSize:
+            continue
         cluster_i_fasta = job.fileStore.getLocalTempFile()
         runCmd(parameters=["samtools", "faidx", os.path.basename(fasta)] + seqList, outfile=cluster_i_fasta, args=args)
 
         cluster_i_fastaID = job.fileStore.writeGlobalFile(cluster_i_fasta)
         poaJob = Job.wrapJobFn(runPoa, fastaID=cluster_i_fastaID, args=args)
-        elementsJob = Job.wrapJobFn(getRepeatElementsFromGraph, graphID=poaJob.rv(), clusterName=i, args=args)
+        elementsJob = Job.wrapJobFn(getRepeatElementsFromGraph, graphID=poaJob.rv(), clusterName="Consensus_%d" % i, args=args)
         job.addChild(poaJob)
         poaJob.addFollowOn(elementsJob)
         elementsJobs.append(elementsJob)
@@ -289,60 +298,46 @@ def runPoa(job, fastaID, args, heaviestBundle=True):
 def getRepeatElementsFromGraph(job, graphID, clusterName, args):
     graph = job.fileStore.readGlobalFile(graphID)
     consensusSequences = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["getHeaviestBundles", "--lpo", os.path.basename(graph)], outfile=consensusSequences, args=args)
-
-    #Give the sequences unique names
-    repeatLibrary = job.fileStore.getLocalTempFile()
-    with open(consensusSequences, "r") as seqRead:
-        with open(repeatLibrary, "w") as repeatLibraryWrite:
-            for name, sequence in fastaRead(seqRead):
-                repeatLibraryWrite.write(">Cluster_%s_%s\n" % (str(clusterName), name))
-                repeatLibraryWrite.write(sequence)
-                repeatLibraryWrite.write("\n")
-
-
-    return job.fileStore.writeGlobalFile(repeatLibrary)
-
-def lastzPipeline(job, halID, genome, args):
-    getTECandidatesJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, genome=genome, includeReverse=False, args=args)
-    job.addChild(getTECandidatesJob)
-
-    trfJob = Job.wrapJobFn(runTRF, fastaID=getTECandidatesJob.rv('fasta'), args=args)
-    getTECandidatesJob.addFollowOn(trfJob)
-
-    if args.getCandidateTEsOnly:
-        return {"masked_candidates.fa": trfJob.rv()}
-
-    if args.lastzExact:
-        lastzJob = Job.wrapJobFn(runLastz, fastaID=trfJob.rv(), args=args)
-    else:
-        lastzJob = Job.wrapJobFn(sampleLastzAlignments, fastaID=trfJob.rv(), args=args)
     
-    trfJob.addFollowOn(lastzJob)
-    alignmentsID = lastzJob.rv('alignments')
+    if args.poaConsensusMethod == "heaviest-bundling":
+        runCmd(parameters=["getHeaviestBundles", "--namePrefix", clusterName, "--lpo", os.path.basename(graph)], outfile=consensusSequences, args=args)
 
-    #Sort the alignments so that high-scoring homologies are prioritized
-    #when building the pinch graph
-    sortAlignmentsJob = Job.wrapJobFn(sortAlignments, alignmentsID=alignmentsID, args=args)
-    lastzJob.addFollowOn(sortAlignmentsJob)
-    alignmentsID = sortAlignmentsJob.rv()
+    elif args.poaConsensusMethod == "dense-bundling":
+        runCmd(parameters=["denseBundles", "--lpo", os.path.basename(graph)], outfile=consensusSequences, args=args)
 
-    return {"masked_candidates.fa": trfJob.rv(), "alignments.cigar": alignmentsID, "alignmentFiles": lastzJob.rv()}
+    return job.fileStore.writeGlobalFile(consensusSequences)
 
-def poaPipeline(job, halID, genome, args):
+def workflow(job, halID, genome, args):
     #Get candidate TE insertions from the cactus alignment
-    getTECandidatesJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, genome=genome, args=args)
+    getTECandidatesJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, genome=genome, includeReverse=False, args=args)
     job.addChild(getTECandidatesJob)
 
     #Mask low complexity regions and simple repeats with TRF
     trfJob = Job.wrapJobFn(runTRF, fastaID=getTECandidatesJob.rv('fasta'), args=args)
     getTECandidatesJob.addFollowOn(trfJob)
 
-    #Cluster the sequences into large families with minhash
-    #so that the graph construction step is computationally 
-    #possible
-    initialClusteringJob = Job.wrapJobFn(minhashClustering, fastaID=trfJob.rv(), args=args)
-    trfJob.addFollowOn(initialClusteringJob)
+    if args.getCandidateTEsOnly:
+        return {"masked_candidate_TEs.fa": trfJob.rv()}
+    
+    if args.initialClusteringMethod == 'lastz':
+        if args.precomputedAlignments:
+            alignmentsID = args.precomputedAlignmentsID
+            prevJob = trfJob
+        else:
+            alignmentsJob = Job.wrapJobFn(sampleLastzAlignments, fastaID=trfJob.rv(), args=args)
+            alignmentsID = alignmentsJob.rv('alignments')
+            trfJob.addFollowOn(alignmentsJob)
+            prevJob = alignmentsJob
+        distancesJob = Job.wrapJobFn(alignmentDistances, sequencesID=trfJob.rv(), alignmentsID=alignmentsID, args=args)
+        prevJob.addFollowOn(distancesJob)
+        initialClusteringJob = Job.wrapJobFn(clusterByDistance, distancesID=distancesJob.rv(), args=args)
+        distancesJob.addFollowOn(initialClusteringJob)
+
+    elif args.initialClusteringMethod == 'minhash':
+        distancesJob = Job.wrapJobFn(minhashDistances, fastaID=trfJob.rv(), args=args)
+        trfJob.addFollowOn(distancesJob)
+        initialClusteringJob = Job.wrapJobFn(clusterByDistance, distancesID=distancesJob.rv(), args=args)
+        distancesJob.addFollowOn(initialClusteringJob)
 
     #Build a poa graph for each cluster and extract 
     #consensus repeat sequences from each graph
@@ -366,22 +361,8 @@ def poaPipeline(job, halID, genome, args):
         buildLibraryJob.addFollowOn(repeatMaskerJob)
         finalGffID = repeatMaskerJob.rv()
 
-    return {'candidates.gff': getTECandidatesJob.rv('gff'), 'masked_candidates.fa': trfJob.rv(),'clusters.txt': initialClusteringJob.rv(), 'final.gff': finalGffID, 'library.fa': buildLibraryJob.rv()}
+    return {'candidates.gff': getTECandidatesJob.rv('gff'), 'masked_candidate_TEs.fa': trfJob.rv(),'clusters.txt': initialClusteringJob.rv(), 'final.gff': finalGffID, 'library.fa': buildLibraryJob.rv()}
 
-
-def repeatScoutPipeline(job, halID, args):
-    #genomeFile = getFasta(job=job, hal=hal, genome=args.genome, chrom=args.chrom, start=args.start, end=args.end, args=args)
-    genomeID = job.fileStore.writeGlobalFile(genomeFile)
-    getTECandidatesJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, genome=args.genome, args=args)
-
-    repeatScoutJob = Job.wrapJobFn(runRepeatScout, genome=args.genome, halID=halID, gffID = getTECandidatesJob.rv(), seqID=seqID)
-    repeatMaskerJob = Job.wrapJobFn(runRepeatMasker, repeatLibraryID=repeatScoutJob.rv(), seqID=genomeID, args=args)
-
-    job.addChild(getTECandidatesJob)
-    getTECandidatesJob.addFollowOn(repeatScoutJob)
-    repeatScoutJob.addFollowOn(repeatMaskerJob)
-
-    return {'final.gff':repeatMaskerJob.rv(), 'library.fa':repeatScoutJob.rv()}
 
 def exportResultsFiles(toil, results, outDir):
     for item in results:
@@ -418,14 +399,17 @@ def main():
     parser.add_argument("--substMatrix", type=str, default="blosum80.mat")
 
 
-    parser.add_argument("--usePoa", action="store_true", default=False, help="Use the POA pipeline")
-    parser.add_argument("--useLastz", action="store_true", default=False, help="")
     parser.add_argument("--getCandidateTEsOnly", action="store_true", default=False, help="")
     parser.add_argument("--lastzExact", action="store_true", default=False)
     parser.add_argument("--skipRepeatMasker", action="store_true", default=False)
 
     parser.add_argument("--localBinaries", action="store_true", default=False)
 
+    parser.add_argument("--precomputedAlignments", type=str, default=None)
+
+    parser.add_argument("--initialClusteringMethod", type=str, default="lastz")
+    parser.add_argument("--minClusterSize", type=int, default=3)
+    parser.add_argument("--poaConsensusMethod", type=str, default="heaviest-bundling")
 
     Job.Runner.addToilOptions(parser)
 
@@ -439,14 +423,10 @@ def main():
 
     with Toil(args) as toil:
         halID = toil.importFile(makeURL(args.hal))
+        args.substMatrixID = toil.importFile(makeURL(os.path.join(os.path.dirname(__file__), args.substMatrix)))
+        args.precomputedAlignmentsID = toil.importFile(makeURL(args.precomputedAlignments)) if args.precomputedAlignments else None
 
-        if args.usePoa:
-            args.substMatrixID = toil.importFile(makeURL(os.path.join(os.path.dirname(__file__), args.substMatrix)))
-            rootJob = Job.wrapJobFn(poaPipeline, halID=halID, genome=args.genome, args=args)
-        elif args.useLastz:
-            rootJob = Job.wrapJobFn(lastzPipeline, halID=halID, genome=args.genome, args=args)
-        else:
-            rootJob = Job.wrapJobFn(repeatScoutPipeline, halID=halID, args=args)
+        rootJob = Job.wrapJobFn(workflow, halID=halID, genome=args.genome, args=args)
 
         results = toil.start(rootJob)
         exportResultsFiles(toil=toil, results=results, outDir=args.outDir)
