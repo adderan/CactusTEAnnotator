@@ -6,6 +6,25 @@
 #include "bioioC.h"
 #include "pairwiseAlignment.h"
 
+char *seedWindow;
+char *seedPattern;
+stHash *seedToLastzHash;
+int64_t seedLength;
+
+void getAllSeedsInSubsequence(char *seq, int64_t start, int64_t end) {
+	for (int i = start; i < end - seedLength; i++) {
+		memcpy(seedWindow, seq + i, seedLength);
+		for (int pos = 0; pos < seedLength; pos++) {
+			if (seedPattern[pos] == 'x') seedWindow[pos] = 'x';
+		}
+		uint64_t *seedWindowHash = (uint64_t*) stHash_search(seedToLastzHash, (void*) stHash_stringKey(seedWindow));
+		if (!seedWindowHash) continue;
+
+		printf("%.6lx\n", *seedWindowHash);
+	}
+
+}
+
 int main(int argc, char **argv) {
 	char *sequencesFilename = NULL;
 	char *alignmentsFilename = NULL;
@@ -47,8 +66,7 @@ int main(int argc, char **argv) {
 
 	//Just keep track of the hash lastz assigns
 	//to each seed instead of computing it from scratch
-	stHash *seedToLastzHash = stHash_construct();
-	stHash *seedCounts = stHash_construct();
+	seedToLastzHash = stHash_construct2(NULL, free);
 	uint64_t lastzHash;
 	char seed[50];
 	uint64_t count;
@@ -61,10 +79,6 @@ int main(int argc, char **argv) {
 		uint64_t *lastzHashPtr = malloc(sizeof(uint64_t));
 		memcpy(lastzHashPtr, &lastzHash, sizeof(uint64_t));
 		stHash_insert(seedToLastzHash, (void*) stHash_stringKey(seed), (void*) lastzHashPtr);
-
-		uint64_t *countPtr = malloc(sizeof(uint64_t));
-		memcpy(countPtr, &count, sizeof(uint64_t));
-		stHash_insert(seedCounts, (void*) stHash_stringKey(seed), (void*) countPtr);
 	}
 
 	stHash *seqNameToSeq = stHash_construct();
@@ -77,26 +91,19 @@ int main(int argc, char **argv) {
 	}
 
 	//Detect the seed length and ignored positions
-	int seedLength = strlen(seed);
-	char *seedPattern = seed;
+	seedLength = strlen(seed);
+	seedPattern = seed;
 
-	char *seedWindow = calloc(sizeof(char), seedLength + 1);
+	seedWindow = calloc(sizeof(char), seedLength + 1);
 	struct PairwiseAlignment *alignment = NULL;
 	while ((alignment = cigarRead(alignmentsFile)) != NULL) {
-		char *seq = stHash_search(seqNameToSeq, (void*) stHash_stringKey(alignment->contig1));
-		for (int i = 0; i < strlen(seq) - seedLength; i++) {
-			memcpy(seedWindow, seq + i, seedLength);
-			for (int pos = 0; pos < seedLength; pos++) {
-				if (seedPattern[pos] == 'x') seedWindow[pos] = 'x';
-			}
-			uint64_t *seedWindowHash = (uint64_t*) stHash_search(seedToLastzHash, (void*) stHash_stringKey(seedWindow));
-			if (!seedWindowHash) continue;
-			//uint64_t *seedMultiplicity = (uint64_t*) stHash_search(seedCounts, (void*) stHash_stringKey(seedWindow));
-
-			printf("%.6lx\n", *seedWindowHash);
-		}
+		char *seq1 = stHash_search(seqNameToSeq, (void*) stHash_stringKey(alignment->contig1));
+		getAllSeedsInSubsequence(seq1, alignment->start1, alignment->end1);
+		char *seq2 = stHash_search(seqNameToSeq, (void*) stHash_stringKey(alignment->contig2));
+		getAllSeedsInSubsequence(seq2, alignment->start2, alignment->end2);
 	}
 
+	stHash_destruct(seedToLastzHash);
 	fclose(alignmentsFile);
 	fclose(seedsFile);
 	fclose(sequencesFile);

@@ -120,6 +120,16 @@ def sortAlignments(job, alignmentsID, args):
     runCmd(parameters=["sort", os.path.basename(alignments), "-k10", "-n", "-r"], outfile=sortedAlignments, args=args)
     return job.fileStore.writeGlobalFile(sortedAlignments)
 
+def seedSampleProb(N, n, L):
+    #N : number of alignments sampled per family
+    #p : probability of starting an alignment at any given 
+    #    seed hit
+    #n : size of repeat family
+    #N = n*(n-1) * (1 - (1 - p)^L)
+    #p = 1 - (1 - N/(n*(n-1))) ^ (1/L)
+    p = 1.0 - (1.0 - N/(n*(n-1.0)))**(1.0/L)
+    return p
+
 def sampleLastzAlignments(job, fastaID, args):
     returnValues = {}
 
@@ -137,14 +147,8 @@ def sampleLastzAlignments(job, fastaID, args):
     n = max(counts)
     #assume an average family length (in number of seeds covered)
     L = 5000.0
-    N = 10
-    #N : number of alignments sampled per family
-    #p : probability of starting an alignment at any given 
-    #    seed hit
-    #n : size of repeat family
-    #N = n*(n-1) * (1 - (1 - p)^L)
-    #p = 1 - (1 - N/(n*(n-1))) ^ (1/L)
-    lowestSamplingLevel = 1.0 - (1.0 - N/(n*(n-1.0)))**(1.0/L)
+    N = 2*n
+    lowestSamplingLevel = seedSampleProb(N = N, n = n, L = L)
     
     #Fill out the other levels, incrementing by an order of magnitude
     levels = []
@@ -204,7 +208,10 @@ def runLastzAndGetCoveredSeeds(job, fastaID, ignoredSeedsID, baseSamplingRate, a
     
     runCmd(parameters=["getCoveredSeeds", "--seeds", os.path.basename(seedCountsFile), "--alignments", os.path.basename(alignments), "--sequences", os.path.basename(fasta)], outfile=ignoredSeeds, mode="a", args=args)
 
-    ignoredSeedsID = job.fileStore.writeGlobalFile(ignoredSeeds)
+    uniqueSeeds = job.fileStore.getLocalTempFile()
+    runCmd(parameters=["uniq", os.path.basename(ignoredSeeds)], outfile=uniqueSeeds, args=args)
+    
+    ignoredSeedsID = job.fileStore.writeGlobalFile(uniqueSeeds)
 
     return {"alignments": alignmentsID, "ignoredSeeds": ignoredSeedsID}
 
@@ -392,7 +399,7 @@ def main():
     parser.add_argument("--start", type=int, default=None)
     parser.add_argument("--end", type=int, default=None)
 
-    parser.add_argument("--distanceThreshold", type=float, default=0.01)
+    parser.add_argument("--distanceThreshold", type=float, default=0.005)
 
     parser.add_argument("--heaviestBundlingThreshold", type=float, default=0.8)
     parser.add_argument("--kmerLength", type=int, default=5)
