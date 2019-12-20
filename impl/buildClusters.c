@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
 
     FILE *distancesFile = fopen(distancesFilename, "r");
 
-    char *line;
+    char *line = NULL;
     char seq1[50];
     char seq2[50];
     double dist;
