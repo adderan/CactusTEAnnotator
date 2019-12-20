@@ -11,7 +11,7 @@ from toil.common import Toil
 from sonLib.bioio import fastaRead, fastaWrite, catFiles, reverseComplement
 
 def makeURL(path):
-    return "file://%s" % path
+    return "file://%s" % os.path.abspath(path)
 
 dockerImage = "cactus-te-annotator:latest"
 
@@ -104,10 +104,14 @@ def runRepeatScout(job, genome, halID, gffID, seqID):
 
     return job.fileStore.writeGlobalFile(repeatScoutLibrary)
 
-def runLastz(job, fastaID, args):
+def runLastz(job, fastaID, args, querydepth=None):
     fasta = job.fileStore.readGlobalFile(fastaID)
     alignments = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["lastz", "--notrivial", "--format=cigar", "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
+
+    parameters = ["lastz", "--notrivial", "--format=cigar", "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)]
+    if querydepth:
+        parameters.extend(["--querydepth=keep,nowarn:%i" % querydepth])
+    runCmd(parameters=parameters, outfile=alignments, args=args)
 
     return {"alignments": job.fileStore.writeGlobalFile(alignments)}
 
@@ -130,78 +134,41 @@ def seedSampleProb(N, n, L):
     p = 1.0 - (1.0 - N/(n*(n-1.0)))**(1.0/L)
     return p
 
-def sampleLastzAlignments(job, fastaID, args):
-    returnValues = {}
-
-    #calculate how shallow we should begin sampling the alignments based on
-    #an estimate of the largest repeat family size
-    fasta = job.fileStore.readGlobalFile(fastaID)
-    
-    counts = []
-    for line in runCmd(parameters=["lastz", "--tableonly=count", "%s[multiple]" % os.path.basename(fasta)], args=args).split("\n"):
-        if len(line.split()) != 2:
-            continue
-        other, count = line.split()
-        counts.append(float(count))
-
-    n = max(counts)
-    #assume an average family length (in number of seeds covered)
-    L = 5000.0
-    N = 2*n
-    lowestSamplingLevel = seedSampleProb(N = N, n = n, L = L)
-    
-    #Fill out the other levels, incrementing by an order of magnitude
-    levels = []
-    level = lowestSamplingLevel
-    while (level < 1.0):
-        levels.append(level)
-        level *= 10.0
-
-    #Always sample at full depth on the last iteration
-    levels.append(1.0)
-
-    #Store the levels for debugging
-    levelsFile = job.fileStore.getLocalTempFile()
-    with open(levelsFile, "w") as f:
-        f.write("Largest family size = %d\n" % n)
-        f.write(" ".join([str(x) for x in levels]) + "\n")
-    returnValues["levels.txt"] = job.fileStore.writeGlobalFile(levelsFile)
-
-    #Start with every seed treated equally
-    ignoredSeedsID = job.fileStore.writeGlobalFile(job.fileStore.getLocalTempFile())
-    alignmentsID = None
-    nLevels = len(levels)
-    alignmentJobs = []
-    alignmentFileIDs = []
-    for i in range(nLevels):
-        alignmentJobs.append(Job.wrapJobFn(runLastzAndGetCoveredSeeds, fastaID=fastaID, ignoredSeedsID = ignoredSeedsID, baseSamplingRate = levels[i], args=args))
-
-        alignmentsID = alignmentJobs[i].rv('alignments')
-        ignoredSeedsID = alignmentJobs[i].rv('ignoredSeeds')
-
-        returnValues["alignments_%f.cigar" % levels[i]] = alignmentsID
-        returnValues["ignoredSeeds_%f.txt" % levels[i]] = ignoredSeedsID
-        alignmentFileIDs.append(alignmentsID)
-        if i > 0:
-            alignmentJobs[i-1].addFollowOn(alignmentJobs[i])
-    job.addChild(alignmentJobs[0])
-
-    catFilesJob = Job.wrapJobFn(catFilesJobFn, alignmentFileIDs)
-    job.addChild(catFilesJob)
-    alignmentJobs[i].addFollowOn(catFilesJob)
-
-    returnValues["alignments"] = catFilesJob.rv()
-    return returnValues
-
-def runLastzAndGetCoveredSeeds(job, fastaID, ignoredSeedsID, baseSamplingRate, args):
+def sampleLastzAlignments(job, fastaID, args, files=None, nIterations=0):
     fasta = job.fileStore.readGlobalFile(fastaID)
 
-    ignoredSeeds = job.fileStore.readGlobalFile(ignoredSeedsID)
+    if files:
+        ignoredSeeds = job.fileStore.readGlobalFile(files["ignoredSeeds"])
+        alignments = job.fileStore.readGlobalFile(files["alignments"])
+        levels = job.fileStore.readGlobalFile(files["levels"])
+    else:
+        files = {}
+        ignoredSeeds = job.fileStore.getLocalTempFile()
+        alignments = job.fileStore.getLocalTempFile()
+        levels = job.fileStore.getLocalTempFile()
 
-    alignments = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["lastz", "--format=cigar", "--notrivial", "--ignoredSeeds=%s" % os.path.basename(ignoredSeeds), "--baseSamplingRate=%E" % baseSamplingRate, "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, args=args)
+    ignoredSeedsSet = set()
+    with open(ignoredSeeds, "r") as ignoredSeedsFile:
+        for line in ignoredSeedsFile:
+            seed = line.strip().rstrip()
+            ignoredSeedsSet.add(str(seed))
 
-    alignmentsID = job.fileStore.writeGlobalFile(alignments)
+    seedCounts = job.fileStore.getLocalTempFile()
+    runCmd(parameters=["lastz", "--tableonly=count", "%s[multiple]" % os.path.basename(fasta)], outfile=seedCounts, args=args)
+    highestMultiplicity = 0
+    with open(seedCounts, "r") as seedCountsFile:
+        for line in seedCountsFile:
+            info, count = line.split()
+            seed, unpacked = info.split("/")
+            if not seed in ignoredSeedsSet and count > highestMultiplicity:
+                highestMultiplicity = count
+    
+    p = seedSampleProb(N = highestMultiplicity, n = highestMultiplicity, L = args.assumedTELength)
+    with open(levels, "a") as levelsFile:
+        levelsFile.write("%s\n", str(p))
+
+    runCmd(parameters=["lastz", "--format=cigar", "--notrivial", "--ignoredSeeds=%s" % os.path.basename(ignoredSeeds), "--baseSamplingRate=%E" % p, "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, mode="a", args=args)
+
 
     seedCountsFile = job.fileStore.getLocalTempFile()
     runCmd(parameters=["lastz", "--tableonly=count", "%s[multiple]" % fasta], outfile=seedCountsFile, args=args)
@@ -211,9 +178,14 @@ def runLastzAndGetCoveredSeeds(job, fastaID, ignoredSeedsID, baseSamplingRate, a
     uniqueSeeds = job.fileStore.getLocalTempFile()
     runCmd(parameters=["uniq", os.path.basename(ignoredSeeds)], outfile=uniqueSeeds, args=args)
     
-    ignoredSeedsID = job.fileStore.writeGlobalFile(uniqueSeeds)
+    files["ignoredSeeds"] = job.fileStore.writeGlobalFile(uniqueSeeds)
+    files["alignments"] = job.fileStore.writeGlobalFile(alignments)
+    files["levels"] = job.fileStore.writeGlobalFile(levels)
 
-    return {"alignments": alignmentsID, "ignoredSeeds": ignoredSeedsID}
+    if nIterations > 5 or p > 0.5:
+        return files
+    else:
+        return job.addChildJobFn(sampleLastzAlignments, fastaID=fastaID, files=files, nIterations=nIterations+1).rv()
 
 def repeatLibraryFromPinchGraph(job, alignmentsID, sequencesID, args):
     """Construct a pinch graph from the set of pairwise alignments
@@ -261,18 +233,14 @@ def clusterByDistance(job, distancesID, args):
 
     return job.fileStore.writeGlobalFile(clusters)
 
-def buildLibrary_poa(job, fastaID, clustersID, args):
-    """Build a poa graph for each family and extract
-    repeat elements from each graph. Return a library of
-    repeat elements in fasta format.
-    """
+def makeFamilySequenceFiles(job, clustersID, fastaID, args):
     fasta = job.fileStore.readGlobalFile(fastaID)
 
     clustersFile = job.fileStore.readGlobalFile(clustersID)
     with open(clustersFile, "r") as clustersRead:
         clusters = [line.split() for line in clustersRead]
 
-    elementsJobs = []
+    fastaIDs = {}
     for i, seqList in enumerate(clusters):
         if len(seqList) < args.minClusterSize:
             continue
@@ -280,14 +248,39 @@ def buildLibrary_poa(job, fastaID, clustersID, args):
         runCmd(parameters=["samtools", "faidx", os.path.basename(fasta)] + seqList, outfile=cluster_i_fasta, args=args)
 
         cluster_i_fastaID = job.fileStore.writeGlobalFile(cluster_i_fasta)
-        poaJob = Job.wrapJobFn(runPoa, fastaID=cluster_i_fastaID, args=args)
-        elementsJob = Job.wrapJobFn(getRepeatElementsFromGraph, graphID=poaJob.rv(), clusterName="Consensus_%d" % i, args=args)
+        clusterName = "cluster_%d" % i
+        fastaIDs[clusterName] = cluster_i_fastaID
+    return fastaIDs
+
+def chooseRandomConsensusEachCluster(job, fastaID, clustersID, args):
+    fasta = job.fileStore.readGlobalFile(fastaID)
+    clusters = job.fileStore.readGlobalFile(clustersID)
+
+    library = job.fileStore.getLocalTempFile()
+    with open(clusters, "r") as clustersFile:
+        for line in clustersFile:
+            seqList = line.split()
+            seqName = random.choice(seqList)
+            runCmd(parameters=["samtools", "faidx", os.path.basename(fasta), seqName], outfile=library, mode="a", args=args)
+    
+    return job.fileStore.writeGlobalFile(library)
+
+def buildLibraryFromClusters(job, clusterSeqFileIDs, args):
+    """Build a poa graph for each family and extract
+    repeat elements from each graph. Return a library of
+    repeat elements in fasta format.
+    """
+    getElementsJobs = []
+    for clusterName in clusterSeqFileIDs:
+        fastaID = clusterSeqFileIDs[clusterName]
+        poaJob = Job.wrapJobFn(runPoa, fastaID=fastaID, args=args)
+        elementsJob = Job.wrapJobFn(getRepeatElementsFromGraph, graphID=poaJob.rv(), clusterName=clusterName, args=args)
         job.addChild(poaJob)
         poaJob.addFollowOn(elementsJob)
-        elementsJobs.append(elementsJob)
+        getElementsJobs.append(elementsJob)
 
-    catFilesJob = Job.wrapJobFn(catFilesJobFn, fileIDs=[elementsJob.rv() for elementsJob in elementsJobs])
-    for elementsJob in elementsJobs:
+    catFilesJob = Job.wrapJobFn(catFilesJobFn, fileIDs=[elementsJob.rv() for elementsJob in getElementsJobs])
+    for elementsJob in getElementsJobs:
         elementsJob.addFollowOn(catFilesJob)
     job.addChild(catFilesJob)
     return catFilesJob.rv()
@@ -315,13 +308,16 @@ def getRepeatElementsFromGraph(job, graphID, clusterName, args):
     return job.fileStore.writeGlobalFile(consensusSequences)
 
 def workflow(job, halID, genome, args):
+    returnValues = {}
     #Get candidate TE insertions from the cactus alignment
     getTECandidatesJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, genome=genome, includeReverse=False, args=args)
     job.addChild(getTECandidatesJob)
+    returnValues["candidateTEs.gff"] = getTECandidatesJob.rv('gff')
 
     #Mask low complexity regions and simple repeats with TRF
     trfJob = Job.wrapJobFn(runTRF, fastaID=getTECandidatesJob.rv('fasta'), args=args)
     getTECandidatesJob.addFollowOn(trfJob)
+    returnValues["masked_candidate_TEs.fa"] = trfJob.rv()
 
     if args.getCandidateTEsOnly:
         return {"masked_candidate_TEs.fa": trfJob.rv()}
@@ -331,26 +327,42 @@ def workflow(job, halID, genome, args):
             alignmentsID = args.precomputedAlignmentsID
             prevJob = trfJob
         else:
-            alignmentsJob = Job.wrapJobFn(sampleLastzAlignments, fastaID=trfJob.rv(), args=args)
+            alignmentsJob = Job.wrapJobFn(runLastz, fastaID=trfJob.rv(), args=args, querydepth=2)
             alignmentsID = alignmentsJob.rv('alignments')
             trfJob.addFollowOn(alignmentsJob)
             prevJob = alignmentsJob
+        returnValues["alignments.cigar"] = alignmentsID
         distancesJob = Job.wrapJobFn(alignmentDistances, sequencesID=trfJob.rv(), alignmentsID=alignmentsID, args=args)
         prevJob.addFollowOn(distancesJob)
         initialClusteringJob = Job.wrapJobFn(clusterByDistance, distancesID=distancesJob.rv(), args=args)
         distancesJob.addFollowOn(initialClusteringJob)
+        returnValues["distances.txt"] = distancesJob.rv()
 
     elif args.initialClusteringMethod == 'minhash':
         distancesJob = Job.wrapJobFn(minhashDistances, fastaID=trfJob.rv(), args=args)
         trfJob.addFollowOn(distancesJob)
         initialClusteringJob = Job.wrapJobFn(clusterByDistance, distancesID=distancesJob.rv(), args=args)
         distancesJob.addFollowOn(initialClusteringJob)
+        returnValues["distances.txt"] = distancesJob.rv()
 
-    #Build a poa graph for each cluster and extract 
-    #consensus repeat sequences from each graph
-    buildLibraryJob = Job.wrapJobFn(buildLibrary_poa, clustersID=initialClusteringJob.rv(), fastaID=trfJob.rv(), args=args)
-    initialClusteringJob.addFollowOn(buildLibraryJob)
+    returnValues["clusters.txt"] = initialClusteringJob.rv()
+    makeFamilySequenceFilesJob = Job.wrapJobFn(makeFamilySequenceFiles, clustersID=initialClusteringJob.rv(), fastaID=trfJob.rv(), args=args)
+    initialClusteringJob.addFollowOn(makeFamilySequenceFilesJob)
+    returnValues["families"] = makeFamilySequenceFilesJob.rv()
 
+    if args.skipConsensus:
+        return returnValues
+
+    if args.consensusMethod == "poa-heaviest-bundling":
+        #Build a poa graph for each cluster and extract 
+        #consensus repeat sequences from each graph
+        buildLibraryJob = Job.wrapJobFn(buildLibraryFromClusters, clusterSeqFileIDs=makeFamilySequenceFilesJob.rv(), args=args)
+        makeFamilySequenceFilesJob.addFollowOn(buildLibraryJob)
+        returnValues["library.fa"] = buildLibraryJob.rv()
+    elif args.consensusMethod == "random":
+        buildLibraryJob = Job.wrapJobFn(chooseRandomConsensusEachCluster, fastaID=trfJob.rv(), clustersID=initialClusteringJob.rv(), args=args)
+        makeFamilySequenceFilesJob.addFollowOn(buildLibraryJob)
+        returnValues["library.fa"] = buildLibraryJob.rv()
     if args.skipRepeatMasker:
         finalGffID = None
     else:
@@ -360,15 +372,16 @@ def workflow(job, halID, genome, args):
         genomeFile = job.fileStore.getLocalTempFile()
         hal2fastaCmd = ["hal2fasta", os.path.basename(hal), genome]
         if args.chrom and args.start and args.end:
-            hal2fastaCmd.extend(["--sequence", chrom, "--start", str(start), "--length", str(end - start)])
+            hal2fastaCmd.extend(["--sequence", args.chrom, "--start", str(start), "--length", str(end - start)])
         runCmd(parameters=hal2fastaCmd, outfile=genomeFile, args=args)
 
         genomeID = job.fileStore.writeGlobalFile(genomeFile)
         repeatMaskerJob = Job.wrapJobFn(runRepeatMasker, repeatLibraryID=buildLibraryJob.rv(), seqID=genomeID, args=args)
         buildLibraryJob.addFollowOn(repeatMaskerJob)
         finalGffID = repeatMaskerJob.rv()
+    returnValues["final_annotations.gff"] = finalGffID
 
-    return {'candidates.gff': getTECandidatesJob.rv('gff'), 'masked_candidate_TEs.fa': trfJob.rv(),'clusters.txt': initialClusteringJob.rv(), 'final.gff': finalGffID, 'library.fa': buildLibraryJob.rv()}
+    return returnValues
 
 
 def exportResultsFiles(toil, results, outDir):
@@ -409,6 +422,7 @@ def main():
     parser.add_argument("--getCandidateTEsOnly", action="store_true", default=False, help="")
     parser.add_argument("--lastzExact", action="store_true", default=False)
     parser.add_argument("--skipRepeatMasker", action="store_true", default=False)
+    parser.add_argument("--skipConsensus", action="store_true", default=False)
 
     parser.add_argument("--localBinaries", action="store_true", default=False)
 
@@ -416,7 +430,7 @@ def main():
 
     parser.add_argument("--initialClusteringMethod", type=str, default="lastz")
     parser.add_argument("--minClusterSize", type=int, default=3)
-    parser.add_argument("--poaConsensusMethod", type=str, default="heaviest-bundling")
+    parser.add_argument("--consensusMethod", type=str, default="poa-heaviest-bundling")
 
     Job.Runner.addToilOptions(parser)
 

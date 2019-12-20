@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
 
 	for (int i = 0; i < graph->nsource_seq; i++) {
 		if (is_consensus(graph->source_seq[i].name)) {
-			printf(">Consensus_%s_%s\n", namePrefix, graph->source_seq[i].name);
+			printf(">%s_%s\n", namePrefix, graph->source_seq[i].name);
 			printSequence(graph, i, stdout);
 			printf("\n");
 		}
