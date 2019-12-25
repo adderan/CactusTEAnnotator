@@ -65,9 +65,14 @@ def getTECandidatesOnBranch(job, halID, genome, args, includeReverse=True):
     genome relative to its parent.
     """
     returnValues = {}
-    if args.precomputedFiles and "masked_candidate_TEs.fa" in args.precomputedFileIDs:
+    if args.precomputedFiles:
+        assert "candidate_TEs.gff" in args.precomputedFileIDs
+        assert "candidate_TEs.fa" in args.precomputedFileIDs
+        assert "masked_candidate_TEs.fa" in args.precomputedFileIDs
         job.fileStore.logToMaster("Using precomputed masked TEs file")
-        return args.precomputedFileIDs["masked_candidate_TEs.fa"]
+        returnValues["gff"] = args.precomputedFileIDs["candidate_TEs.gff"]
+        returnValues["fasta"] = args.precomputedFileIDs["candidate_TEs.fa"]
+        returnValues["masked_fasta"] = args.precomputedFileIDs["masked_candidate_TEs.fa"]
     hal = job.fileStore.readGlobalFile(halID)
     gff = job.fileStore.getLocalTempFile()
     fasta = job.fileStore.getLocalTempFile()
@@ -79,8 +84,9 @@ def getTECandidatesOnBranch(job, halID, genome, args, includeReverse=True):
 
     fastaID = job.fileStore.writeGlobalFile(fasta)
     gffID = job.fileStore.writeGlobalFile(gff)
-    returnValues["gff"] = gffID
-    returnValues["fasta"] = job.addChildJobFn(runTRF, fastaID=fastaID, args=args).rv()
+    returnValues["candidate_TEs.gff"] = gffID
+    returnValues["candidate_TEs.fa"] = fastaID
+    returnValues["masked_candidate_TEs.fa"] = job.addChildJobFn(runTRF, fastaID=fastaID, args=args).rv()
     return returnValues
 
 def runTRF(job, fastaID, args):
@@ -323,37 +329,34 @@ def workflow(job, halID, genome, args):
     #Get candidate TE insertions from the cactus alignment
     getTECandidatesJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, genome=genome, includeReverse=False, args=args)
     job.addChild(getTECandidatesJob)
-    returnValues["candidateTEs.gff"] = getTECandidatesJob.rv('gff')
+    returnValues["candidate_TEs.gff"] = getTECandidatesJob.rv('gff')
     returnValues["candidate_TEs.fa"] = getTECandidatesJob.rv('fasta')
-    #Mask low complexity regions and simple repeats with TRF
-    trfJob = Job.wrapJobFn(runTRF, fastaID=getTECandidatesJob.rv('fasta'), args=args)
-    getTECandidatesJob.addFollowOn(trfJob)
-    returnValues["masked_candidate_TEs.fa"] = trfJob.rv()
-
+    returnValues["masked_candidate_TEs.fa"] = getTECandidatesJob.rv("masked_fasta")
+    fastaID = getTECandidatesJob.rv("masked_fasta")
     if args.getCandidateTEsOnly:
         return returnValues
 
     if args.initialClusteringMethod == 'lastz':
-        alignmentsJob = Job.wrapJobFn(runLastz, fastaID=trfJob.rv(), args=args, querydepth=2)
+        alignmentsJob = Job.wrapJobFn(runLastz, fastaID=fastaID, args=args, querydepth=2)
         alignmentsID = alignmentsJob.rv('alignments')
-        trfJob.addFollowOn(alignmentsJob)
+        getTECandidatesJob.addFollowOn(alignmentsJob)
         
         returnValues["alignments.cigar"] = alignmentsID
-        distancesJob = Job.wrapJobFn(alignmentDistances, sequencesID=trfJob.rv(), alignmentsID=alignmentsID, args=args)
+        distancesJob = Job.wrapJobFn(alignmentDistances, sequencesID=fastaID, alignmentsID=alignmentsID, args=args)
         alignmentsJob.addFollowOn(distancesJob)
         initialClusteringJob = Job.wrapJobFn(clusterByDistance, distancesID=distancesJob.rv(), args=args)
         distancesJob.addFollowOn(initialClusteringJob)
         returnValues["distances.txt"] = distancesJob.rv()
 
     elif args.initialClusteringMethod == 'minhash':
-        distancesJob = Job.wrapJobFn(minhashDistances, fastaID=trfJob.rv(), args=args)
-        trfJob.addFollowOn(distancesJob)
+        distancesJob = Job.wrapJobFn(minhashDistances, fastaID=fastaID, args=args)
+        getTECandidatesJob.addFollowOn(distancesJob)
         initialClusteringJob = Job.wrapJobFn(clusterByDistance, distancesID=distancesJob.rv(), args=args)
         distancesJob.addFollowOn(initialClusteringJob)
         returnValues["distances.txt"] = distancesJob.rv()
 
     returnValues["clusters.txt"] = initialClusteringJob.rv()
-    makeFamilySequenceFilesJob = Job.wrapJobFn(makeFamilySequenceFiles, clustersID=initialClusteringJob.rv(), fastaID=trfJob.rv(), args=args)
+    makeFamilySequenceFilesJob = Job.wrapJobFn(makeFamilySequenceFiles, clustersID=initialClusteringJob.rv(), fastaID=fastaID, args=args)
     initialClusteringJob.addFollowOn(makeFamilySequenceFilesJob)
     returnValues["families"] = makeFamilySequenceFilesJob.rv()
 
@@ -367,7 +370,7 @@ def workflow(job, halID, genome, args):
         makeFamilySequenceFilesJob.addFollowOn(buildLibraryJob)
         returnValues["library.fa"] = buildLibraryJob.rv()
     elif args.consensusMethod == "random":
-        buildLibraryJob = Job.wrapJobFn(chooseRandomConsensusEachCluster, fastaID=trfJob.rv(), clustersID=initialClusteringJob.rv(), args=args)
+        buildLibraryJob = Job.wrapJobFn(chooseRandomConsensusEachCluster, fastaID=fastaID, clustersID=initialClusteringJob.rv(), args=args)
         makeFamilySequenceFilesJob.addFollowOn(buildLibraryJob)
         returnValues["library.fa"] = buildLibraryJob.rv()
     if args.skipRepeatMasker:
@@ -394,6 +397,8 @@ def importPrecomputedFiles(toil, args):
     args.precomputedFileIDs = {}
     files = os.listdir(args.precomputedFiles)
     for file in files:
+        if os.path.isdir(os.path.join(args.precomputedFiles, file)):
+            continue
         args.precomputedFileIDs[file] = toil.importFile(makeURL(os.path.join(args.precomputedFiles, file)))
 
 
@@ -439,7 +444,7 @@ def main():
 
     parser.add_argument("--localBinaries", action="store_true", default=False)
 
-    parser.add_argument("--precomputedFiles", type="str", default=None)
+    parser.add_argument("--precomputedFiles", type=str, default=None)
 
     parser.add_argument("--initialClusteringMethod", type=str, default="lastz")
     parser.add_argument("--minClusterSize", type=int, default=3)
@@ -460,7 +465,7 @@ def main():
         args.substMatrixID = toil.importFile(makeURL(os.path.join(os.path.dirname(__file__), args.substMatrix)))
 
         if args.precomputedFiles:
-            importPrecomputedFiles(args)
+            importPrecomputedFiles(toil, args)
 
         rootJob = Job.wrapJobFn(workflow, halID=halID, genome=args.genome, args=args)
 
