@@ -73,20 +73,21 @@ def getTECandidatesOnBranch(job, halID, genome, args, includeReverse=True):
         returnValues["gff"] = args.precomputedFileIDs["candidate_TEs.gff"]
         returnValues["fasta"] = args.precomputedFileIDs["candidate_TEs.fa"]
         returnValues["masked_fasta"] = args.precomputedFileIDs["masked_candidate_TEs.fa"]
+        return returnValues
     hal = job.fileStore.readGlobalFile(halID)
     gff = job.fileStore.getLocalTempFile()
     fasta = job.fileStore.getLocalTempFile()
 
-    cmd = ["getTECandidates", os.path.basename(hal), genome, "--minLength", str(args.minTESize), "--maxLength", str(args.maxTESize), "--outGFF", os.path.basename(gff), "--outFasta", os.path.basename(fasta), "--maxSequences", str(args.maxInsertions)]
+    cmd = ["getTECandidates", os.path.basename(hal), genome, "--minLength", str(args.minTESize), "--maxLength", str(args.maxTESize), "--outGFF", os.path.basename(gff), "--outFasta", os.path.basename(fasta), "--maxSequences", str(args.maxTECandidatesToProcess)]
     if not includeReverse:
         cmd.extend(["--ignoreReverse"])
     runCmd(parameters=cmd, args=args)
 
     fastaID = job.fileStore.writeGlobalFile(fasta)
     gffID = job.fileStore.writeGlobalFile(gff)
-    returnValues["candidate_TEs.gff"] = gffID
-    returnValues["candidate_TEs.fa"] = fastaID
-    returnValues["masked_candidate_TEs.fa"] = job.addChildJobFn(runTRF, fastaID=fastaID, args=args).rv()
+    returnValues["gff"] = gffID
+    returnValues["fasta"] = fastaID
+    returnValues["masked_fasta"] = job.addChildJobFn(runTRF, fastaID=fastaID, args=args).rv()
     return returnValues
 
 def runTRF(job, fastaID, args):
@@ -130,7 +131,7 @@ def runLastz(job, fastaID, args, querydepth=None):
         parameters.extend(["--querydepth=keep,nowarn:%i" % querydepth])
     runCmd(parameters=parameters, outfile=alignments, args=args)
 
-    return {"alignments": job.fileStore.writeGlobalFile(alignments)}
+    return job.fileStore.writeGlobalFile(alignments)
 
 def sortAlignments(job, alignmentsID, args):
     """Sort a set of alignments in cigar format by highest to lowest
@@ -316,29 +317,38 @@ def getRepeatElementsFromGraph(job, graphID, clusterName, args):
     graph = job.fileStore.readGlobalFile(graphID)
     consensusSequences = job.fileStore.getLocalTempFile()
     
-    if args.poaConsensusMethod == "heaviest-bundling":
+    if args.consensusMethod == "poa-heaviest-bundling":
         runCmd(parameters=["getHeaviestBundles", "--namePrefix", clusterName, "--lpo", os.path.basename(graph)], outfile=consensusSequences, args=args)
 
-    elif args.poaConsensusMethod == "dense-bundling":
+    elif args.consensusMethod == "poa-dense-bundling":
         runCmd(parameters=["denseBundles", "--lpo", os.path.basename(graph)], outfile=consensusSequences, args=args)
 
     return job.fileStore.writeGlobalFile(consensusSequences)
 
 def workflow(job, halID, genome, args):
     returnValues = {}
+
+    parameters = job.fileStore.getLocalTempFile()
+    with open(parameters, "w") as parametersFile:
+        parametersFile.write("parameters for this run\n" \
+            + "alignment distance threshold for clustering: %f\n" % args.distanceThreshold \
+            + "initial clustering method: %s\n" % args.initialClusteringMethod \
+            + "consensus method: %s\n" % args.consensusMethod)
+    returnValues["parameters.txt"] = job.fileStore.writeGlobalFile(parameters)
+    
     #Get candidate TE insertions from the cactus alignment
     getTECandidatesJob = Job.wrapJobFn(getTECandidatesOnBranch, halID=halID, genome=genome, includeReverse=False, args=args)
     job.addChild(getTECandidatesJob)
     returnValues["candidate_TEs.gff"] = getTECandidatesJob.rv('gff')
     returnValues["candidate_TEs.fa"] = getTECandidatesJob.rv('fasta')
-    returnValues["masked_candidate_TEs.fa"] = getTECandidatesJob.rv("masked_fasta")
-    fastaID = getTECandidatesJob.rv("masked_fasta")
+    returnValues["masked_candidate_TEs.fa"] = getTECandidatesJob.rv('masked_fasta')
+    fastaID = getTECandidatesJob.rv('masked_fasta')
     if args.getCandidateTEsOnly:
         return returnValues
 
     if args.initialClusteringMethod == 'lastz':
         alignmentsJob = Job.wrapJobFn(runLastz, fastaID=fastaID, args=args, querydepth=2)
-        alignmentsID = alignmentsJob.rv('alignments')
+        alignmentsID = alignmentsJob.rv()
         getTECandidatesJob.addFollowOn(alignmentsJob)
         
         returnValues["alignments.cigar"] = alignmentsID
@@ -424,7 +434,7 @@ def main():
     parser.add_argument("--minTESize", type=int, default=100)
     parser.add_argument("--maxTESize", type=int, default=10000)
     parser.add_argument("--maxNFraction", type=float, default=0.2)
-    parser.add_argument("--maxInsertions", type=int, default=None)
+    parser.add_argument("--maxTECandidatesToProcess", type=int, default=None)
 
     parser.add_argument("--chrom", type=str, default=None)
     parser.add_argument("--start", type=int, default=None)
@@ -449,7 +459,6 @@ def main():
     parser.add_argument("--initialClusteringMethod", type=str, default="lastz")
     parser.add_argument("--minClusterSize", type=int, default=3)
     parser.add_argument("--consensusMethod", type=str, default="poa-heaviest-bundling")
-
     Job.Runner.addToilOptions(parser)
 
     args = parser.parse_args()
