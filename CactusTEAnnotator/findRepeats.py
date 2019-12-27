@@ -262,6 +262,8 @@ def makeFamilySequenceFiles(job, clustersID, fastaID, args):
     for i, seqList in enumerate(clusters):
         if len(seqList) < args.minClusterSize:
             continue
+        if args.maxTEsPerFamily and len(seqList) > args.maxTEsPerFamily:
+            seqList = random.sample(seqList, args.maxTEsPerFamily)
         cluster_i_fasta = job.fileStore.getLocalTempFile()
         runCmd(parameters=["samtools", "faidx", os.path.basename(fasta)] + seqList, outfile=cluster_i_fasta, args=args)
 
@@ -459,6 +461,7 @@ def main():
     parser.add_argument("--initialClusteringMethod", type=str, default="lastz")
     parser.add_argument("--minClusterSize", type=int, default=3)
     parser.add_argument("--consensusMethod", type=str, default="poa-heaviest-bundling")
+    parser.add_argument("--maxTEsPerFamily", type=int, default=100)
     Job.Runner.addToilOptions(parser)
 
     args = parser.parse_args()
