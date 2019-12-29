@@ -8,9 +8,10 @@ def main():
 
     with open(args.rmaskGff, "r") as rmaskGffFile:
         for line in rmaskGffFile:
-            chrom = line[4]
-            start = line[5]
-            end = line[6]
+            info = line.split()
+            chrom = info[4]
+            start = info[5]
+            end = info[6]
             print("%s\t%s\t%s\n" % (chrom, start, end))
 
 if __name__ == "__main__":
