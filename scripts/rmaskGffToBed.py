@@ -12,7 +12,7 @@ def main():
             chrom = info[4]
             start = info[5]
             end = info[6]
-            print("%s\t%s\t%s\n" % (chrom, start, end))
+            print("%s\t%s\t%s" % (chrom, start, end))
 
 if __name__ == "__main__":
     main()
