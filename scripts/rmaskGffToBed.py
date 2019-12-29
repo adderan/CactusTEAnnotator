@@ -11,7 +11,7 @@ def main():
             chrom = line[4]
             start = line[5]
             end = line[6]
-            print "%s\t%s\t%s\n" % (chrom, start, end)
+            print("%s\t%s\t%s\n" % (chrom, start, end))
 
 if __name__ == "__main__":
     main()
