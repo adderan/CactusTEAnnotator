@@ -34,7 +34,7 @@ def readGff(gff):
         features[chrom].append(Feature(chrom=chrom, start=int(start), end=int(end), name=name, strand=strand, family=family))
     return(features)
 
-def readRmaskGff(gffFilename, targetChrom):
+def readRmaskGff(gffFilename):
     features = []
     with open(gffFilename, 'r') as gffFile:
         for line in gffFile:
@@ -42,8 +42,6 @@ def readRmaskGff(gffFilename, targetChrom):
             if len(info) != 16:
                 continue
             chrom, source, annotationType, start, end, score, strand, a, b, geneID, c, transcriptID, e, familyID, g, h = info
-            if not chrom == targetChrom:
-                continue
             geneID = geneID[1:len(geneID) - 2]
             familyID = familyID[1:len(familyID) - 2]
             transcriptID = transcriptID[1:len(transcriptID) - 2]
@@ -57,17 +55,15 @@ def readRmaskGff(gffFilename, targetChrom):
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--rmask", type=str)
-    parser.add_argument("--features", type=file)
+    parser.add_argument("--query", type=str)
+    parser.add_argument("--target", type=file)
     parser.add_argument("--minOverlap", type=int, default=0.6)
     args = parser.parse_args()
 
     
-    elements = []
+    queryAnnotations = readRmaskGff(args.query)
+    targetAnnotations = readRmaskGff(args.target)
     
-
-    for element in elements:
-        print("%s\t%s\t%s\t%s\n" % (element.family, element.refFamily, element.refName, element.name))
 
     #print("Found %d elements" % len(elements))
     #Calculate rand index
