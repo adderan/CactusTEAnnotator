@@ -121,8 +121,10 @@ int main(int argc, char **argv) {
         if(overlap(target, query) > 0.5) {
             stList_append(matchingAnnotations_query, query);
             stList_append(matchingAnnotations_target, target);
+            target = stSortedSet_getNext(targetIterator);
+            query = stSortedSet_getNext(queryIterator);
         }
-        if (target->start < query->start) {
+        else if (target->start < query->start) {
             target = stSortedSet_getNext(targetIterator);
         }
         else {
@@ -132,6 +134,26 @@ int main(int argc, char **argv) {
     
     fprintf(stderr, "Found %ld overlapping annotations\n", stList_length(matchingAnnotations_query));
 
+    int64_t nConcordant = 0;
+    int64_t total = 0;
+    for (int64_t i = 0; i < stList_length(matchingAnnotations_query); i++) {
+        if (!(i % 50 == 0)) continue;
+        Annotation *query_i = stList_get(matchingAnnotations_query, i);
+        Annotation *target_i = stList_get(matchingAnnotations_target, i);
+        for (int64_t j = 0; j < i; j++) { 
+            Annotation *query_j = stList_get(matchingAnnotations_query, j);
+            Annotation *target_j = stList_get(matchingAnnotations_target, j);
+            bool a = (strcmp(query_i->family, query_j->family) == 0);
+            bool b = (strcmp(target_i->family, target_j->family) == 0);
+            if ((a && b) || (!a && !b)) {
+                nConcordant++;
+            }
+            total++;
+        }
+    }
+    fprintf(stderr, "Sampled %ld pairs\n", total);
+    double concordance = (double) nConcordant / (double) total;
+    fprintf(stderr, "Concordance = %lf\n", concordance);
     stSortedSet_destruct(targetAnnotations);
     stSortedSet_destruct(queryAnnotations);
 }
