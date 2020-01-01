@@ -64,14 +64,12 @@ double overlap(Annotation *query, Annotation *target) {
     assert(query->start < query->end);
     if ((target->start > query->end) || (query->start > target->end))
         return 0.0;
-    
     int64_t overlapStart = (target->start > query->start) ? target->start : query->start;
     int64_t overlapEnd = (target->end < query->end) ? target->end : query->end;
 
     int64_t overlappingBases = overlapEnd - overlapStart + 1;
     double overlapFraction = (double) overlappingBases/ (double) (target->end - target->start);
 
-    fprintf(stderr, "Overlap = %lf\n", overlapFraction);
     return overlapFraction;
 }
 
@@ -120,21 +118,16 @@ int main(int argc, char **argv) {
     Annotation *target = stSortedSet_getNext(targetIterator);
     Annotation *query = stSortedSet_getNext(queryIterator);
     while(target && query) {
-        if (overlap(target, query) > 0.0) {
-            if(overlap(target, query) > 0.5) {
-                stList_append(matchingAnnotations_query, query);
-                stList_append(matchingAnnotations_target, target);
-            }
-            target = stSortedSet_getNext(targetIterator);
-            query = stSortedSet_getNext(queryIterator);
+        if(overlap(target, query) > 0.5) {
+            stList_append(matchingAnnotations_query, query);
+            stList_append(matchingAnnotations_target, target);
         }
-        else if (target->start < query->start) {
+        if (target->start < query->start) {
             target = stSortedSet_getNext(targetIterator);
         }
-        else if (target->start > query->start) {
+        else {
             query = stSortedSet_getNext(queryIterator);
         }
-        fprintf(stderr, "No overlap\n");
     }
     
     fprintf(stderr, "Found %ld overlapping annotations\n", stList_length(matchingAnnotations_query));
