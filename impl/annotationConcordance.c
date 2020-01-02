@@ -10,6 +10,7 @@ typedef struct {
     int64_t start;
     int64_t end;
     int64_t id;
+    Annotation *match;
 } Annotation;
 
 
@@ -50,6 +51,7 @@ stSortedSet *readRepeatMaskerGff(char *gffFilename) {
         annotation->start = _start;
         annotation->end = _end;
         annotation->id = _id;
+        annotation->match = NULL;
 
         stSortedSet_insert(annotations, annotation);
 
@@ -121,6 +123,8 @@ int main(int argc, char **argv) {
         if(overlap(target, query) > 0.5) {
             stList_append(matchingAnnotations_query, query);
             stList_append(matchingAnnotations_target, target);
+            query->match = target;
+            target->match = query;
             target = stSortedSet_getNext(targetIterator);
             query = stSortedSet_getNext(queryIterator);
         }
@@ -154,6 +158,20 @@ int main(int argc, char **argv) {
     fprintf(stderr, "Sampled %ld pairs\n", total);
     double concordance = (double) nConcordant / (double) total;
     fprintf(stderr, "Concordance = %lf\n", concordance);
+
+    stHash *familyNames = stHash_construct();
+    stHash *totalCopiesPerFamily = stHash_construct();
+    stHash *coveredCopiesPerFamily = stHash_construct();
+    stList *targetAnnotationsList = stList_construct();
+    for (int64_t i = 0; i < stList_length(targetAnnotationsList); i++) {
+        Annotation *a = stList_get(targetAnnotationsList, i);
+        if (!stHash_search(totalCopiesPerFamily, stHash_stringKey(a->family))) {
+            stHash_insert(totalCopiesPerFamily, stHash_stringKey(a->family), (void*)0);
+            stHash_insert(coveredCopiesPerFamily, stHash_stringKey(a->family), (void*)0);
+        }
+        stHash_set()
+
+    }
     stSortedSet_destruct(targetAnnotations);
     stSortedSet_destruct(queryAnnotations);
 }
