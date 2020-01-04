@@ -1,6 +1,9 @@
 from __future__ import print_function
 import argparse
 import sys
+import os
+import matplotlib.pyplot as pyplot
+
 
 class GffLine:
     def __init__(self, chrom, start, end, name, family):
@@ -39,8 +42,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--queryGff", type=str)
     parser.add_argument("--targetGff", type=str)
+    parser.add_argument("--out", type=str)
 
     args = parser.parse_args()
+
+    if os.path.exists(args.out):
+        print("Output folder %s already exists.", file=sys.stderr)
 
     queryAnnotations = readGff(args.queryGff)
     targetAnnotations = readGff(args.targetGff)
@@ -83,24 +90,28 @@ def main():
     concordance = float(nConcordant)/float(total)
     print("Concordance = %f" % concordance, file=sys.stderr)
 
-    targetFamilies = {}
-    for target in targetAnnotations:
-        if target.family not in targetFamilies:
-            targetFamilies[target.family] = []
-        targetFamilies[target.family].append(target)
-    familyStats = []
-    for family in targetFamilies:
-        coveredRepeatCopies = 0
-        for repeatCopy in targetFamilies[family]:
-            if repeatCopy.match is not None:
-                coveredRepeatCopies = coveredRepeatCopies + 1
-        familyCoverage = float(coveredRepeatCopies)/float(len(targetFamilies[family]))
 
-        averageLength = float(sum([copy.end - copy.start for copy in targetFamilies[family]]))/float(len(targetFamilies[family]))
-        familyStats.append((family, len(targetFamilies[family]), familyCoverage, averageLength))
-    
-    familyStats.sort(key = lambda x: x[1])
-    for familyInfo in familyStats:
-        print("\t".join([str(item) for item in familyInfo]), file=sys.stdout)
+    if args.familyCoverageStats:
+        targetFamilies = {}
+        for target in targetAnnotations:
+            if target.family not in targetFamilies:
+                targetFamilies[target.family] = []
+            targetFamilies[target.family].append(target)
+        familyStats = []
+        for family in targetFamilies:
+            coveredRepeatCopies = 0
+            for repeatCopy in targetFamilies[family]:
+                if repeatCopy.match is not None:
+                    coveredRepeatCopies = coveredRepeatCopies + 1
+            familyCoverage = float(coveredRepeatCopies)/float(len(targetFamilies[family]))
+
+            averageLength = float(sum([copy.end - copy.start for copy in targetFamilies[family]]))/float(len(targetFamilies[family]))
+            concordance = 0
+            
+            familyStats.append((family, len(targetFamilies[family]), familyCoverage, averageLength))
+        familyStats.sort(key = lambda x: x[1], reverse=True)
+        with open(args.familyCoverageStats, "w") as coverageStatsFile:
+            for familyInfo in familyStats:
+                print("\t".join([str(item) for item in familyInfo]), file=coverageStatsFile)
 if __name__ == "__main__":
     main()
