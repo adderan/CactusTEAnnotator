@@ -186,6 +186,7 @@ int main(int argc, char **argv) {
 	}
 	else {
 		bestPath = dense_bundle(graph, &pathLength, c);
+		fpritnf(stderr, "Path length = %d\n", pathLength);
 		for (int i = 0; i < pathLength; i++) {
 			printf("%c", graph->letter[bestPath[i]].letter);
 		}
