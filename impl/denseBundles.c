@@ -30,7 +30,7 @@
  *
  */
 
-int *dense_bundle(LPOSequence_T *graph, int *pathLength, double c) {
+int *dense_bundle(LPOSequence_T *graph, int *pathLength, double lengthPenalty) {
 
 	int *containsPosition = calloc(sizeof(int), graph->nsource_seq);
 	int *paths = calloc(sizeof(int), graph->length);
@@ -76,7 +76,6 @@ int *dense_bundle(LPOSequence_T *graph, int *pathLength, double c) {
 		paths[i] = best_right;
 		score[i] = right_score + right_overlap;
 
-		//printf("score = %d\n", score[i]);
 
 	}
 
@@ -87,13 +86,8 @@ int *dense_bundle(LPOSequence_T *graph, int *pathLength, double c) {
 		for (int end = start; end >= 0; end = paths[end]) {
 			len++;
 			int weight = score[start] - score[end];
-			double density = weight - c*len;
-			if (density > bestScore) {
-				bestScore = density;
-				bestStart = start;
-				bestEnd = end;
-				bestLength = len;
-			}
+
+
 		}
 	}
 	if (bestScore <= 0) {
@@ -130,7 +124,7 @@ void zeroPath(LPOSequence_T *graph, int *path, int pathLength) {
 int main(int argc, char **argv) {
 	char *lpoFilename = NULL;
 	bool iterate = false;
-	double c = 1.1;
+	double lengthPenalty = 1.1;
     while (1) {
         static struct option long_options[] = {
             { "lpo", required_argument, 0, 'a' }, 
@@ -155,7 +149,7 @@ int main(int argc, char **argv) {
                 break;
 
 			case 'c':
-				sscanf(optarg, "%lf\n", &c);
+				sscanf(optarg, "%lf\n", &lengthPenalty);
 				break;
             default:
                 return 1;
@@ -173,7 +167,7 @@ int main(int argc, char **argv) {
 		while (true) {
 			//Keep extracting paths and zeroing out the weights
 			//of all sequences in the best path until none are left
-			bestPath = dense_bundle(graph, &pathLength, c);
+			bestPath = dense_bundle(graph, &pathLength, lengthPenalty);
 			if (!bestPath) break;
 			printf(">consensus_%d\n", consensusNum);
 			for (int i = 0; i < pathLength; i++) {
@@ -185,7 +179,7 @@ int main(int argc, char **argv) {
 		}
 	}
 	else {
-		bestPath = dense_bundle(graph, &pathLength, c);
+		bestPath = dense_bundle(graph, &pathLength, lengthPenalty);
 		for (int i = 0; i < pathLength; i++) {
 			printf("%c", graph->letter[bestPath[i]].letter);
 		}
