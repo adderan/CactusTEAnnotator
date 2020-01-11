@@ -187,16 +187,15 @@ stList *getPartialOrderGraph(stPinchThreadSet *graph) {
 				node->length =  stPinchBlock_getLength(block);
 				stList *incomingEndList = stSet_getList(incomingAdjacencies);
 
-				node->nIncomingNodes = stList_length(incomingEndList);
-				node->incomingNodes = calloc(node->nIncomingNodes, sizeof(int64_t));
-				node->incomingEdgeWeights = calloc(node->nIncomingNodes, sizeof(int64_t));
-				for (int k = 0; k < node->nIncomingNodes; k++) {
+				node->incomingNodes = stList_construct2(stList_length(incomingEndList));
+				node->incomingEdgeWeights = stList_construct2(stList_length(incomingEndList));
+				for (int k = 0; k < stList_length(incomingEndList); k++) {
 					stPinchEnd *incomingEnd = stList_get(incomingEndList, k);
 					stPinchBlock *incomingBlock = stPinchEnd_getBlock(incomingEnd);
 					//We should have already encountered this block
-					node->incomingNodes[k] = (int64_t) stHash_search(blockIndex, incomingBlock);
+					stList_set(node->incomingNodes, k, stHash_search(blockIndex, incomingBlock));
 					stSortedSet *connectingThreads = getConnectingThreads(incomingEnd, end);
-					node->incomingEdgeWeights[k] = stSortedSet_size(connectingThreads);
+					stList_set(node->incomingEdgeWeights, k, (void*)stSortedSet_size(connectingThreads));
 					stSortedSet_destruct(connectingThreads);
 				}
 				node->data = block;
@@ -532,11 +531,12 @@ stList *getHeaviestPath(stList *graph) {
 
 		int64_t maxEdgeWeight = 0;
 		paths[i] = -1;
-		for (int64_t k = 0; k < node->nIncomingNodes; k++) {
+		for (int64_t k = 0; k < stList_length(node->incomingNodes); k++) {
+			int64_t incomingNodeIndex = (int64_t) stList_get(node->incomingNodes, k);
 			PartialOrderNode *incomingNode = 
-				stList_get(graph, node->incomingNodes[k]);
+				stList_get(graph, incomingNodeIndex);
 			
-			int64_t edgeWeight = node->incomingEdgeWeights[k];
+			int64_t edgeWeight = (int64_t) stList_get(node->incomingEdgeWeights, k);
 
 			if (edgeWeight > maxEdgeWeight) {
 				paths[i] = k;
@@ -566,9 +566,9 @@ stList *getHeaviestPath(stList *graph) {
 		if (k == -1) break;
 
 		//zero out the edge chosen in this traversal
-		node->incomingEdgeWeights[k] = 0;
+		stList_set(node->incomingEdgeWeights, k, 0);
 
-		i = node->incomingNodes[k];
+		i = (int64_t) stList_get(node->incomingNodes, k);
 	}
 	free(paths);
 	free(score);

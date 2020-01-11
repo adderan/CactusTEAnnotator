@@ -89,8 +89,7 @@ bin/getSequencesFromHAL: impl/getSequencesFromHAL.cpp ${libHal} ${libSonLib}
 bin/neighborJoining: impl/neighborJoining.c ${libSonLib}
 	${cc} ${cflags} -o bin/neighborJoining -I ${sonLibInc} impl/neighborJoining.c ${libSonLib} -lm
 
-bin/denseBundles: impl/denseBundles.c ${libSonLib}
-	${cc} ${cflags} -o bin/denseBundles -I ${sonLibInc} -I poaV2/ impl/denseBundles.c ${libSonLib} ${liblpo} -lm
+
 
 bin/clusterByAlignmentDistances: impl/clusterByAlignmentDistances.cpp ${libSonLib} ${liblpo} ${objs}
 	g++ -g -o bin/clusterByAlignmentDistances -I ${sonLibInc} -I poaV2/ impl/clusterByAlignmentDistances.cpp ${objs} ${libSonLib} ${murmurHashSources} ${liblpo} -lm
@@ -114,6 +113,9 @@ bin/repeatGraphTests: impl/repeatGraphs.o impl/repeatGraphTests.c ${libSonLib} $
 bin/getElementsFromPinchGraph: impl/repeatGraphs.o impl/getElementsFromPinchGraph.c ${libSonLib} ${pinchesAndCactiLib} ${cafLib} ${cactusLib}
 	${cc} ${cflags} -o bin/getElementsFromPinchGraph -I impl/ -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/getElementsFromPinchGraph.c impl/repeatGraphs.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} -lm -lz
 
+bin/denseBundles: impl/denseBundles.c ${libSonLib} impl/repeatGraphs.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib}
+	${cc} ${cflags} -o bin/denseBundles -I ${sonLibInc} -I poaV2/ impl/denseBundles.c impl/repeatGraphs.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} ${liblpo} -lm -lz
+
 bin/getCoveredSeeds: impl/getCoveredSeeds.c ${libSonLib}
 	${cc} ${cflags} -o bin/getCoveredSeeds -I ${sonLibInc} impl/getCoveredSeeds.c ${libSonLib} -lm
 
@@ -122,10 +124,6 @@ bin/getAlignmentDistances: impl/getAlignmentDistances.c ${libSonLib}
 
 bin/buildClusters: impl/buildClusters.c ${libSonLib}
 	${cc} ${cflags} -o bin/buildClusters -I ${sonLibInc} impl/buildClusters.c ${libSonLib} -lm
-
-bin/build_clusters: scripts/build_clusters
-	cp scripts/build_clusters bin/build_clusters
-	chmod +x bin/build_clusters
 
 bin/RepeatScout:
 	cd RepeatScout && make

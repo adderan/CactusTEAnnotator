@@ -2,10 +2,12 @@
 #include <stdlib.h>
 
 #include "sonLib.h"
+#include <getopt.h>
 
 #include "lpo.h"
 #include "seq_util.h"
-#include <getopt.h>
+
+#include "repeatGraphs.h"
 
 
 /*                  A
@@ -30,7 +32,9 @@
  *
  */
 
-int *dense_bundle(LPOSequence_T *graph, int *pathLength, double lengthPenalty) {
+
+/*
+int *heaviestPath(LPOSequence_T *graph, int *pathLength, bool **seen) {
 
 	int *containsPosition = calloc(sizeof(int), graph->nsource_seq);
 	int *paths = calloc(sizeof(int), graph->length);
@@ -39,6 +43,8 @@ int *dense_bundle(LPOSequence_T *graph, int *pathLength, double lengthPenalty) {
 
 	LPOLetter_T *seq = graph->letter;
 
+	int bestScore = 0;
+	int bestStart = -1;
 	for (int i = graph->length - 1; i >= 0; i--) {
 		source = &seq[i].source;
 		memset(containsPosition, 0, graph->nsource_seq * sizeof(int));
@@ -76,22 +82,10 @@ int *dense_bundle(LPOSequence_T *graph, int *pathLength, double lengthPenalty) {
 		paths[i] = best_right;
 		score[i] = right_score + right_overlap;
 
-
-	}
-
-	double bestScore = 0.0;
-	int bestStart, bestEnd, bestLength = 0;
-	for (int start = 0; start < graph->length; start++) {
-		int len = 0;
-		for (int end = start; end >= 0; end = paths[end]) {
-			len++;
-			int weight = score[start] - score[end];
-
-
+		if (score[i] > bestScore) {
+			bestScore = score[i];
+			bestStart = i;
 		}
-	}
-	if (bestScore <= 0) {
-		return NULL;
 	}
 
 	int *bestPath = calloc(sizeof(int), bestLength);
@@ -109,6 +103,7 @@ int *dense_bundle(LPOSequence_T *graph, int *pathLength, double lengthPenalty) {
 	return bestPath;
 
 }
+*/
 
 void zeroPath(LPOSequence_T *graph, int *path, int pathLength) {
 	LPOLetterSource_T *source;
@@ -121,20 +116,49 @@ void zeroPath(LPOSequence_T *graph, int *path, int pathLength) {
 	}
 }
 
+stList *lpoToPartialOrder(LPOSequence_T *graph) {
+	LPOLetter_T *seq = graph->letter;
+
+	stList *partialOrderGraph = stList_construct();
+	for (int i = 0; i < graph->length; i++) {
+		PartialOrderNode *node = malloc(sizeof(PartialOrderNode));
+		node->incomingNodes = stList_construct();
+		node->nodeID = i;
+		stList_append(partialOrderGraph, node);
+	}
+	for (int64_t i = 0; i < graph->length - 1; i++) {
+		LPOLetterLink_T *right = NULL;
+		for (right = &seq[i].right; (right) && (right->ipos >= 0); right= right->more) {
+			PartialOrderNode *node_j = stList_get(partialOrderGraph, right->ipos);
+			stList_append(node_j->incomingNodes, (void*)i);
+		}
+
+	}
+	return partialOrderGraph;
+}
+
+char *getConsensusSequence(stList *nodesInPath, LPOSequence_T *graph) {
+	int64_t pathLength = stList_length(nodesInPath);
+	char *path = calloc(pathLength + 1, sizeof(char));
+
+	for (int64_t i = 0; i < stList_length(nodesInPath); i++) {
+		PartialOrderNode *node = stList_get(nodesInPath, i);
+		path[i] = graph->letter[node->nodeID].letter;
+	}
+	path[pathLength] = '\0';
+	return path;
+}
+
 int main(int argc, char **argv) {
 	char *lpoFilename = NULL;
-	bool iterate = false;
-	double lengthPenalty = 1.1;
     while (1) {
         static struct option long_options[] = {
             { "lpo", required_argument, 0, 'a' }, 
-			{ "iterate", no_argument, 0, 'b'},
-			{ "lengthPenalty", required_argument, 0, 'c'},
             { 0, 0, 0, 0 } };
 
         int option_index = 0;
 
-        int key = getopt_long(argc, argv, "a:b:c:", long_options, &option_index);
+        int key = getopt_long(argc, argv, "a:", long_options, &option_index);
 
         if (key == -1) {
             break;
@@ -144,13 +168,6 @@ int main(int argc, char **argv) {
             case 'a':
                 lpoFilename = strdup(optarg);
                 break;
-            case 'b':
-				iterate = true;
-                break;
-
-			case 'c':
-				sscanf(optarg, "%lf\n", &lengthPenalty);
-				break;
             default:
                 return 1;
         }
@@ -160,31 +177,13 @@ int main(int argc, char **argv) {
 	LPOSequence_T *graph = read_lpo(lpoFile);
 	fclose(lpoFile);
 
-	int pathLength = 0;
-	int *bestPath;
 	int consensusNum = 0;
-	if (iterate) {
-		while (true) {
-			//Keep extracting paths and zeroing out the weights
-			//of all sequences in the best path until none are left
-			bestPath = dense_bundle(graph, &pathLength, lengthPenalty);
-			if (!bestPath) break;
-			printf(">consensus_%d\n", consensusNum);
-			for (int i = 0; i < pathLength; i++) {
-				printf("%c", graph->letter[bestPath[i]].letter);
-			}
-			printf("\n");
-			consensusNum++;
-			zeroPath(graph, bestPath, pathLength);
-		}
-	}
-	else {
-		bestPath = dense_bundle(graph, &pathLength, lengthPenalty);
-		for (int i = 0; i < pathLength; i++) {
-			printf("%c", graph->letter[bestPath[i]].letter);
-		}
-		printf("\n");
-	}
-	
-	free(bestPath);
+
+	stList *poGraph = lpoToPartialOrder(graph);
+	stList *nodesInPath = getHeaviestPath(poGraph);
+	printf(">consensus_%d\n", consensusNum);
+	char *consensusSeq = getConsensusSequence(nodesInPath, graph);
+	printf("%s\n", consensusSeq);
+	free(consensusSeq);
+	consensusNum++;
 }

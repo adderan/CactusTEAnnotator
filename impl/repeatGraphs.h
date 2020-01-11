@@ -15,9 +15,8 @@
 
 typedef struct PartialOrderNode {
 	int64_t nodeID;
-	int64_t *incomingNodes;
-	int64_t *incomingEdgeWeights;
-	int64_t nIncomingNodes;
+	stList *incomingNodes;
+	stList *incomingEdgeWeights;
 	int64_t length;
 	int64_t degree;
 	bool orientation;
