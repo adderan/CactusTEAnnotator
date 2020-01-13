@@ -116,22 +116,53 @@ void zeroPath(LPOSequence_T *graph, int *path, int pathLength) {
 	}
 }
 
+//Get partial order graph out of POA data structure into
+//my data structure
 stList *lpoToPartialOrder(LPOSequence_T *graph) {
 	LPOLetter_T *seq = graph->letter;
 
-	stList *partialOrderGraph = stList_construct();
-	for (int i = 0; i < graph->length; i++) {
+	stList *partialOrderGraph = stList_construct2(graph->length);
+	for (int64_t i = 0; i < graph->length; i++) {
 		PartialOrderNode *node = malloc(sizeof(PartialOrderNode));
 		node->incomingNodes = stList_construct();
+		node->incomingEdgeWeights = stList_construct();
 		node->nodeID = i;
-		stList_append(partialOrderGraph, node);
-	}
-	for (int64_t i = 0; i < graph->length - 1; i++) {
-		LPOLetterLink_T *right = NULL;
-		for (right = &seq[i].right; (right) && (right->ipos >= 0); right= right->more) {
-			PartialOrderNode *node_j = stList_get(partialOrderGraph, right->ipos);
-			stList_append(node_j->incomingNodes, (void*)i);
+		node->length = 1;
+		node->degree = 0;
+
+		stList_set(partialOrderGraph, i, node);
+
+		stHash *threads_i = stHash_construct();
+		LPOLetterSource_T *source = &seq[i].source;
+		while(source) {
+			int64_t positionInSeq = (int64_t) source->ipos;
+			int64_t seqID = (int64_t) source->iseq;
+			stHash_insert(threads_i, (void*) seqID, (void*) positionInSeq);
+			source = source->more;
+			node->degree++;
 		}
+		assert(node->degree > 0);
+
+		LPOLetterLink_T *left = NULL;
+		for (left = &seq[i].left; (left) && (left->ipos >= 0); left= left->more) {
+			PartialOrderNode *node_left = stList_get(partialOrderGraph, left->ipos);
+			stList_append(node->incomingNodes, (void*) node_left->nodeID);
+
+			source = &seq[left->ipos].source;
+			int64_t edgeWeight = 0;
+			while (source) {
+				int64_t positionInSeq = (int64_t) source->ipos;
+				int64_t seqID = (int64_t) source->iseq;
+				if ((int64_t) stHash_search(threads_i, (void*) seqID) == positionInSeq + 1) {
+					edgeWeight++;
+				}
+				source = source->more;
+			}
+			assert(edgeWeight > 0);
+			stList_append(node->incomingEdgeWeights, (void*) edgeWeight);
+		}
+
+		stHash_destruct(threads_i);
 
 	}
 	return partialOrderGraph;
@@ -151,14 +182,16 @@ char *getConsensusSequence(stList *nodesInPath, LPOSequence_T *graph) {
 
 int main(int argc, char **argv) {
 	char *lpoFilename = NULL;
+	int64_t minConsensusLength = 50;
     while (1) {
         static struct option long_options[] = {
             { "lpo", required_argument, 0, 'a' }, 
+			{ "minConsensusLength", required_argument, 0, 'b'},
             { 0, 0, 0, 0 } };
 
         int option_index = 0;
 
-        int key = getopt_long(argc, argv, "a:", long_options, &option_index);
+        int key = getopt_long(argc, argv, "a:b:", long_options, &option_index);
 
         if (key == -1) {
             break;
@@ -168,6 +201,9 @@ int main(int argc, char **argv) {
             case 'a':
                 lpoFilename = strdup(optarg);
                 break;
+			case 'b':
+				sscanf(optarg, "%ld", &minConsensusLength);
+				break;
             default:
                 return 1;
         }
@@ -180,10 +216,16 @@ int main(int argc, char **argv) {
 	int consensusNum = 0;
 
 	stList *poGraph = lpoToPartialOrder(graph);
-	stList *nodesInPath = getHeaviestPath(poGraph);
-	printf(">consensus_%d\n", consensusNum);
-	char *consensusSeq = getConsensusSequence(nodesInPath, graph);
-	printf("%s\n", consensusSeq);
-	free(consensusSeq);
-	consensusNum++;
+	char *consensusSeq = NULL;
+	int64_t consensusLength = 0;
+	do {
+		stList *nodesInPath = getHeaviestPath(poGraph);
+		printf(">consensus_%d\n", consensusNum);
+		consensusSeq = getConsensusSequence(nodesInPath, graph);
+		printf("%s\n", consensusSeq);
+		consensusLength = strlen(consensusSeq);
+		free(consensusSeq);
+		consensusNum++;
+	}
+	while (consensusLength > minConsensusLength);
 }

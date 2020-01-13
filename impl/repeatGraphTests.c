@@ -67,7 +67,7 @@ static void testPoGraph(CuTest *testCase) {
 	PartialOrderNode *node2 = stList_get(poGraph, 1);
 	CuAssertTrue(testCase, node1->data == block1);
 	CuAssertTrue(testCase, node2->data == block2);
-	CuAssertTrue(testCase, node2->nIncomingNodes == 1);
+	CuAssertTrue(testCase, stList_length(node2->incomingNodes) == 1);
 
 }
 

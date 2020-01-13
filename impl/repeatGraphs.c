@@ -518,7 +518,7 @@ stList *traversePath(stPinchThreadSet *graph, stList *path, stHash *sequences) {
 	return pathSeqList;
 }
 
-stList *getHeaviestPath(stList *graph) {
+stList *getHeaviestPath(stList *graph, int64_t lengthPenalty) {
 	int64_t N = stList_length(graph);
 	int64_t *score = calloc(N, sizeof(int64_t));
 	int64_t *paths = calloc(N, sizeof(int64_t));
@@ -527,7 +527,7 @@ stList *getHeaviestPath(stList *graph) {
 	int64_t endpoint = -1;
 	for (int64_t i = 0; i < N; i++) {
 		PartialOrderNode *node = stList_get(graph, i);
-		int64_t blockWeight = node->degree * node->length;
+		//int64_t blockWeight = node->degree * node->length;
 
 		int64_t maxEdgeWeight = 0;
 		paths[i] = -1;
@@ -542,17 +542,31 @@ stList *getHeaviestPath(stList *graph) {
 				paths[i] = k;
 				assert(paths[i] < N);
 				maxEdgeWeight = edgeWeight;
-				score[i] = score[incomingNode->nodeID] + blockWeight;
+				score[i] = score[incomingNode->nodeID] + edgeWeight;
 			}
 		}
 
-		if (score[i] > bestScore) {
-			bestScore = score[i];
-			endpoint = i;
-		}
 	}
 
-	if (endpoint == -1) return NULL;
+	int64_t bestScore = 0;
+	int64_t bestStart = 0;
+	int64_t bestEnd = 0;
+	for (int64_t end = N - 1; end >= 0; end--) {
+		int64_t start = end;
+		while (start > 0) {
+			int64_t pathScore = score[end] - score[start] - (end - start) * lengthPenalty;
+			if (pathScore > bestScore) {
+				bestScore = pathScore;
+				bestStart = start;
+				bestEnd = end;
+			}
+
+			//step back along the best path
+			int64_t k = paths[start];
+			PartialOrderNode *node = stList_get(graph, start);
+			start = (int64_t) stList_get(node->incomingNodes, k);
+		}
+	}
 
 	//traceback and adjust weights
 	stList *heaviestPath = stList_construct();
