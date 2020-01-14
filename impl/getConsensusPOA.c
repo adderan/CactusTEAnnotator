@@ -32,7 +32,7 @@
  */
 
 
-char *getHeaviestPath(LPOSequence_T *graph, stHash *seqLengths) {
+char *getHeaviestPath(LPOSequence_T *graph, stHash *seqLengths, double lengthPenalty) {
 
 	int *containsPosition = calloc(sizeof(int), graph->nsource_seq);
 	int *direction = calloc(sizeof(int), graph->length);
@@ -88,10 +88,13 @@ char *getHeaviestPath(LPOSequence_T *graph, stHash *seqLengths) {
 	for (int64_t start = 0; start < graph->length; start++) {
 		stSet *seenThreads = stSet_construct();
 		int64_t totalPositions = 0;
-		int64_t pathLength = 1;
+		int64_t pathLength = 0;
+		int64_t pathWeight = 0;
 		for (int64_t i = start; (i < graph->length) && (i != -1); i = direction[i]) {
 			source = &seq[i].source;
+			int64_t nodeWeight = 0;
 			while(source) {
+				nodeWeight += graph->source_seq[source->iseq].weight;
 				if (!stSet_search(seenThreads, (void*) (int64_t) source->iseq)) {
 					stSet_insert(seenThreads, (void*) (int64_t) source->iseq);
 					char *threadName = graph->source_seq[source->iseq].name;
@@ -102,15 +105,18 @@ char *getHeaviestPath(LPOSequence_T *graph, stHash *seqLengths) {
 				source = source->more;
 			}
 
-			double pathWeight = (double)(score[start] - score[i]);
-			double pathScore = pathWeight/totalPositions;
+			pathLength++;
+			pathWeight += nodeWeight;
+			
+
+			double pathScore = (double)pathWeight/(double)totalPositions;
 			if (pathScore > bestScore) {
 				bestStart = start;
 				bestEnd = i;
 				bestScore = pathScore;
 				bestPathLength = pathLength;
 			}
-			pathLength++;
+
 
 		}
 		stSet_destruct(seenThreads);
@@ -197,7 +203,7 @@ int main(int argc, char **argv) {
 
 	char *consensusSeq = NULL;
 	while (true) {
-		consensusSeq = getHeaviestPath(graph, seqLengths);
+		consensusSeq = getHeaviestPath(graph, seqLengths, 1.0);
 		if (strlen(consensusSeq) == 0) break;
 
 		printf(">consensus_%d\n", consensusNum);
