@@ -90,7 +90,7 @@ static void testHeaviestPath(CuTest *testCase) {
 
 	stList *poGraph = getPartialOrderGraph(graph);
 
-	stList *heaviestPath = getHeaviestPath(poGraph);
+	stList *heaviestPath = getHeaviestPath(poGraph, 1.0);
 	CuAssertTrue(testCase, stList_length(heaviestPath) == 2);
 
 	PartialOrderNode *node1 = stList_get(heaviestPath, 0);

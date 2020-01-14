@@ -518,13 +518,11 @@ stList *traversePath(stPinchThreadSet *graph, stList *path, stHash *sequences) {
 	return pathSeqList;
 }
 
-stList *getHeaviestPath(stList *graph, int64_t lengthPenalty) {
+stList *getHeaviestPath(stList *graph, double lengthPenalty) {
 	int64_t N = stList_length(graph);
 	int64_t *score = calloc(N, sizeof(int64_t));
 	int64_t *paths = calloc(N, sizeof(int64_t));
 
-	int64_t bestScore = 0;
-	int64_t endpoint = -1;
 	for (int64_t i = 0; i < N; i++) {
 		PartialOrderNode *node = stList_get(graph, i);
 		//int64_t blockWeight = node->degree * node->length;
@@ -537,6 +535,7 @@ stList *getHeaviestPath(stList *graph, int64_t lengthPenalty) {
 				stList_get(graph, incomingNodeIndex);
 			
 			int64_t edgeWeight = (int64_t) stList_get(node->incomingEdgeWeights, k);
+			if (edgeWeight == 0) continue;
 
 			if (edgeWeight > maxEdgeWeight) {
 				paths[i] = k;
@@ -548,13 +547,14 @@ stList *getHeaviestPath(stList *graph, int64_t lengthPenalty) {
 
 	}
 
-	int64_t bestScore = 0;
+	double bestScore = 0.0;
 	int64_t bestStart = 0;
 	int64_t bestEnd = 0;
 	for (int64_t end = N - 1; end >= 0; end--) {
 		int64_t start = end;
+		int64_t pathLength = 0;
 		while (start > 0) {
-			int64_t pathScore = score[end] - score[start] - (end - start) * lengthPenalty;
+			double pathScore = score[end] - score[start] - pathLength * lengthPenalty;
 			if (pathScore > bestScore) {
 				bestScore = pathScore;
 				bestStart = start;
@@ -563,14 +563,16 @@ stList *getHeaviestPath(stList *graph, int64_t lengthPenalty) {
 
 			//step back along the best path
 			int64_t k = paths[start];
+			if (k == -1) break;
 			PartialOrderNode *node = stList_get(graph, start);
 			start = (int64_t) stList_get(node->incomingNodes, k);
+			pathLength++;
 		}
 	}
 
 	//traceback and adjust weights
 	stList *heaviestPath = stList_construct();
-	int64_t i = endpoint;
+	int64_t i = bestEnd;
 	while(true) {
 		PartialOrderNode *node = stList_get(graph, i);
 		assert(node);
@@ -581,6 +583,7 @@ stList *getHeaviestPath(stList *graph, int64_t lengthPenalty) {
 
 		//zero out the edge chosen in this traversal
 		stList_set(node->incomingEdgeWeights, k, 0);
+		if (i == bestStart) break;
 
 		i = (int64_t) stList_get(node->incomingNodes, k);
 	}

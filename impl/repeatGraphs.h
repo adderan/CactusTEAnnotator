@@ -28,7 +28,7 @@ stList *getPartialOrderGraph(stPinchThreadSet *graph);
 bool graphIsAcyclic(stPinchThreadSet *graph);
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection);
 //void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
-stList *getHeaviestPath(stList *poGraph);
+stList *getHeaviestPath(stList *poGraph, double lengthPenalty);
 stList *traversePath(stPinchThreadSet *graph, stList *endsInPath, stHash *sequences);
 stSortedSet *getConnectingThreads(stPinchEnd *end1, stPinchEnd *end2);
 #endif

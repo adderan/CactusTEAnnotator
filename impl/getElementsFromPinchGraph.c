@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 	int64_t i = 0;
 	int64_t pathLength;
 	do {
-		stList *path = getHeaviestPath(poGraph);
+		stList *path = getHeaviestPath(poGraph, 1.0);
 
 		stList *consensusSequence = traversePath(graph, path, sequences);
 
