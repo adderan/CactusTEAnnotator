@@ -32,7 +32,7 @@
  */
 
 
-char *getHeaviestPath(LPOSequence_T *graph, stHash *seqLengths, double lengthPenalty) {
+char *getHeaviestPath(LPOSequence_T *graph, int64_t *nodeWeights, int64_t *bestPathScore) {
 
 	int *containsPosition = calloc(sizeof(int), graph->nsource_seq);
 	int *direction = calloc(sizeof(int), graph->length);
@@ -81,47 +81,39 @@ char *getHeaviestPath(LPOSequence_T *graph, stHash *seqLengths, double lengthPen
 
 	}
 
+	*bestPathScore = 0;
 	int64_t bestStart = 0;
 	int64_t bestEnd = 0;
 	int64_t bestPathLength = 0;
-	double bestScore = 0.0;
 	for (int64_t start = 0; start < graph->length; start++) {
 		stSet *seenThreads = stSet_construct();
-		int64_t totalPositions = 0;
 		int64_t pathLength = 0;
-		int64_t pathWeight = 0;
+		int64_t pathScore = 0;
 		for (int64_t i = start; (i < graph->length) && (i != -1); i = direction[i]) {
 			source = &seq[i].source;
-			int64_t nodeWeight = 0;
 			while(source) {
-				nodeWeight += graph->source_seq[source->iseq].weight;
-				if (!stSet_search(seenThreads, (void*) (int64_t) source->iseq)) {
-					stSet_insert(seenThreads, (void*) (int64_t) source->iseq);
-					char *threadName = graph->source_seq[source->iseq].name;
-
-					int64_t threadLength = (int64_t) stHash_search(seqLengths, (void*)stHash_stringKey(threadName));
-					totalPositions += threadLength;
+				char *threadName = graph->source_seq[source->iseq].name;
+				if (!stSet_search(seenThreads, (void*) stHash_stringKey(threadName))) {
+					stSet_insert(seenThreads, (void*) stHash_stringKey(threadName));
 				}
 				source = source->more;
 			}
-
 			pathLength++;
-			pathWeight += nodeWeight;
-			
+			int64_t nodeScore = 2*nodeWeights[i] - stSet_size(seenThreads);
+			pathScore += nodeScore;
 
-			double pathScore = (double)pathWeight/(double)totalPositions;
-			if (pathScore > bestScore) {
+			if (pathScore > *bestPathScore) {
 				bestStart = start;
 				bestEnd = i;
-				bestScore = pathScore;
+				*bestPathScore = pathScore;
 				bestPathLength = pathLength;
+
 			}
 
 
 		}
 		stSet_destruct(seenThreads);
 	}
-
 
 	char *path = calloc(bestPathLength + 1, sizeof(char));
 
@@ -130,17 +122,10 @@ char *getHeaviestPath(LPOSequence_T *graph, stHash *seqLengths, double lengthPen
 	while ((pos <= bestEnd) && pos != -1) {
 		path[i] = seq[pos].letter;
 		i++;
-
-		source = &seq[pos].source;
-		while (source != NULL) {
-			graph->source_seq[source->iseq].weight = 0;
-			source = source->more;
-		}
-
+		nodeWeights[pos] = 0;
 		pos = direction[pos];
 		
 	}
-	path[bestPathLength] = '\0';
 
 	free(direction);
 	free(score);
@@ -151,18 +136,16 @@ char *getHeaviestPath(LPOSequence_T *graph, stHash *seqLengths, double lengthPen
 
 int main(int argc, char **argv) {
 	char *lpoFilename = NULL;
-	char *sequencesFilename = NULL;
-	int64_t minConsensusLength = 5;
+	int64_t minConsensusScore = 100;
     while (1) {
         static struct option long_options[] = {
             { "lpo", required_argument, 0, 'a' }, 
-			{ "sequences", required_argument, 0, 'b'},
-			{ "minConsensusLength", required_argument, 0, 'c'},
+			{ "minConsensusScore", required_argument, 0, 'b'},
             { 0, 0, 0, 0 } };
 
         int option_index = 0;
 
-        int key = getopt_long(argc, argv, "a:b:c:", long_options, &option_index);
+        int key = getopt_long(argc, argv, "a:b:", long_options, &option_index);
 
         if (key == -1) {
             break;
@@ -173,10 +156,7 @@ int main(int argc, char **argv) {
                 lpoFilename = strdup(optarg);
                 break;
 			case 'b':
-				sequencesFilename = strdup(optarg);
-				break;
-			case 'c':
-				sscanf(optarg, "%ld", &minConsensusLength);
+				sscanf(optarg, "%ld", &minConsensusScore);
 				break;
             default:
                 return 1;
@@ -187,29 +167,26 @@ int main(int argc, char **argv) {
 	LPOSequence_T *graph = read_lpo(lpoFile);
 	fclose(lpoFile);
 
-	FILE *sequencesFile = fopen(sequencesFilename, "r");
-    struct List *seqsList = constructEmptyList(0, NULL);
-    struct List *seqLengthsList = constructEmptyList(0, free);
-    struct List *headersList = constructEmptyList(0, free);
-    fastaRead(sequencesFile, seqsList, seqLengthsList, headersList);
-    fclose(sequencesFile);
-
-	stHash *seqLengths = stHash_construct();
-	for (int64_t i = 0; i < seqsList->length; i++) {
-		stHash_insert(seqLengths, (void*)stHash_stringKey(headersList->list[i]), (void*) strlen(seqsList->list[i]));
+	int64_t *nodeWeights = calloc(graph->length, sizeof(int64_t));
+	for (int64_t i = 0; i < graph->length; i++) {
+		LPOLetterSource_T *source = &graph->letter[i].source;
+		while (source) {
+			nodeWeights[i]++;
+			source = source->more;
+		}
 	}
 
 	int consensusNum = 0;
-
 	char *consensusSeq = NULL;
+	int64_t consensusScore;
 	while (true) {
-		consensusSeq = getHeaviestPath(graph, seqLengths, 1.0);
-		if (strlen(consensusSeq) == 0) break;
-
-		printf(">consensus_%d\n", consensusNum);
-		printf("%s\n", consensusSeq);
+		consensusSeq = getHeaviestPath(graph, nodeWeights, &consensusScore);
+		if (consensusScore >= minConsensusScore) {
+			printf(">consensus_%d\n", consensusNum);
+			printf("%s\n", consensusSeq);
+		}
 		free(consensusSeq);
+		if (consensusScore < minConsensusScore) break;
 		consensusNum++;
-
 	}
 }
