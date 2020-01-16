@@ -137,15 +137,17 @@ char *getHeaviestPath(LPOSequence_T *graph, int64_t *nodeWeights, int64_t *bestP
 int main(int argc, char **argv) {
 	char *lpoFilename = NULL;
 	int64_t minConsensusScore = 100;
+	char *namePrefix;
     while (1) {
         static struct option long_options[] = {
             { "lpo", required_argument, 0, 'a' }, 
 			{ "minConsensusScore", required_argument, 0, 'b'},
+			{ "namePrefix", required_argument, 0, 'c'},
             { 0, 0, 0, 0 } };
 
         int option_index = 0;
 
-        int key = getopt_long(argc, argv, "a:b:", long_options, &option_index);
+        int key = getopt_long(argc, argv, "a:b:c:", long_options, &option_index);
 
         if (key == -1) {
             break;
@@ -157,6 +159,9 @@ int main(int argc, char **argv) {
                 break;
 			case 'b':
 				sscanf(optarg, "%ld", &minConsensusScore);
+				break;
+			case 'c':
+				namePrefix = strdup(optarg);
 				break;
             default:
                 return 1;
@@ -182,7 +187,7 @@ int main(int argc, char **argv) {
 	while (true) {
 		consensusSeq = getHeaviestPath(graph, nodeWeights, &consensusScore);
 		if (consensusScore >= minConsensusScore) {
-			printf(">consensus_%d\n", consensusNum);
+			printf(">%s_consensus_%d\n", namePrefix, consensusNum);
 			printf("%s\n", consensusSeq);
 		}
 		free(consensusSeq);

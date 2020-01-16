@@ -290,22 +290,33 @@ def buildLibraryFromClusters(job, clusterSeqFileIDs, args):
     repeat elements from each graph. Return a library of
     repeat elements in fasta format.
     """
-    getElementsJobs = []
+    returnValues = {}
+    consensusJobs = []
     for clusterName in clusterSeqFileIDs:
         fastaID = clusterSeqFileIDs[clusterName]
-        poaJob = Job.wrapJobFn(runPoa, fastaID=fastaID, args=args)
-        elementsJob = Job.wrapJobFn(getRepeatElementsFromGraph, graphID=poaJob.rv(), clusterName=clusterName, args=args)
+
+        if args.consensusMethod == "poa-heaviest-path":
+
+            poaJob = Job.wrapJobFn(runPoa, fastaID=fastaID, heaviestBundle=True, args=args)
+            consensusJob = Job.wrapJobFn(getConsensusPOAHeaviestPath, graphID=poaJob.rv(), clusterName=clusterName, args=args)
+        elif args.consensusMethod == "poa-dense-path":
+            poaJob = Job.wrapJobFn(runPoa, fastaID=fastaID, heaviestBundle=False, args=args)
+            consensusJob = Job.wrapJobFn(getConsensusPOADensePath, graphID=poaJob.rv(), clusterName=clusterName, args=args)
+
         job.addChild(poaJob)
-        poaJob.addFollowOn(elementsJob)
-        getElementsJobs.append(elementsJob)
+        poaJob.addFollowOn(consensusJob)
+        consensusJobs.append(consensusJob)
+        returnValues["%s.po" % clusterName] = poaJob.rv()
+        returnValues["%s_consensus.fa" % clusterName] = consensusJob.rv()
 
-    catFilesJob = Job.wrapJobFn(catFilesJobFn, fileIDs=[elementsJob.rv() for elementsJob in getElementsJobs])
-    for elementsJob in getElementsJobs:
-        elementsJob.addFollowOn(catFilesJob)
+    catFilesJob = Job.wrapJobFn(catFilesJobFn, fileIDs=[consensusJob.rv() for consensusJob in consensusJobs])
+    for consensusJob in consensusJobs:
+        consensusJob.addFollowOn(catFilesJob)
     job.addChild(catFilesJob)
-    return catFilesJob.rv()
+    returnValues["library.fa"] = catFilesJob.rv()
+    return returnValues
 
-def runPoa(job, fastaID, args, heaviestBundle=True):
+def runPoa(job, fastaID, args, heaviestBundle=False):
     fasta = job.fileStore.readGlobalFile(fastaID)
     graph = job.fileStore.getLocalTempFile()
     substMatrix = job.fileStore.readGlobalFile(args.substMatrixID)
@@ -315,16 +326,17 @@ def runPoa(job, fastaID, args, heaviestBundle=True):
     runCmd(parameters=cmd, args=args)
     return job.fileStore.writeGlobalFile(graph)
 
-def getRepeatElementsFromGraph(job, graphID, clusterName, args):
+def getConsensusPOAHeaviestPath(job, graphID, clusterName, args):
     graph = job.fileStore.readGlobalFile(graphID)
     consensusSequences = job.fileStore.getLocalTempFile()
-    
-    if args.consensusMethod == "poa-heaviest-bundling":
-        runCmd(parameters=["getHeaviestBundles", "--namePrefix", clusterName, "--lpo", os.path.basename(graph)], outfile=consensusSequences, args=args)
+    runCmd(parameters=["getHeaviestBundles", "--namePrefix", clusterName, "--lpo", os.path.basename(graph)], outfile=consensusSequences, args=args)
+    return job.fileStore.writeGlobalFile(consensusSequences)
 
-    elif args.consensusMethod == "poa-dense-path":
-        runCmd(parameters=["getConsensusPOA", "--lpo", os.path.basename(graph), "--minConsensusLength", args.minConsensusLength], outfile=consensusSequences, args=args)
-
+def getConsensusPOADensePath(job, graphID, clusterName, args):
+    graph = job.fileStore.readGlobalFile(graphID)
+    consensusSequences = job.fileStore.getLocalTempFile()
+    job.fileStore.logToMaster("Using dense path consensus method")
+    runCmd(parameters=["getConsensusPOA", "--lpo", os.path.basename(graph), "--minConsensusScore", str(args.minConsensusScore), "--namePrefix", clusterName], outfile=consensusSequences, args=args)
     return job.fileStore.writeGlobalFile(consensusSequences)
 
 def workflow(job, halID, genome, args):
@@ -380,7 +392,8 @@ def workflow(job, halID, genome, args):
         #consensus repeat sequences from each graph
         buildLibraryJob = Job.wrapJobFn(buildLibraryFromClusters, clusterSeqFileIDs=makeFamilySequenceFilesJob.rv(), args=args)
         makeFamilySequenceFilesJob.addFollowOn(buildLibraryJob)
-        returnValues["library.fa"] = buildLibraryJob.rv()
+        returnValues["library.fa"] = buildLibraryJob.rv("library.fa")
+        returnValues["consensus"] = buildLibraryJob.rv()
     elif args.consensusMethod == "random":
         buildLibraryJob = Job.wrapJobFn(chooseRandomConsensusEachCluster, fastaID=fastaID, clustersID=initialClusteringJob.rv(), args=args)
         makeFamilySequenceFilesJob.addFollowOn(buildLibraryJob)
@@ -462,7 +475,7 @@ def main():
     parser.add_argument("--minClusterSize", type=int, default=3)
     parser.add_argument("--consensusMethod", type=str, default="poa-dense-path")
     parser.add_argument("--maxTEsPerFamily", type=int, default=100)
-    parser.add_argument("--minConsensusLength", type=int, default=30)
+    parser.add_argument("--minConsensusScore", type=int, default=200)
     Job.Runner.addToilOptions(parser)
 
     args = parser.parse_args()
