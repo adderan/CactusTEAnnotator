@@ -322,8 +322,8 @@ def getRepeatElementsFromGraph(job, graphID, clusterName, args):
     if args.consensusMethod == "poa-heaviest-bundling":
         runCmd(parameters=["getHeaviestBundles", "--namePrefix", clusterName, "--lpo", os.path.basename(graph)], outfile=consensusSequences, args=args)
 
-    elif args.consensusMethod == "poa-dense-bundling":
-        runCmd(parameters=["denseBundles", "--lpo", os.path.basename(graph)], outfile=consensusSequences, args=args)
+    elif args.consensusMethod == "poa-dense-path":
+        runCmd(parameters=["getConsensusPOA", "--lpo", os.path.basename(graph), "--minConsensusLength", args.minConsensusLength], outfile=consensusSequences, args=args)
 
     return job.fileStore.writeGlobalFile(consensusSequences)
 
@@ -375,7 +375,7 @@ def workflow(job, halID, genome, args):
     if args.skipConsensus:
         return returnValues
 
-    if args.consensusMethod == "poa-heaviest-bundling":
+    if args.consensusMethod.startswith("poa"):
         #Build a poa graph for each cluster and extract 
         #consensus repeat sequences from each graph
         buildLibraryJob = Job.wrapJobFn(buildLibraryFromClusters, clusterSeqFileIDs=makeFamilySequenceFilesJob.rv(), args=args)
@@ -460,8 +460,9 @@ def main():
 
     parser.add_argument("--initialClusteringMethod", type=str, default="lastz")
     parser.add_argument("--minClusterSize", type=int, default=3)
-    parser.add_argument("--consensusMethod", type=str, default="poa-heaviest-bundling")
+    parser.add_argument("--consensusMethod", type=str, default="poa-dense-path")
     parser.add_argument("--maxTEsPerFamily", type=int, default=100)
+    parser.add_argument("--minConsensusLength", type=int, default=30)
     Job.Runner.addToilOptions(parser)
 
     args = parser.parse_args()
