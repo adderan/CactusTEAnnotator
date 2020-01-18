@@ -53,5 +53,7 @@ int main(int argc, char **argv) {
 	stList *blockOrdering = getBlockOrdering(graph);
 	fprintf(stderr, "Ordering contains %ld blocks\n", stList_length(blockOrdering));
 
+	stList *path = getHeaviestPath(blockOrdering, 1);
+	fprintf(stderr, "Best path length %ld\n", stList_length(path));
 	stPinchThreadSet_destruct(graph);
 }
