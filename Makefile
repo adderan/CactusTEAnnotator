@@ -43,7 +43,7 @@ liblpo = poaV2/liblpo.a
 all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries bin/lastz local
 
 
-local: bin/neighborJoining bin/getConsensusPOA bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs bin/getElementsFromPinchGraph bin/getCoveredSeeds bin/repeatGraphTests bin/getAlignmentDistances bin/buildClusters 
+local: bin/neighborJoining bin/getConsensusPOA bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs bin/getConsensusFromPairwiseAlignments bin/getCoveredSeeds bin/repeatGraphTests bin/getAlignmentDistances bin/buildClusters 
 
 halBinaries:
 	cd cactus && make
@@ -104,14 +104,14 @@ bin/filterNs: impl/filterNs.c ${libSonLib}
 	${cc} ${cflags} -o bin/filterNs -I ${sonLibInc} impl/filterNs.c ${libSonLib} -lm
 
 impl/repeatGraphs.o: impl/repeatGraphs.c
-	${cc} ${cflags} -DDEBUG_ -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} -c impl/repeatGraphs.c
+	${cc} ${cflags} -DDEBUG_ -I ${sonLibInc} -I ${pinchesAndCactiInc} -c impl/repeatGraphs.c
 	mv repeatGraphs.o impl/repeatGraphs.o
 
 bin/repeatGraphTests: impl/repeatGraphs.o impl/repeatGraphTests.c ${libSonLib} ${pinchesAndCactiLib} ${cafLib} ${cactusLib}
 	${cc} ${cflags} -o bin/repeatGraphTests -I impl/ -I ${sonLibInc} -I ${sonLibTestInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/repeatGraphTests.c impl/repeatGraphs.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} ${libCu} -lm -lz
 
-bin/getElementsFromPinchGraph: impl/repeatGraphs.o impl/getElementsFromPinchGraph.c ${libSonLib} ${pinchesAndCactiLib} ${cafLib} ${cactusLib}
-	${cc} ${cflags} -o bin/getElementsFromPinchGraph -I impl/ -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/getElementsFromPinchGraph.c impl/repeatGraphs.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} -lm -lz
+bin/getConsensusFromPairwiseAlignments: impl/repeatGraphs.o impl/getConsensusFromPairwiseAlignments.c ${libSonLib} ${pinchesAndCactiLib} ${cafLib} ${cactusLib}
+	${cc} ${cflags} -o bin/getConsensusFromPairwiseAlignments -I impl/ -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/getConsensusFromPairwiseAlignments.c impl/repeatGraphs.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} -lm -lz
 
 bin/getConsensusPOA: impl/getConsensusPOA.c ${libSonLib}
 	${cc} ${cflags} -o bin/getConsensusPOA -I ${sonLibInc} -I poaV2/ impl/getConsensusPOA.c ${libSonLib} ${liblpo} -lm

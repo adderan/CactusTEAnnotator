@@ -13,22 +13,12 @@
 
 #define OP(X) ((void*)X == BLACK ? RED : BLACK)
 
-typedef struct PartialOrderNode {
-	int64_t nodeID;
-	stList *incomingNodes;
-	stList *incomingEdgeWeights;
-	int64_t length;
-	int64_t degree;
-	bool orientation;
-	void *data;
-} PartialOrderNode;
 
-stPinchThreadSet *buildRepeatGraph(stHash *sequences, char *alignmentsFilename);
-stList *getPartialOrderGraph(stPinchThreadSet *graph);
+bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2);
 bool graphIsAcyclic(stPinchThreadSet *graph);
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection);
-//void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
-stList *getHeaviestPath(stList *poGraph, double lengthPenalty);
+void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
+stList *getBlockOrdering(stPinchThreadSet *graph);
 stList *traversePath(stPinchThreadSet *graph, stList *endsInPath, stHash *sequences);
 stSortedSet *getConnectingThreads(stPinchEnd *end1, stPinchEnd *end2);
 #endif

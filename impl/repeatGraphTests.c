@@ -49,60 +49,6 @@ static void testAcyclic(CuTest *testCase) {
 	CuAssertTrue(testCase, !graphIsAcyclic(threadSet));
 }
 
-static void testPoGraph(CuTest *testCase) {
-    stPinchThreadSet *graph = stPinchThreadSet_construct();
-	stPinchThread *thread1 = stPinchThreadSet_addThread(graph, 1, 0, 100);
-	stPinchThread *thread2 = stPinchThreadSet_addThread(graph, 2, 0, 100);
-
-	stPinchThread_pinch(thread1, thread2, 50, 50, 10, 1);
-	stPinchThread_pinch(thread1, thread2, 70, 70, 10, 1);
-
-    stPinchBlock *block1 = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 50));
-	stPinchBlock *block2 = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 70));
-
-	stList *poGraph = getPartialOrderGraph(graph);
-
-    CuAssertTrue(testCase, stList_length(poGraph) == 2);
-	PartialOrderNode *node1 = stList_get(poGraph, 0);
-	PartialOrderNode *node2 = stList_get(poGraph, 1);
-	CuAssertTrue(testCase, node1->data == block1);
-	CuAssertTrue(testCase, node2->data == block2);
-	CuAssertTrue(testCase, stList_length(node2->incomingNodes) == 1);
-
-}
-
-static void testHeaviestPath(CuTest *testCase) {
-	stPinchThreadSet *graph = stPinchThreadSet_construct();
-	stPinchThread *thread1 = stPinchThreadSet_addThread(graph, 1, 0, 100);
-	stPinchThread *thread2 = stPinchThreadSet_addThread(graph, 2, 0, 100);
-	//stPinchThread *thread3 = stPinchThreadSet_addThread(graph, 3, 0, 100);
-
-	stPinchThread_pinch(thread1, thread2, 50, 50, 10, 1);
-	stPinchThread_pinch(thread1, thread2, 70, 70, 10, 1);
-
-	//stPinchThread_pinch(thread1, thread3, 90, 90, 5, 1);
-
-    stPinchBlock *block1 = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 50));
-	stPinchBlock *block2 = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 70));
-
-	//stPinchEnd *end1 = stPinchEnd_construct(block1, _3PRIME);
-	//stPinchEnd *end2 = stPinchEnd_construct(block2, _5PRIME);
-
-	stList *poGraph = getPartialOrderGraph(graph);
-
-	stList *heaviestPath = getHeaviestPath(poGraph, 1.0);
-	CuAssertTrue(testCase, stList_length(heaviestPath) == 2);
-
-	PartialOrderNode *node1 = stList_get(heaviestPath, 0);
-	PartialOrderNode *node2 = stList_get(heaviestPath, 1);
-
-	CuAssertTrue(testCase, node1->data == block1);
-	CuAssertTrue(testCase, node2->data == block2);
-
-
-
-}
-
 static void testConnectingThreads(CuTest *testCase) {
 	stPinchThreadSet *graph = stPinchThreadSet_construct();
 	stPinchThread *thread1 = stPinchThreadSet_addThread(graph, 1, 0, 100);
@@ -135,7 +81,5 @@ int main(int argc, char **argv) {
 	SUITE_ADD_TEST(suite, testConnectingThreads);
 	SUITE_ADD_TEST(suite, testDirectedWalk);
 	SUITE_ADD_TEST(suite, testAcyclic);
-    SUITE_ADD_TEST(suite, testPoGraph);
-	SUITE_ADD_TEST(suite, testHeaviestPath);
 	CuSuiteRun(suite);
 }
