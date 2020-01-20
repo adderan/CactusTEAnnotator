@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
 		stPinchThread *thread1 = stPinchThreadSet_getThread(graph, pinch->name1);
 		stPinchThread *thread2 = stPinchThreadSet_getThread(graph, pinch->name2);
 		if (pinch->length < 10) continue;
-		fprintf(stderr, "Pinching %ld to %ld\n", stPinchThread_getName(thread1), stPinchThread_getName(thread2));
+		//fprintf(stderr, "Pinching %ld to %ld\n", stPinchThread_getName(thread1), stPinchThread_getName(thread2));
 		if (pinch->strand == 0) continue;
 		stPinchThread_filterPinch(thread1, thread2, pinch->start1, pinch->start2, 
 			pinch->length, pinch->strand, singleCopyFilterFn);
@@ -53,7 +53,11 @@ int main(int argc, char **argv) {
 	stList *blockOrdering = getBlockOrdering(graph);
 	fprintf(stderr, "Ordering contains %ld blocks\n", stList_length(blockOrdering));
 
-	stList *path = getHeaviestPath(blockOrdering, 1);
+
+	stPinchBlock *startBlock = getHighestWeightBlock(graph);
+	stSortedSet *pathThreads = getThreads(stPinchBlock_getFirst(startBlock));
+	stList *path = getHeaviestPath(blockOrdering, 1, pathThreads);
+
 	fprintf(stderr, "Best path length %ld\n", stList_length(path));
 	stPinchThreadSet_destruct(graph);
 }

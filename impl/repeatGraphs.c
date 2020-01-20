@@ -452,6 +452,11 @@ stList *getBlockOrdering2(stPinchThreadSet *graph, stSet *seen) {
 	return ordering;
 }
 
+
+
+//get a partial ordering of the blocks implied by
+//the order they are seen in a DFS from the highest-weight
+//block
 stList *getBlockOrdering(stPinchThreadSet *graph) {
 	stSet *seen = stSet_construct();
 	stList *ordering = stList_construct();
@@ -462,7 +467,21 @@ stList *getBlockOrdering(stPinchThreadSet *graph) {
 	return ordering;
 }
 
-stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty) {
+int64_t getMinAdjacencyLength(stPinchEnd *end1, stPinchEnd *end2) {
+	stSortedSet *connectingThreads = getConnectingThreads(end1, end2);
+	int64_t minAdjacencyLength = INT_MAX;
+	stIntTuple *connectingThreadInfo;
+	stSortedSetIterator *connectingThreadsIt = stSortedSet_getIterator(connectingThreads);
+	while((connectingThreadInfo = stSortedSet_getNext(connectingThreadsIt))) {
+		int64_t adjLength = stIntTuple_get(connectingThreadInfo, 2);
+		if (adjLength < minAdjacencyLength) {
+			minAdjacencyLength = adjLength;
+		}
+	}
+	return minAdjacencyLength;
+}
+
+stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *pathThreads) {
 	int64_t N = stList_length(blockOrdering);
 	int64_t *scores = calloc(N, sizeof(int64_t));
 	int64_t *directions = calloc(N, sizeof(int64_t));
@@ -481,6 +500,12 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty) {
 		scores[i] = stPinchBlock_getLength(block);
 		directions[i] = -1;
 
+		stSortedSet *threadsInBlock = getThreads(stPinchBlock_getFirst(block));
+		stSortedSet *sharedThreads = stSortedSet_getIntersection(pathThreads, threadsInBlock);
+
+		int64_t blockWeight = stSortedSet_size(sharedThreads) * stPinchBlock_getLength(block);
+		stSortedSet_destruct(threadsInBlock);
+		stSortedSet_destruct(sharedThreads);
 
 		stSet *adjacentEnds = stPinchEnd_getConnectedPinchEnds(end);
 		stSetIterator *adjacentEndsIt = stSet_getIterator(adjacentEnds);
@@ -488,19 +513,13 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty) {
 		while((adjEnd = stSet_getNext(adjacentEndsIt)) != NULL) {
 			stPinchBlock *leftBlock = stPinchEnd_getBlock(adjEnd);
 			int64_t leftBlockPosition = (int64_t) stHash_search(blockIndex, leftBlock);
-			stSortedSet *connectingThreads = getConnectingThreads(adjEnd, end);
 
-			stIntTuple *connectingThreadInfo;
-			stSortedSetIterator *connectingThreadsIt = stSortedSet_getIterator(connectingThreads);
-			while((connectingThreadInfo = stSortedSet_getNext(connectingThreadsIt))) {
-				int64_t threadID = stIt
-			}
+			//this edge violates the ordering so it is ignored
+			if (leftBlockPosition >= i) continue;
+			
+			int64_t bestAdjLength = getMinAdjacencyLength(adjEnd, end);
 
-
-			int64_t blockWeight = stSortedSet_size(connectingThreads) * stPinchBlock_getLength(block);
-				- stPinchSegment_getStart(stPinchBlock_getFirst(leftBlock)) - stPinchBlock_getLength(leftBlock);
-
-			int64_t scoreFromLeftBlock = scores[leftBlockPosition] + blockWeight - gapPenalty * adjacencyLength;
+			int64_t scoreFromLeftBlock = scores[leftBlockPosition] + blockWeight - gapPenalty * bestAdjLength;
 
 			if (scoreFromLeftBlock > scores[i]) {
 				scores[i] = scoreFromLeftBlock;
@@ -528,5 +547,93 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty) {
 	}
 	stList_reverse(path);
 	return path;
-
 }
+
+stPinchBlock *getHighestWeightBlock(stPinchThreadSet *graph) {
+	stPinchBlock *bestBlock = NULL;
+	int64_t highestWeight = 0;
+	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(graph);
+	stPinchBlock *block;
+	while((block = stPinchThreadSetBlockIt_getNext(&blockIt)) != NULL) {
+		int64_t blockWeight = stPinchBlock_getDegree(block) * stPinchBlock_getLength(block);
+		if (blockWeight > highestWeight) {
+			highestWeight = blockWeight;
+			bestBlock = block;
+		}
+	}
+	return bestBlock;
+}
+
+/*
+stList *extendDensePath(stPinchThreadSet *graph) {
+	stPinchBlock *startBlock = getHighestWeightBlock(graph);
+	if (!startBlock) return NULL;
+
+	stSet *seenBlocks = stSet_construct();
+	stSet *seenThreads = stSet_construct();
+	stHash *directions = stHash_construct();
+
+	int64_t bestScore = 0;
+	int64_t curPathScore = stPinchBlock_getDegree(startBlock) * stPinchBlock_getLength(startBlock);
+
+	int64_t maxBadIterations = 5;
+	int64_t badIterations = 0;
+
+	stPinchBlock *lastBlock = startBlock;
+
+	stSortedSet *threads = getThreads(startBlock);
+	stSortedSet *pathWeight = stSortedSet_size(threads);
+
+	//extend to the right
+	stPinchEnd *end = stPinchEnd_construct(startBlock, _5PRIME);
+	while (end && (badIterations < maxBadIterations)) {
+		stPinchBlock *block = stPinchEnd_getBlock(end);
+		stSet_insert(seenBlocks, block);
+
+		int64_t bestNextBlockScore = 0;
+		stPinchEnd *bestNextEnd = NULL;
+
+		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
+		stSet *connectedEnds = stPinchEnd_getConnectedEnds(oppositeEnd);
+		stSetIterator *connectedEndsIt = stSet_getIterator(connectedEnds);
+		stPinchEnd *adjEnd = NULL;
+		while((adjEnd = stSet_getNext(connectedEndsIt)) != NULL) {
+			stPinchBlock *nextBlock = stPinchEnd_getBlock(adjEnd);
+			if (stSet_search(seenBlocks, nextBlock)) continue;
+
+			int64_t adjacencyLength = getMinAdjacencyLength(oppositeEnd, adjEnd);
+			
+			stSortedSet *nextBlockThreads = getThreads(nextBlock);
+			stSortedSet *sharedThreads = stSortedSet_getIntersection(threads, nextBlockThreads);
+
+			int64_t blockWeight = stSortedSet_size(sharedThreads) * stPinchBlock_getLength(nextBlock);
+
+			int64_t nextBlockScore = blockWeight - adjacencyLength * pathWeight;
+			if (nextBlockScore > bestNextBlockScore) {
+				bestNextBlockScore = nextBlockScore;
+				bestNextEnd = adjEnd;
+			}
+			
+		}
+		stSet_destructIterator(connectedEndsIt);
+		stSet_destruct(connectedEnds);
+		stPinchEnd_destruct(oppositeEnd);
+
+		stPinchBlock *nextBlock = stPinchEnd_getBlock(nextEnd);
+
+		curPathScore += bestNextBlockScore;
+		stHash_insert(directions, block,)
+		if (curPathScore > bestScore) {
+			bestScore = curPathScore;
+			lastBlock = nextBlock;
+			badIterations = 0;
+		}
+		else {
+			badIterations++;
+		}
+
+		end = bestNextEnd;
+		
+	}
+}
+*/
