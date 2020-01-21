@@ -23,29 +23,14 @@ stSortedSet *getThreads(stPinchSegment *segment) {
 	return threads;
 }
 
-bool singleCopyFilterFn2(stPinchSegment *seg1, stPinchSegment *seg2) {
-	bool filter = false;
-	stSortedSet *threads2 = getThreads(seg2);
-	stPinchBlock *block1 = stPinchSegment_getBlock(seg1);
-	if (block1) {
-		stPinchBlockIt block1It = stPinchBlock_getSegmentIterator(block1);
-		stPinchSegment *otherSeg = NULL;
-		while ((otherSeg = stPinchBlockIt_getNext(&block1It)) != NULL) {
-			if (stSortedSet_search(threads2, otherSeg)) {
-				filter = true;
-				break;
-			}
-		}
-	}
-	else {
-		filter = stSortedSet_search(threads2, seg1);
-	}
-	stSortedSet_destruct(threads2);
-	return filter;
-}
-
 bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2) {
 	if (stPinchSegment_getThread(seg1) == stPinchSegment_getThread(seg2)) return true;
+
+	stPinchBlock *block1 = stPinchSegment_getBlock(seg1);
+	stPinchBlock *block2 = stPinchSegment_getBlock(seg2);
+	if (block1 && stPinchBlock_getDegree(block1) > MAX_BLOCK_DEGREE) return true;
+	if (block2 && stPinchBlock_getDegree(block2) > MAX_BLOCK_DEGREE) return true;
+
 	bool filter = false;
 
 	stSortedSet *threads1 = getThreads(seg1);

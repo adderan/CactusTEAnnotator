@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
 	fprintf(stderr, "Best path length %ld\n", stList_length(path));
 
 	char *consensusSeq = getConsensusSequence(path, sequences);
-	fprintf(stdout, ">consensus_0\n");
+	fprintf(stdout, ">consensus_0 length=%ld\n", strlen(consensusSeq));
 	fprintf(stdout, "%s\n", consensusSeq);
 
 	stPinchThreadSet_destruct(graph);

@@ -2,6 +2,8 @@
 #define repeat_graph_h
 #include "stPinchGraphs.h"
 
+#define MAX_BLOCK_DEGREE 100
+
 #define _5PRIME 1
 #define _3PRIME 0
 
