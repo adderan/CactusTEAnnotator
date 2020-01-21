@@ -34,10 +34,13 @@ int main(int argc, char **argv) {
 
 	stPinch *pinch = NULL;
 	while ((pinch = stPinchIterator_getNext(pinchIterator)) != NULL) {
+		assert(stHash_search(sequences, (void*)pinch->name1));
+		assert(stHash_search(sequences, (void*)pinch->name2));
 		stPinchThread *thread1 = stPinchThreadSet_getThread(graph, pinch->name1);
 		stPinchThread *thread2 = stPinchThreadSet_getThread(graph, pinch->name2);
+		assert(stPinchThread_getName(thread1) == pinch->name1);
+		assert(stPinchThread_getName(thread2) == pinch->name2);
 		if (pinch->length < 10) continue;
-		//fprintf(stderr, "Pinching %ld to %ld\n", stPinchThread_getName(thread1), stPinchThread_getName(thread2));
 		if (pinch->strand == 0) continue;
 		stPinchThread_filterPinch(thread1, thread2, pinch->start1, pinch->start2, 
 			pinch->length, pinch->strand, singleCopyFilterFn);
@@ -59,5 +62,11 @@ int main(int argc, char **argv) {
 	stList *path = getHeaviestPath(blockOrdering, 1, pathThreads);
 
 	fprintf(stderr, "Best path length %ld\n", stList_length(path));
+
+	char *consensusSeq = getConsensusSequence(path, sequences);
+	fprintf(stdout, ">consensus_0\n");
+	fprintf(stdout, "%s\n", consensusSeq);
+
 	stPinchThreadSet_destruct(graph);
+	free(consensusSeq);
 }

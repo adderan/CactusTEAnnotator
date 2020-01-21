@@ -323,21 +323,19 @@ stPinchSegment *getSegment(stPinchBlock *block, int64_t threadName) {
 	return segment;
 }
 
-stList *traversePath(stPinchThreadSet *graph, stList *path, stHash *sequences) {
-	stList *pathSeqList = stList_construct();
+char *getConsensusSequence(stList *path, stHash *sequences) {
+	int64_t consensusSeqLength = 1;
+	char *consensusSeq = malloc(sizeof(char)*consensusSeqLength);
+	int64_t pos = 0;
 
 	for (int64_t i = 0; i < stList_length(path); i++) {
 		if (i > 0) {
 			//Fill in the adjacency connecting the previous block
 			//to this one
-			stPinchBlock *block1 = stList_get(path, i - 1);
-
-			stPinchBlock *block2 = stList_get(path, i);
-
-			//can only assume the orientations because there 
-			//are no negative pinches
-			stPinchEnd *end1 = stPinchEnd_construct(block1, _3PRIME);
-			stPinchEnd *end2 = stPinchEnd_construct(block2, _5PRIME);
+			stPinchEnd *oppositeEnd1 = stList_get(path, i - 1);
+			stPinchBlock *block1 = stPinchEnd_getBlock(oppositeEnd1);
+			stPinchEnd *end1 = stPinchEnd_construct(block1, !stPinchEnd_getOrientation(oppositeEnd1));
+			stPinchEnd *end2 = stList_get(path, i);
 
 			stSortedSet *adjacencies = getConnectingThreads(end1, end2);
 			assert(stSortedSet_size(adjacencies) > 0);
@@ -360,32 +358,36 @@ stList *traversePath(stPinchThreadSet *graph, stList *path, stHash *sequences) {
 			int64_t adjLength = stIntTuple_get(bestAdj, 2);
 
 			if (adjLength > 0) {
-				char *adjacencySequence = calloc(adjLength + 1, sizeof(char));
+				consensusSeqLength += adjLength;
+				consensusSeq = st_realloc(consensusSeq, consensusSeqLength);
 				char *sequence = stHash_search(sequences, (void*) threadName);
 				assert(sequence);
 				assert(strlen(sequence) >= adjStart + adjLength);
 
-				strncpy(adjacencySequence, sequence + adjStart, adjLength);
-				assert(adjacencySequence);
-
-				stList_append(pathSeqList, adjacencySequence);
+				strncpy(consensusSeq + pos, sequence + adjStart, adjLength);
+				pos += adjLength;
 			}
 			stSortedSet_destruct(adjacencies);
 
 		}
 
-		stPinchBlock *block = stList_get(path, i);
+		stPinchEnd *end = stList_get(path, i);
+		stPinchBlock *block = stPinchEnd_getBlock(end);
 		assert(block);
 		stPinchSegment *segment = stPinchBlock_getFirst(block);
+		assert(segment);
 		int64_t threadName = stPinchThread_getName(stPinchSegment_getThread(segment));
-		char *threadSequence = stHash_search(sequences, (void*) threadName);
+		char *threadSequence = (char*) stHash_search(sequences, (void*) threadName);
+		assert(threadSequence);
 		int64_t blockLength = stPinchSegment_getLength(segment);
 		int64_t blockStart = stPinchSegment_getStart(segment);
-		char *blockSequence = calloc(blockLength + 1, sizeof(char));
-		strncpy(blockSequence, threadSequence + blockStart, blockLength);
-		stList_append(pathSeqList, blockSequence);
+		consensusSeqLength += blockLength;
+		consensusSeq = st_realloc(consensusSeq, consensusSeqLength);
+		strncpy(consensusSeq + pos, threadSequence + blockStart, blockLength);
+		pos += blockLength;
 	}
-	return pathSeqList;
+	consensusSeq[consensusSeqLength] = '\0';
+	return consensusSeq;
 }
 
 stList *getBlockOrdering3(stPinchEnd *startEnd, stSet *seen) {
@@ -539,10 +541,8 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *
 
 	int64_t pos = bestPathStart;
 	while ((pos >= 0) && (scores[pos] > 0)) {
-		stPinchBlock *block = stList_get(blockOrdering, pos);
-		assert(block);
-		stList_append(path, block);
-		//stPinchBlock_destruct(block);
+		stPinchEnd *end = stList_get(blockOrdering, pos);
+		stList_append(path, end);
 		pos = directions[pos];
 	}
 	stList_reverse(path);

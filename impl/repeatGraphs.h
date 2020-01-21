@@ -19,7 +19,7 @@ bool graphIsAcyclic(stPinchThreadSet *graph);
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection);
 void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
 stList *getBlockOrdering(stPinchThreadSet *graph);
-stList *traversePath(stPinchThreadSet *graph, stList *endsInPath, stHash *sequences);
+char *getConsensusSequence(stList *path, stHash *sequences);
 stSortedSet *getConnectingThreads(stPinchEnd *end1, stPinchEnd *end2);
 stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *pathThreads);
 stPinchBlock *getHighestWeightBlock(stPinchThreadSet *graph);
