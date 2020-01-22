@@ -17,13 +17,14 @@
 
 
 bool singleCopyFilterFn(stPinchSegment *seg1, stPinchSegment *seg2);
+bool acyclicFilterFn(stPinchSegment *seg1, stPinchSegment *seg2);
 bool graphIsAcyclic(stPinchThreadSet *graph);
 bool directedWalk(stPinchSegment *seg1, stPinchSegment *seg2, bool startDirection);
 void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
 stList *getBlockOrdering(stPinchThreadSet *graph);
 char *getConsensusSequence(stList *path, stHash *sequences);
 stSortedSet *getConnectingThreads(stPinchEnd *end1, stPinchEnd *end2);
-stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *pathThreads);
+stList *getHeaviestPath(stList *blockOrdering, stSet *ignoredBlocks, int64_t gapPenalty, stSortedSet *pathThreads, int64_t *pathScore);
 stPinchBlock *getHighestWeightBlock(stPinchThreadSet *graph);
 stSortedSet *getThreads(stPinchSegment *segment);
 #endif
