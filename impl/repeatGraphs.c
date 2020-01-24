@@ -309,8 +309,8 @@ stPinchSegment *getSegment(stPinchBlock *block, int64_t threadName) {
 }
 
 char *getConsensusSequence(stList *path, stHash *sequences) {
-	int64_t consensusSeqLength = 1;
-	char *consensusSeq = malloc(sizeof(char)*consensusSeqLength);
+	int64_t consensusSeqLength = 0;
+	char *consensusSeq = malloc(sizeof(char));
 	int64_t pos = 0;
 
 	for (int64_t i = 0; i < stList_length(path); i++) {
@@ -344,7 +344,7 @@ char *getConsensusSequence(stList *path, stHash *sequences) {
 
 			if (adjLength > 0) {
 				consensusSeqLength += adjLength;
-				consensusSeq = st_realloc(consensusSeq, consensusSeqLength);
+				consensusSeq = realloc(consensusSeq, (consensusSeqLength + 1)*sizeof(char));
 				char *sequence = stHash_search(sequences, (void*) threadName);
 				assert(sequence);
 				assert(strlen(sequence) >= adjStart + adjLength);
@@ -352,6 +352,7 @@ char *getConsensusSequence(stList *path, stHash *sequences) {
 				strncpy(consensusSeq + pos, sequence + adjStart, adjLength);
 				pos += adjLength;
 			}
+			stSortedSet_destructIterator(adjIt);
 			stSortedSet_destruct(adjacencies);
 			stPinchEnd_destruct(end1);
 
@@ -368,7 +369,7 @@ char *getConsensusSequence(stList *path, stHash *sequences) {
 		int64_t blockLength = stPinchSegment_getLength(segment);
 		int64_t blockStart = stPinchSegment_getStart(segment);
 		consensusSeqLength += blockLength;
-		consensusSeq = st_realloc(consensusSeq, consensusSeqLength);
+		consensusSeq = realloc(consensusSeq, (consensusSeqLength + 1)*sizeof(char));
 		strncpy(consensusSeq + pos, threadSequence + blockStart, blockLength);
 		pos += blockLength;
 	}
@@ -384,18 +385,29 @@ stList *getBlockOrdering3(stPinchEnd *startEnd, stSet *seen) {
 		stPinchEnd *end = stList_pop(stack);
 		stPinchBlock *block = stPinchEnd_getBlock(end);
 
-		if (stSet_search(seen, block)) continue;
+		if (stSet_search(seen, block)) {
+			stPinchEnd_destruct(end);
+			continue;
+		}
 		stSet_insert(seen, block);
 
 		stList_append(ordering, end);
+
 		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
 		stSet *connectedEnds = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
 		stPinchEnd *connectedEnd;
 		stSetIterator *connectedEndsIt = stSet_getIterator(connectedEnds);
 		while ((connectedEnd = stSet_getNext(connectedEndsIt)) != NULL) {
-			stList_append(stack, connectedEnd);
+			stPinchBlock *connectedBlock = stPinchEnd_getBlock(connectedEnd);
+
+			//duplicate the end because this copy will be destructed
+			//along with the connected ends set
+			stPinchEnd *connectedEndCopy = stPinchEnd_construct(connectedBlock, stPinchEnd_getOrientation(connectedEnd));
+			stList_append(stack, connectedEndCopy);
 		}
 		stPinchEnd_destruct(oppositeEnd);
+		stSet_destructIterator(connectedEndsIt);
+		stSet_destruct(connectedEnds);
 
 	}
 	stList_destruct(stack);
@@ -426,8 +438,6 @@ stList *getBlockOrdering2(stPinchThreadSet *graph, stSet *seen) {
 
 	stList *orderingToLeft = getBlockOrdering3(leftStart, seen);
 
-	//stList *ordering = stList_construct3(stList_length(orderingToLeft) + stList_length(orderingToRight) - 1, 
-	//	(void (*)(void *))stPinchEnd_destruct);
 	stList *ordering = stList_construct();
 	//Reverse the direction and trim off first block to avoid double counting
 	for (int64_t i = stList_length(orderingToLeft) - 1; i >= 1; i--) {
@@ -438,17 +448,18 @@ stList *getBlockOrdering2(stPinchThreadSet *graph, stSet *seen) {
 		stPinchEnd_destruct(end);
 	}
 	stList_appendAll(ordering, orderingToRight);
+	stList_destruct(orderingToLeft);
+	stList_destruct(orderingToRight);
 	return ordering;
 }
-
-
 
 //get a partial ordering of the blocks implied by
 //the order they are seen in a DFS from the highest-weight
 //block
 stList *getBlockOrdering(stPinchThreadSet *graph) {
 	stSet *seen = stSet_construct();
-	stList *ordering = stList_construct();
+	stList *ordering = stList_construct3(0, (void (*)(void *))stPinchEnd_destruct);
+
 	stList *componentOrdering = NULL;
 	while((componentOrdering = getBlockOrdering2(graph, seen)) != NULL) {
 		stList_appendAll(ordering, componentOrdering);
@@ -467,6 +478,8 @@ int64_t getMinAdjacencyLength(stPinchEnd *end1, stPinchEnd *end2) {
 			minAdjacencyLength = adjLength;
 		}
 	}
+	stSortedSet_destruct(connectingThreads);
+	stSortedSet_destructIterator(connectingThreadsIt);
 	return minAdjacencyLength;
 }
 
@@ -548,6 +561,10 @@ stList *getHeaviestPath(stList *blockOrdering, stSet *ignoredBlocks, int64_t gap
 	}
 	stList_reverse(path);
 	*pathScore = bestScore;
+
+	free(scores);
+	free(directions);
+	stHash_destruct(blockIndex);
 	return path;
 }
 

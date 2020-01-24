@@ -147,6 +147,10 @@ int main(int argc, char **argv) {
 		consensusNum++;
 		if (pathScore < minConsensusScore) break;
 	}
+	destructList(seqs);
+	destructList(headers);
+	destructList(seqLengths);
 
+	stList_destruct(blockOrdering);
 	stPinchThreadSet_destruct(graph);
 }
