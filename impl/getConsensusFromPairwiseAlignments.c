@@ -9,9 +9,10 @@ int main(int argc, char **argv) {
 	char *sequencesFilename = NULL;
 	char *alignmentsFilename = NULL;
 	char *namePrefix = "";
-	int64_t minConsensusScore = 500;
+	int64_t minConsensusScore = 1000;
 	int64_t gapPenalty = 1;
 	char *gvizDebugFilename = NULL;
+	double minConsensusDegree = 3.0;
 	while (1) {
         static struct option long_options[] = {
             { "sequences", required_argument, 0, 'a' }, 
@@ -20,11 +21,12 @@ int main(int argc, char **argv) {
 			{ "minConsensusScore", required_argument, 0, 'd'},
 			{ "gapPenalty", required_argument, 0, 'e'},
 			{ "gvizDebugFilename", required_argument, 0, 'f'},
+			{ "minConsensusDegree", required_argument, 0, 'g'},
             { 0, 0, 0, 0 } };
 
         int option_index = 0;
 
-        int key = getopt_long(argc, argv, "a:b:c:d:e:f:", long_options, &option_index);
+        int key = getopt_long(argc, argv, "a:b:c:d:e:f:g:", long_options, &option_index);
 
         if (key == -1) {
             break;
@@ -48,6 +50,9 @@ int main(int argc, char **argv) {
 				break;
 			case 'f':
 				gvizDebugFilename = strdup(optarg);
+				break;
+			case 'g':
+				sscanf(optarg, "%lf", &minConsensusDegree);
 				break;
             default:
                 return 1;
@@ -135,9 +140,7 @@ int main(int argc, char **argv) {
 		}
 
 		double consensusDegree = (double)pathScore/(double)strlen(consensusSeq);
-		//paths with only one thread supporting them don't mean
-		//anything
-		if (consensusDegree <= 1.0) continue;
+		if (consensusDegree < minConsensusDegree) continue;
 
 		fprintf(stdout, ">%s_consensus_%ld length=%ld score=%ld\n", namePrefix, consensusNum, strlen(consensusSeq), pathScore);
 		fprintf(stdout, "%s\n", consensusSeq);

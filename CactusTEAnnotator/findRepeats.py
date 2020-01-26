@@ -104,21 +104,6 @@ def runTRF(job, fastaID, args):
     runCmd(parameters=["filterNs", maskedFasta, str(args.maxNFraction)], outfile=NFilteredFasta, args=args)
     return job.fileStore.writeGlobalFile(NFilteredFasta)
 
-def runRepeatScout(job, genome, halID, gffID, seqID):
-    hal = job.fileStore.readGlobalFile(halID)
-    gff = job.fileStore.readGlobalFile(gffID)
-    seq = job.fileStore.readGlobalFile(seqID)
-
-    seqs = gffToFasta(job=job, hal=hal, genome=genome, gff=gff, args=args)
-
-    repeatScoutFreqs = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["build_lmer_table", "-sequence", os.path.basename(seqs), "-freq", os.path.basename(repeatScoutFreqs)], args=args)
-
-    repeatScoutLibrary = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["RepeatScout", "-sequence", os.path.basename(seqs), "-output", os.path.basename(repeatScoutLibrary), "-freq", os.path.basename(repeatScoutFreqs)], args=args)
-
-    return job.fileStore.writeGlobalFile(repeatScoutLibrary)
-
 def runLastz(job, fastaID, args, querydepth=None):
     if args.precomputedFiles and "alignments.cigar" in args.precomputedFileIDs:
         job.fileStore.logToMaster("Using precomputed lastz alignments file.")
@@ -142,83 +127,23 @@ def sortAlignments(job, alignmentsID, args):
     runCmd(parameters=["sort", os.path.basename(alignments), "-k10", "-n", "-r"], outfile=sortedAlignments, args=args)
     return job.fileStore.writeGlobalFile(sortedAlignments)
 
-def seedSampleProb(N, n, L):
-    #N : number of alignments sampled per family
-    #p : probability of starting an alignment at any given 
-    #    seed hit
-    #n : size of repeat family
-    #N = n*(n-1) * (1 - (1 - p)^L)
-    #p = 1 - (1 - N/(n*(n-1))) ^ (1/L)
-    p = 1.0 - (1.0 - N/(n*(n-1.0)))**(1.0/L)
-    return p
-
-def sampleLastzAlignments(job, fastaID, args, files=None, nIterations=0):
-    fasta = job.fileStore.readGlobalFile(fastaID)
-
-    if files:
-        ignoredSeeds = job.fileStore.readGlobalFile(files["ignoredSeeds"])
-        alignments = job.fileStore.readGlobalFile(files["alignments"])
-        levels = job.fileStore.readGlobalFile(files["levels"])
-    else:
-        files = {}
-        ignoredSeeds = job.fileStore.getLocalTempFile()
-        alignments = job.fileStore.getLocalTempFile()
-        levels = job.fileStore.getLocalTempFile()
-
-    ignoredSeedsSet = set()
-    with open(ignoredSeeds, "r") as ignoredSeedsFile:
-        for line in ignoredSeedsFile:
-            seed = line.strip().rstrip()
-            ignoredSeedsSet.add(str(seed))
-
-    seedCounts = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["lastz", "--tableonly=count", "%s[multiple]" % os.path.basename(fasta)], outfile=seedCounts, args=args)
-    highestMultiplicity = 0
-    with open(seedCounts, "r") as seedCountsFile:
-        for line in seedCountsFile:
-            info, count = line.split()
-            seed, unpacked = info.split("/")
-            if not seed in ignoredSeedsSet and count > highestMultiplicity:
-                highestMultiplicity = count
-    
-    p = seedSampleProb(N = highestMultiplicity, n = highestMultiplicity, L = args.assumedTELength)
-    with open(levels, "a") as levelsFile:
-        levelsFile.write("%s\n", str(p))
-
-    runCmd(parameters=["lastz", "--format=cigar", "--notrivial", "--ignoredSeeds=%s" % os.path.basename(ignoredSeeds), "--baseSamplingRate=%E" % p, "%s[multiple]" % os.path.basename(fasta), os.path.basename(fasta)], outfile=alignments, mode="a", args=args)
-
-
-    seedCountsFile = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["lastz", "--tableonly=count", "%s[multiple]" % fasta], outfile=seedCountsFile, args=args)
-    
-    runCmd(parameters=["getCoveredSeeds", "--seeds", os.path.basename(seedCountsFile), "--alignments", os.path.basename(alignments), "--sequences", os.path.basename(fasta)], outfile=ignoredSeeds, mode="a", args=args)
-
-    uniqueSeeds = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["uniq", os.path.basename(ignoredSeeds)], outfile=uniqueSeeds, args=args)
-    
-    files["ignoredSeeds"] = job.fileStore.writeGlobalFile(uniqueSeeds)
-    files["alignments"] = job.fileStore.writeGlobalFile(alignments)
-    files["levels"] = job.fileStore.writeGlobalFile(levels)
-
-    if nIterations > 5 or p > 0.5:
-        return files
-    else:
-        return job.addChildJobFn(sampleLastzAlignments, fastaID=fastaID, files=files, nIterations=nIterations+1).rv()
-
-def repeatLibraryFromPinchGraph(job, alignmentsID, sequencesID, args):
+def buildRepeatLibrary(job, alignmentsID, fastaID, args):
     """Construct a pinch graph from the set of pairwise alignments
     representing the repeat family. Then use the graph to define repeat
     element boundaries and extract the consensus sequence for each 
-    defined element.
+    defined family.
     """
     alignments = job.fileStore.readGlobalFile(alignmentsID)
-    sequences = job.fileStore.readGlobalFile(sequencesID)
+    sequences = job.fileStore.readGlobalFile(fastaID)
 
     repeatLibrary = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["getElementsFromPinchGraph", os.path.basename(alignments), os.path.basename(sequences)], outfile=repeatLibrary, args=args)
+    runCmd(parameters=["getConsensusTEs", "--alignments", os.path.basename(alignments), "--sequences", os.path.basename(sequences)], outfile=repeatLibrary, args=args)
     return job.fileStore.writeGlobalFile(repeatLibrary)
 
 def runRepeatMasker(job, repeatLibraryID, seqID, args):
+    """Use RepeatMasker to annotate the genome using a
+    custom repeat library.
+    """
     repeatLibrary = job.fileStore.readGlobalFile(repeatLibraryID)
     seq = job.fileStore.readGlobalFile(seqID)
     repeatMaskerOutput = job.fileStore.getLocalTempDir()
@@ -229,13 +154,6 @@ def runRepeatMasker(job, repeatLibraryID, seqID, args):
 
     return outputGffID
 
-def minhashDistances(job, fastaID, args):
-    fasta = job.fileStore.readGlobalFile(fastaID)
-
-    distances = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["minhash", "--kmerLength", str(args.kmerLength), "--sequences", os.path.basename(fasta)], outfile=distances, args=args)
-    return job.fileStore.writeGlobalFile(distances)
-
 def alignmentDistances(job, sequencesID, alignmentsID, args):
     alignments = job.fileStore.readGlobalFile(alignmentsID)
     sequences = job.fileStore.readGlobalFile(sequencesID)
@@ -243,101 +161,6 @@ def alignmentDistances(job, sequencesID, alignmentsID, args):
     distances = job.fileStore.getLocalTempFile()
     runCmd(parameters=["getAlignmentDistances", "--sequences", sequences, "--alignments", alignments], outfile=distances, args=args)
     return job.fileStore.writeGlobalFile(distances)
-
-def clusterByDistance(job, distancesID, args):
-    distances = job.fileStore.readGlobalFile(distancesID)
-    clusters = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["buildClusters", "--distances", os.path.basename(distances), "--distanceThreshold", str(args.distanceThreshold)], outfile=clusters, args=args)
-
-    return job.fileStore.writeGlobalFile(clusters)
-
-def makeFamilySequenceFiles(job, clustersID, fastaID, args):
-    fasta = job.fileStore.readGlobalFile(fastaID)
-
-    clustersFile = job.fileStore.readGlobalFile(clustersID)
-    with open(clustersFile, "r") as clustersRead:
-        clusters = [line.split() for line in clustersRead]
-
-    fastaIDs = {}
-    for i, seqList in enumerate(clusters):
-        if len(seqList) < args.minClusterSize:
-            continue
-        if args.maxTEsPerFamily and len(seqList) > args.maxTEsPerFamily:
-            seqList = random.sample(seqList, args.maxTEsPerFamily)
-        cluster_i_fasta = job.fileStore.getLocalTempFile()
-        runCmd(parameters=["samtools", "faidx", os.path.basename(fasta)] + seqList, outfile=cluster_i_fasta, args=args)
-
-        cluster_i_fastaID = job.fileStore.writeGlobalFile(cluster_i_fasta)
-        clusterName = "cluster_%d" % i
-        fastaIDs[clusterName] = cluster_i_fastaID
-    return fastaIDs
-
-def chooseRandomConsensusEachCluster(job, fastaID, clustersID, args):
-    fasta = job.fileStore.readGlobalFile(fastaID)
-    clusters = job.fileStore.readGlobalFile(clustersID)
-
-    library = job.fileStore.getLocalTempFile()
-    with open(clusters, "r") as clustersFile:
-        for line in clustersFile:
-            seqList = line.split()
-            seqName = random.choice(seqList)
-            runCmd(parameters=["samtools", "faidx", os.path.basename(fasta), seqName], outfile=library, mode="a", args=args)
-    
-    return job.fileStore.writeGlobalFile(library)
-
-def buildLibraryFromClusters(job, clusterSeqFileIDs, args):
-    """Build a poa graph for each family and extract
-    repeat elements from each graph. Return a library of
-    repeat elements in fasta format.
-    """
-    returnValues = {}
-    consensusJobs = []
-    for clusterName in clusterSeqFileIDs:
-        fastaID = clusterSeqFileIDs[clusterName]
-
-        if args.consensusMethod == "poa-heaviest-path":
-
-            poaJob = Job.wrapJobFn(runPoa, fastaID=fastaID, heaviestBundle=True, args=args)
-            consensusJob = Job.wrapJobFn(getConsensusPOAHeaviestPath, graphID=poaJob.rv(), clusterName=clusterName, args=args)
-        elif args.consensusMethod == "poa-dense-path":
-            poaJob = Job.wrapJobFn(runPoa, fastaID=fastaID, heaviestBundle=False, args=args)
-            consensusJob = Job.wrapJobFn(getConsensusPOADensePath, graphID=poaJob.rv(), clusterName=clusterName, args=args)
-
-        job.addChild(poaJob)
-        poaJob.addFollowOn(consensusJob)
-        consensusJobs.append(consensusJob)
-        returnValues["%s.po" % clusterName] = poaJob.rv()
-        returnValues["%s_consensus.fa" % clusterName] = consensusJob.rv()
-
-    catFilesJob = Job.wrapJobFn(catFilesJobFn, fileIDs=[consensusJob.rv() for consensusJob in consensusJobs])
-    for consensusJob in consensusJobs:
-        consensusJob.addFollowOn(catFilesJob)
-    job.addChild(catFilesJob)
-    returnValues["library.fa"] = catFilesJob.rv()
-    return returnValues
-
-def runPoa(job, fastaID, args, heaviestBundle=False):
-    fasta = job.fileStore.readGlobalFile(fastaID)
-    graph = job.fileStore.getLocalTempFile()
-    substMatrix = job.fileStore.readGlobalFile(args.substMatrixID)
-    cmd = ["poa", "-read_fasta", os.path.basename(fasta), "-po", os.path.basename(graph), substMatrix]
-    if heaviestBundle:
-        cmd.extend(["-hb", "-hbmin", str(args.heaviestBundlingThreshold)])
-    runCmd(parameters=cmd, args=args)
-    return job.fileStore.writeGlobalFile(graph)
-
-def getConsensusPOAHeaviestPath(job, graphID, clusterName, args):
-    graph = job.fileStore.readGlobalFile(graphID)
-    consensusSequences = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["getHeaviestBundles", "--namePrefix", clusterName, "--lpo", os.path.basename(graph)], outfile=consensusSequences, args=args)
-    return job.fileStore.writeGlobalFile(consensusSequences)
-
-def getConsensusPOADensePath(job, graphID, clusterName, args):
-    graph = job.fileStore.readGlobalFile(graphID)
-    consensusSequences = job.fileStore.getLocalTempFile()
-    job.fileStore.logToMaster("Using dense path consensus method")
-    runCmd(parameters=["getConsensusPOA", "--lpo", os.path.basename(graph), "--minConsensusScore", str(args.minConsensusScore), "--namePrefix", clusterName], outfile=consensusSequences, args=args)
-    return job.fileStore.writeGlobalFile(consensusSequences)
 
 def workflow(job, halID, genome, args):
     returnValues = {}
@@ -360,44 +183,10 @@ def workflow(job, halID, genome, args):
     if args.getCandidateTEsOnly:
         return returnValues
 
-    if args.initialClusteringMethod == 'lastz':
-        alignmentsJob = Job.wrapJobFn(runLastz, fastaID=fastaID, args=args, querydepth=2)
-        alignmentsID = alignmentsJob.rv()
-        getTECandidatesJob.addFollowOn(alignmentsJob)
-        
-        returnValues["alignments.cigar"] = alignmentsID
-        distancesJob = Job.wrapJobFn(alignmentDistances, sequencesID=fastaID, alignmentsID=alignmentsID, args=args)
-        alignmentsJob.addFollowOn(distancesJob)
-        initialClusteringJob = Job.wrapJobFn(clusterByDistance, distancesID=distancesJob.rv(), args=args)
-        distancesJob.addFollowOn(initialClusteringJob)
-        returnValues["distances.txt"] = distancesJob.rv()
-
-    elif args.initialClusteringMethod == 'minhash':
-        distancesJob = Job.wrapJobFn(minhashDistances, fastaID=fastaID, args=args)
-        getTECandidatesJob.addFollowOn(distancesJob)
-        initialClusteringJob = Job.wrapJobFn(clusterByDistance, distancesID=distancesJob.rv(), args=args)
-        distancesJob.addFollowOn(initialClusteringJob)
-        returnValues["distances.txt"] = distancesJob.rv()
-
-    returnValues["clusters.txt"] = initialClusteringJob.rv()
-    makeFamilySequenceFilesJob = Job.wrapJobFn(makeFamilySequenceFiles, clustersID=initialClusteringJob.rv(), fastaID=fastaID, args=args)
-    initialClusteringJob.addFollowOn(makeFamilySequenceFilesJob)
-    returnValues["families"] = makeFamilySequenceFilesJob.rv()
-
-    if args.skipConsensus:
-        return returnValues
-
-    if args.consensusMethod.startswith("poa"):
-        #Build a poa graph for each cluster and extract 
-        #consensus repeat sequences from each graph
-        buildLibraryJob = Job.wrapJobFn(buildLibraryFromClusters, clusterSeqFileIDs=makeFamilySequenceFilesJob.rv(), args=args)
-        makeFamilySequenceFilesJob.addFollowOn(buildLibraryJob)
-        returnValues["library.fa"] = buildLibraryJob.rv("library.fa")
-        returnValues["consensus"] = buildLibraryJob.rv()
-    elif args.consensusMethod == "random":
-        buildLibraryJob = Job.wrapJobFn(chooseRandomConsensusEachCluster, fastaID=fastaID, clustersID=initialClusteringJob.rv(), args=args)
-        makeFamilySequenceFilesJob.addFollowOn(buildLibraryJob)
-        returnValues["library.fa"] = buildLibraryJob.rv()
+    buildRepeatLibraryJob = Job.wrapJobFn(buildRepeatLibrary, alignmentsID=alignmentsID, fastaID=fastaID, args=args)
+    getTECandidatesJob.addFollowOn(buildRepeatLibraryJob)
+    returnValues["library.fa"] = buildRepeatLibraryJob.rv()
+    
     if args.skipRepeatMasker:
         finalGffID = None
     else:
@@ -412,9 +201,9 @@ def workflow(job, halID, genome, args):
 
         genomeID = job.fileStore.writeGlobalFile(genomeFile)
         repeatMaskerJob = Job.wrapJobFn(runRepeatMasker, repeatLibraryID=buildLibraryJob.rv(), seqID=genomeID, args=args)
-        buildLibraryJob.addFollowOn(repeatMaskerJob)
+        buildRepeatLibraryJob.addFollowOn(repeatMaskerJob)
         finalGffID = repeatMaskerJob.rv()
-    returnValues["final_annotations.gff"] = finalGffID
+        returnValues["annotations.gff"] = finalGffID
 
     return returnValues
 
@@ -463,18 +252,10 @@ def main():
 
 
     parser.add_argument("--getCandidateTEsOnly", action="store_true", default=False, help="")
-    parser.add_argument("--lastzExact", action="store_true", default=False)
     parser.add_argument("--skipRepeatMasker", action="store_true", default=False)
-    parser.add_argument("--skipConsensus", action="store_true", default=False)
-
     parser.add_argument("--localBinaries", action="store_true", default=False)
-
     parser.add_argument("--precomputedFiles", type=str, default=None)
 
-    parser.add_argument("--initialClusteringMethod", type=str, default="lastz")
-    parser.add_argument("--minClusterSize", type=int, default=3)
-    parser.add_argument("--consensusMethod", type=str, default="poa-dense-path")
-    parser.add_argument("--maxTEsPerFamily", type=int, default=100)
     parser.add_argument("--minConsensusScore", type=int, default=200)
     Job.Runner.addToilOptions(parser)
 
