@@ -483,7 +483,7 @@ int64_t getMinAdjacencyLength(stPinchEnd *end1, stPinchEnd *end2) {
 	return minAdjacencyLength;
 }
 
-stList *getHeaviestPath(stList *blockOrdering, stSet *ignoredBlocks, int64_t gapPenalty, stSortedSet *pathThreads, int64_t *pathScore) {
+stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *pathThreads, int64_t *pathScore) {
 	int64_t N = stList_length(blockOrdering);
 	int64_t *scores = calloc(N, sizeof(int64_t));
 	int64_t *directions = calloc(N, sizeof(int64_t));
@@ -506,7 +506,6 @@ stList *getHeaviestPath(stList *blockOrdering, stSet *ignoredBlocks, int64_t gap
 		scores[i] = stPinchBlock_getLength(block);
 		directions[i] = -1;
 
-		if (stSet_search(ignoredBlocks, block)) continue;
 
 		stSortedSet *threadsInBlock = getThreads(stPinchBlock_getFirst(block));
 		stSortedSet *sharedThreads = stSortedSet_getIntersection(pathThreads, threadsInBlock);
@@ -520,7 +519,6 @@ stList *getHeaviestPath(stList *blockOrdering, stSet *ignoredBlocks, int64_t gap
 		stPinchEnd *adjEnd;
 		while((adjEnd = stSet_getNext(adjacentEndsIt)) != NULL) {
 			stPinchBlock *leftBlock = stPinchEnd_getBlock(adjEnd);
-			if (stSet_search(ignoredBlocks, leftBlock)) continue;
 
 			if (!stHash_search(blockIndex, leftBlock)) continue;
 			int64_t leftBlockPosition = (int64_t) stHash_search(blockIndex, leftBlock) - 1;

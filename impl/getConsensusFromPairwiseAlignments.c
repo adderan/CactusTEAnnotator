@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
 
 	int64_t pathScore;
 	int64_t consensusNum = 0;
-	stSet *ignoredBlocks = stSet_construct();
+	stSortedSet *seenThreads = stSortedSet_construct();
 	while (true) {
 
 		//Start from the highest weight block that hasn't appeared
@@ -118,26 +118,34 @@ int main(int argc, char **argv) {
 		stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(graph);
 		stPinchBlock *block;
 		while((block = stPinchThreadSetBlockIt_getNext(&blockIt)) != NULL) {
-			if (stSet_search(ignoredBlocks, block)) continue;
-			int64_t blockWeight = stPinchBlock_getDegree(block) * stPinchBlock_getLength(block);
+			stSortedSet *blockThreads = getThreads(stPinchBlock_getFirst(block));
+			stSortedSet *unseenThreads = stSortedSet_getDifference(blockThreads, seenThreads);
+			int64_t blockWeight = stSortedSet_size(unseenThreads) * stPinchBlock_getLength(block);
 			if (blockWeight > highestWeight) {
 				highestWeight = blockWeight;
 				startBlock = block;
 			}
+			stSortedSet_destruct(blockThreads);
+			stSortedSet_destruct(unseenThreads);
 		}
 		if (!startBlock) break;
 
-		stSortedSet *pathThreads = getThreads(stPinchBlock_getFirst(startBlock));
-		stList *path = getHeaviestPath(blockOrdering, ignoredBlocks, gapPenalty, pathThreads, &pathScore);
+		stSortedSet *startBlockThreads = getThreads(stPinchBlock_getFirst(startBlock));
+		stSortedSet *pathThreads = stSortedSet_getDifference(startBlockThreads, seenThreads);
+		stSortedSet_destruct(startBlockThreads);
+
+		stList *path = getHeaviestPath(blockOrdering, gapPenalty, pathThreads, &pathScore);
+
+		//Add the threads used to construct this path to the seen threads
+		stSortedSetIterator *pathThreadsIt = stSortedSet_getIterator(pathThreads);
+		int64_t threadID;
+		while((threadID = (int64_t) stSortedSet_getNext(pathThreadsIt))) {
+			stSortedSet_insert(seenThreads, (void*) threadID);
+		}
+		stSortedSet_destruct(pathThreads);
+		stSortedSet_destructIterator(pathThreadsIt);
 
 		char *consensusSeq = getConsensusSequence(path, sequences);
-
-		//ignore this path in the future
-		for (int64_t i = 0; i < stList_length(path); i++) {
-			stPinchEnd *end = stList_get(path, i);
-			stPinchBlock *block = stPinchEnd_getBlock(end);
-			stSet_insert(ignoredBlocks, block);
-		}
 
 		double consensusDegree = (double)pathScore/(double)strlen(consensusSeq);
 		if (consensusDegree < minConsensusDegree) continue;
@@ -154,6 +162,7 @@ int main(int argc, char **argv) {
 	destructList(headers);
 	destructList(seqLengths);
 
+	stSortedSet_destruct(seenThreads);
 	stList_destruct(blockOrdering);
 	stPinchThreadSet_destruct(graph);
 }
