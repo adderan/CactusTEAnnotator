@@ -483,7 +483,7 @@ int64_t getMinAdjacencyLength(stPinchEnd *end1, stPinchEnd *end2) {
 	return minAdjacencyLength;
 }
 
-stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *pathThreads, int64_t *pathScore) {
+stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *pathThreads, stSet *ignoredBlocks, int64_t *pathScore) {
 	int64_t N = stList_length(blockOrdering);
 	int64_t *scores = calloc(N, sizeof(int64_t));
 	int64_t *directions = calloc(N, sizeof(int64_t));
@@ -493,8 +493,11 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *
 	int64_t bestPathStart = -1;
 	int64_t bestScore = 0;
 	for (int64_t i = 0; i < stList_length(blockOrdering); i++) {
+		directions[i] = -1;
+		scores[i] = 0;
 		stPinchEnd *end = stList_get(blockOrdering, i);
 		stPinchBlock *block = stPinchEnd_getBlock(end);
+		if (stSet_search(ignoredBlocks, block)) continue;
 
 		//only true if negative pinches aren't allowed,
 		//might have to be removed later
@@ -502,17 +505,16 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *
 
 		stHash_insert(blockIndex, block, (void*) i + 1);
 
-		//base case for blocks with no predecessors
-		scores[i] = stPinchBlock_getLength(block);
-		directions[i] = -1;
-
 
 		stSortedSet *threadsInBlock = getThreads(stPinchBlock_getFirst(block));
 		stSortedSet *sharedThreads = stSortedSet_getIntersection(pathThreads, threadsInBlock);
 
-		int64_t blockWeight = stSortedSet_size(sharedThreads) * stPinchBlock_getLength(block);
+		int64_t blockWeight = (2*stSortedSet_size(sharedThreads) - stSortedSet_size(pathThreads)) * stPinchBlock_getLength(block);
 		stSortedSet_destruct(threadsInBlock);
 		stSortedSet_destruct(sharedThreads);
+
+		int64_t bestLeftScore = -INT_MAX;
+		bool hasPredecessors = false;
 
 		stSet *adjacentEnds = stPinchEnd_getConnectedPinchEnds(end);
 		stSetIterator *adjacentEndsIt = stSet_getIterator(adjacentEnds);
@@ -524,6 +526,7 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *
 			int64_t leftBlockPosition = (int64_t) stHash_search(blockIndex, leftBlock) - 1;
 			//this edge violates the ordering so it is ignored
 			if (leftBlockPosition >= i) continue;
+			hasPredecessors = true;
 
 			assert(stPinchEnd_getOrientation(adjEnd) == 0);
 			stPinchEnd *endInOrdering = stList_get(blockOrdering, leftBlockPosition);
@@ -534,13 +537,21 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *
 			int64_t bestAdjLength = getMinAdjacencyLength(adjEnd, end);
 			int64_t scoreFromLeftBlock = scores[leftBlockPosition] + blockWeight - gapPenalty * bestAdjLength;
 
-			if (scoreFromLeftBlock > scores[i]) {
-				scores[i] = scoreFromLeftBlock;
+			if (scoreFromLeftBlock > bestLeftScore) {
+				bestLeftScore = scoreFromLeftBlock;
 				directions[i] = leftBlockPosition;
 			}
 		}
 		stSet_destructIterator(adjacentEndsIt);
 		stSet_destruct(adjacentEnds);
+
+		if (hasPredecessors) {
+			scores[i] = bestLeftScore;
+		}
+		else {
+			//base case for blocks with no predecessors
+			scores[i] = blockWeight;
+		}
 
 		if (scores[i] > bestScore) {
 			bestScore = scores[i];

@@ -65,7 +65,7 @@ def main():
     reference = next(referenceIter)
     query = next(queryIter)
     while reference and query:
-        if overlap(query, reference) > 0.5:
+        if overlap(query, reference) > 0.8 and overlap(reference, query) > 0.8:
             matchingAnnotations.append((query, reference))
             query.match = reference
             reference.match = query

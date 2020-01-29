@@ -24,7 +24,7 @@ void printBiedgedGraph(stPinchThreadSet *threadSet, char *gvizFilename);
 stList *getBlockOrdering(stPinchThreadSet *graph);
 char *getConsensusSequence(stList *path, stHash *sequences);
 stSortedSet *getConnectingThreads(stPinchEnd *end1, stPinchEnd *end2);
-stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *pathThreads, int64_t *pathScore);
+stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *pathThreads, stSet *ignoredBlocks, int64_t *pathScore);
 stPinchBlock *getHighestWeightBlock(stPinchThreadSet *graph);
 stSortedSet *getThreads(stPinchSegment *segment);
 #endif
