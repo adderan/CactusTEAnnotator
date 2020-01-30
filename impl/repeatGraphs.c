@@ -499,17 +499,15 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSet *ignore
 		stPinchBlock *block = stPinchEnd_getBlock(end);
 		if (stSet_search(ignoredBlocks, block)) continue;
 
+
+		stSortedSet *blockThreads = getThreads(stPinchBlock_getFirst(block));
+
 		//only true if negative pinches aren't allowed,
 		//might have to be removed later
 		assert(stPinchEnd_getOrientation(end) == 1);
 
 		stHash_insert(blockIndex, block, (void*) i + 1);
 
-
-		int64_t blockWeight = stPinchBlock_getDegree(block) * stPinchBlock_getLength(block);
-
-		int64_t bestLeftScore = 0;
-		bool hasPredecessors = false;
 
 		stSet *adjacentEnds = stPinchEnd_getConnectedPinchEnds(end);
 		stSetIterator *adjacentEndsIt = stSet_getIterator(adjacentEnds);
@@ -521,32 +519,30 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSet *ignore
 			int64_t leftBlockPosition = (int64_t) stHash_search(blockIndex, leftBlock) - 1;
 			//this edge violates the ordering so it is ignored
 			if (leftBlockPosition >= i) continue;
-			hasPredecessors = true;
 
 			assert(stPinchEnd_getOrientation(adjEnd) == 0);
 			stPinchEnd *endInOrdering = stList_get(blockOrdering, leftBlockPosition);
 
 			//Make sure this block is being traversed in the direction consistent with the ordering
 			if (stPinchEnd_getOrientation(endInOrdering) == stPinchEnd_getOrientation(adjEnd)) continue;
+
+			stSortedSet *leftBlockThreads = getThreads(stPinchBlock_getFirst(leftBlock));
+			stSortedSet *sharedThreads = stSortedSet_getIntersection(blockThreads, leftBlockThreads);
+			int64_t blockWeight = stSortedSet_size(sharedThreads);
+			stSortedSet_destruct(leftBlockThreads);
+			stSortedSet_destruct(sharedThreads);
 			
 			int64_t bestAdjLength = getMinAdjacencyLength(adjEnd, end);
 			int64_t scoreFromLeftBlock = scores[leftBlockPosition] + blockWeight - gapPenalty * bestAdjLength;
 
-			if (scoreFromLeftBlock > bestLeftScore) {
-				bestLeftScore = scoreFromLeftBlock;
+			if (scoreFromLeftBlock > scores[i]) {
+				scores[i] = scoreFromLeftBlock;
 				directions[i] = leftBlockPosition;
 			}
 		}
 		stSet_destructIterator(adjacentEndsIt);
 		stSet_destruct(adjacentEnds);
-
-		if (hasPredecessors) {
-			scores[i] = bestLeftScore;
-		}
-		else {
-			//base case for blocks with no predecessors
-			scores[i] = blockWeight;
-		}
+		stSortedSet_destruct(blockThreads);
 
 		if (scores[i] > bestScore) {
 			bestScore = scores[i];
