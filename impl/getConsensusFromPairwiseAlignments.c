@@ -129,9 +129,7 @@ int main(int argc, char **argv) {
 		assert(stPinchBlock_getDegree(startBlock) > 0);
 		assert(stPinchBlock_getLength(startBlock) > 0);
 
-		stSortedSet *pathThreads = getThreads(stPinchBlock_getFirst(startBlock));
-
-		stList *path = getHeaviestPath(blockOrdering, gapPenalty, pathThreads, seenBlocks, &pathScore);
+		stList *path = getHeaviestPath(blockOrdering, gapPenalty, seenBlocks, &pathScore);
 
 
 		char *consensusSeq = getConsensusSequence(path, sequences);
@@ -140,7 +138,7 @@ int main(int argc, char **argv) {
 			stPinchEnd *end = stList_get(path, i);
 			stPinchBlock *block = stPinchEnd_getBlock(end);
 			stSet_insert(seenBlocks, block);
-			//stPinchBlock_destruct(block);
+			stPinchBlock_destruct(block);
 		}
 
 		double consensusDegree = (double)pathScore/(double)strlen(consensusSeq);

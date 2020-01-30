@@ -483,7 +483,7 @@ int64_t getMinAdjacencyLength(stPinchEnd *end1, stPinchEnd *end2) {
 	return minAdjacencyLength;
 }
 
-stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *pathThreads, stSet *ignoredBlocks, int64_t *pathScore) {
+stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSet *ignoredBlocks, int64_t *pathScore) {
 	int64_t N = stList_length(blockOrdering);
 	int64_t *scores = calloc(N, sizeof(int64_t));
 	int64_t *directions = calloc(N, sizeof(int64_t));
@@ -491,7 +491,7 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *
 	stHash *blockIndex = stHash_construct();
 
 	int64_t bestPathStart = -1;
-	int64_t bestScore = -INT_MAX;
+	int64_t bestScore = 0;
 	for (int64_t i = 0; i < stList_length(blockOrdering); i++) {
 		directions[i] = -1;
 		scores[i] = 0;
@@ -506,14 +506,9 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *
 		stHash_insert(blockIndex, block, (void*) i + 1);
 
 
-		stSortedSet *threadsInBlock = getThreads(stPinchBlock_getFirst(block));
-		stSortedSet *sharedThreads = stSortedSet_getIntersection(pathThreads, threadsInBlock);
+		int64_t blockWeight = stPinchBlock_getDegree(block) * stPinchBlock_getLength(block);
 
-		int64_t blockWeight = (2*stSortedSet_size(sharedThreads) - stSortedSet_size(pathThreads)) * stPinchBlock_getLength(block);
-		stSortedSet_destruct(threadsInBlock);
-		stSortedSet_destruct(sharedThreads);
-
-		int64_t bestLeftScore = -INT_MAX;
+		int64_t bestLeftScore = 0;
 		bool hasPredecessors = false;
 
 		stSet *adjacentEnds = stPinchEnd_getConnectedPinchEnds(end);
@@ -560,17 +555,30 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *
 	}
 
 	assert(directions[0] == -1);
-	stList *path = stList_construct();
 
+	stPinchEnd *startEnd = stList_get(blockOrdering, bestPathStart);
+	stPinchBlock *startBlock = stPinchEnd_getBlock(startEnd);
+	stSortedSet *startingThreads = getThreads(stPinchBlock_getFirst(startBlock));
+
+
+	stList *path = stList_construct();
 	int64_t pos = bestPathStart;
 	while ((pos >= 0) && (scores[pos] > 0)) {
 		stPinchEnd *end = stList_get(blockOrdering, pos);
+		stPinchBlock *block = stPinchEnd_getBlock(end);
+		stSortedSet *threadsInBlock = getThreads(stPinchBlock_getFirst(block));
+		stSortedSet *threadsRemaining = stSortedSet_getIntersection(startingThreads, threadsInBlock);
+		double remainingThreadsFraction = (double) stSortedSet_size(threadsRemaining) / (double) stSortedSet_size(startingThreads);
+		stSortedSet_destruct(threadsInBlock);
+		stSortedSet_destruct(threadsRemaining);
+		if (remainingThreadsFraction < 0.3) break;
 		stList_append(path, end);
 		pos = directions[pos];
 	}
 	stList_reverse(path);
 	*pathScore = bestScore;
 
+	stSortedSet_destruct(startingThreads);
 	free(scores);
 	free(directions);
 	stHash_destruct(blockIndex);
