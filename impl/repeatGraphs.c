@@ -491,7 +491,7 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSortedSet *
 	stHash *blockIndex = stHash_construct();
 
 	int64_t bestPathStart = -1;
-	int64_t bestScore = 0;
+	int64_t bestScore = -INT_MAX;
 	for (int64_t i = 0; i < stList_length(blockOrdering); i++) {
 		directions[i] = -1;
 		scores[i] = 0;

@@ -137,7 +137,7 @@ def buildRepeatLibrary(job, alignmentsID, fastaID, args):
     sequences = job.fileStore.readGlobalFile(fastaID)
 
     repeatLibrary = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["getConsensusTEs", "--alignments", os.path.basename(alignments), "--sequences", os.path.basename(sequences)], outfile=repeatLibrary, args=args)
+    runCmd(parameters=["getConsensusFromPairwiseAlignments", "--alignments", os.path.basename(alignments), "--sequences", os.path.basename(sequences)], outfile=repeatLibrary, args=args)
     return job.fileStore.writeGlobalFile(repeatLibrary)
 
 def runRepeatMasker(job, repeatLibraryID, seqID, args):
@@ -166,11 +166,9 @@ def workflow(job, halID, genome, args):
     returnValues = {}
 
     parameters = job.fileStore.getLocalTempFile()
-    with open(parameters, "w") as parametersFile:
-        parametersFile.write("parameters for this run\n" \
-            + "alignment distance threshold for clustering: %f\n" % args.distanceThreshold \
-            + "initial clustering method: %s\n" % args.initialClusteringMethod \
-            + "consensus method: %s\n" % args.consensusMethod)
+
+    #with open(parameters, "w") as parametersFile:
+    #    parametersFile.write("parameters for this run\n" \
     returnValues["parameters.txt"] = job.fileStore.writeGlobalFile(parameters)
     
     #Get candidate TE insertions from the cactus alignment
@@ -183,8 +181,16 @@ def workflow(job, halID, genome, args):
     if args.getCandidateTEsOnly:
         return returnValues
 
+    alignmentsJob = Job.wrapJobFn(runLastz, fastaID=fastaID, querydepth=2, args=args)
+    getTECandidatesJob.addFollowOn(alignmentsJob)
+    alignmentsID = alignmentsJob.rv()
+    returnValues["alignments.cigar"] = alignmentsID
+
+    if args.skipConsensus:
+        return returnValues
+
     buildRepeatLibraryJob = Job.wrapJobFn(buildRepeatLibrary, alignmentsID=alignmentsID, fastaID=fastaID, args=args)
-    getTECandidatesJob.addFollowOn(buildRepeatLibraryJob)
+    alignmentsJob.addFollowOn(buildRepeatLibraryJob)
     returnValues["library.fa"] = buildRepeatLibraryJob.rv()
     
     if args.skipRepeatMasker:
@@ -253,6 +259,7 @@ def main():
 
     parser.add_argument("--getCandidateTEsOnly", action="store_true", default=False, help="")
     parser.add_argument("--skipRepeatMasker", action="store_true", default=False)
+    parser.add_argument("--skipConsensus", action="store_true", default=False)
     parser.add_argument("--localBinaries", action="store_true", default=False)
     parser.add_argument("--precomputedFiles", type=str, default=None)
 

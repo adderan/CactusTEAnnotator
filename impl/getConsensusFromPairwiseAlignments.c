@@ -126,23 +126,13 @@ int main(int argc, char **argv) {
 			}
 		}
 		if (!startBlock) break;
+		assert(stPinchBlock_getDegree(startBlock) > 0);
+		assert(stPinchBlock_getLength(startBlock) > 0);
 
 		stSortedSet *pathThreads = getThreads(stPinchBlock_getFirst(startBlock));
 
 		stList *path = getHeaviestPath(blockOrdering, gapPenalty, pathThreads, seenBlocks, &pathScore);
 
-		/*
-		//Add the threads used to construct this path to the seen threads
-		stSortedSetIterator *pathThreadsIt = stSortedSet_getIterator(pathThreads);
-		int64_t threadID;
-		while((threadID = (int64_t) stSortedSet_getNext(pathThreadsIt))) {
-			stSortedSet_insert(seenThreads, (void*) threadID);
-		}
-		stSortedSet_destruct(pathThreads);
-		stSortedSet_destructIterator(pathThreadsIt);
-		*/
-
-		
 
 		char *consensusSeq = getConsensusSequence(path, sequences);
 
@@ -150,11 +140,11 @@ int main(int argc, char **argv) {
 			stPinchEnd *end = stList_get(path, i);
 			stPinchBlock *block = stPinchEnd_getBlock(end);
 			stSet_insert(seenBlocks, block);
-			stPinchBlock_destruct(block);
+			//stPinchBlock_destruct(block);
 		}
 
 		double consensusDegree = (double)pathScore/(double)strlen(consensusSeq);
-		if (consensusDegree < minConsensusDegree) continue;
+		if (consensusDegree < minConsensusDegree) break;
 
 		fprintf(stdout, ">%s_consensus_%ld length=%ld score=%ld\n", namePrefix, consensusNum, strlen(consensusSeq), pathScore);
 		fprintf(stdout, "%s\n", consensusSeq);
@@ -162,7 +152,6 @@ int main(int argc, char **argv) {
 
 		stList_destruct(path);
 		consensusNum++;
-		if (pathScore < minConsensusScore) break;
 	}
 	destructList(seqs);
 	destructList(headers);
