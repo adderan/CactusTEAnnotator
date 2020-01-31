@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
 	char *sequencesFilename = NULL;
 	char *alignmentsFilename = NULL;
 	char *namePrefix = "";
-	int64_t minConsensusScore = 1000;
+	int64_t minConsensusLength= 30;
 	int64_t gapPenalty = 1;
 	char *gvizDebugFilename = NULL;
 	double minConsensusDegree = 3.0;
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
             { "sequences", required_argument, 0, 'a' }, 
 			{ "alignments", required_argument, 0, 'b'},
 			{ "namePrefix", required_argument, 0, 'c'},
-			{ "minConsensusScore", required_argument, 0, 'd'},
+			{ "minConsensusLength", required_argument, 0, 'd'},
 			{ "gapPenalty", required_argument, 0, 'e'},
 			{ "gvizDebugFilename", required_argument, 0, 'f'},
 			{ "minConsensusDegree", required_argument, 0, 'g'},
@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
 				namePrefix = strdup(optarg);
 				break;
 			case 'd':
-				sscanf(optarg, "%ld", &minConsensusScore);
+				sscanf(optarg, "%ld", &minConsensusLength);
 				break;
 			case 'e':
 				sscanf(optarg, "%ld", &gapPenalty);
@@ -140,15 +140,20 @@ int main(int argc, char **argv) {
 			stSet_insert(seenBlocks, block);
 			stPinchBlock_destruct(block);
 		}
+		stList_destruct(path);
 
 		double consensusDegree = (double)pathScore/(double)strlen(consensusSeq);
 		if (consensusDegree < minConsensusDegree) break;
+
+		if (strlen(consensusSeq) < minConsensusLength) {
+			free(consensusSeq);
+			continue;
+		}
 
 		fprintf(stdout, ">%s_consensus_%ld length=%ld score=%ld\n", namePrefix, consensusNum, strlen(consensusSeq), pathScore);
 		fprintf(stdout, "%s\n", consensusSeq);
 		free(consensusSeq);
 
-		stList_destruct(path);
 		consensusNum++;
 	}
 	destructList(seqs);
