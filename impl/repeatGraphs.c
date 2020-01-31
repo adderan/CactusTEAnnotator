@@ -483,7 +483,7 @@ int64_t getMinAdjacencyLength(stPinchEnd *end1, stPinchEnd *end2) {
 	return minAdjacencyLength;
 }
 
-stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSet *ignoredBlocks, int64_t *pathScore) {
+stList *getHeaviestPath_buildDP(stList *blockOrdering, int64_t gapPenalty) {
 	int64_t N = stList_length(blockOrdering);
 	int64_t *scores = calloc(N, sizeof(int64_t));
 	int64_t *directions = calloc(N, sizeof(int64_t));
@@ -580,6 +580,10 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSet *ignore
 	free(directions);
 	stHash_destruct(blockIndex);
 	return path;
+}
+
+stList *tracebackHeaviestPath() {
+
 }
 
 stPinchBlock *getHighestWeightBlock(stPinchThreadSet *graph) {
