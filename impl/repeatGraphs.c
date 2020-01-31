@@ -509,6 +509,7 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSet *ignore
 		stHash_insert(blockIndex, block, (void*) i + 1);
 
 
+		int64_t bestEdgeScore = -INT_MAX;
 		stSet *adjacentEnds = stPinchEnd_getConnectedPinchEnds(end);
 		stSetIterator *adjacentEndsIt = stSet_getIterator(adjacentEnds);
 		stPinchEnd *adjEnd;
@@ -533,17 +534,17 @@ stList *getHeaviestPath(stList *blockOrdering, int64_t gapPenalty, stSet *ignore
 			stSortedSet_destruct(sharedThreads);
 			
 			int64_t bestAdjLength = getMinAdjacencyLength(adjEnd, end);
-			int64_t scoreFromLeftBlock = scores[leftBlockPosition] + blockWeight - gapPenalty * bestAdjLength;
+			int64_t edgeScore = blockWeight - gapPenalty * bestAdjLength;
 
-			if (scoreFromLeftBlock > scores[i]) {
-				scores[i] = scoreFromLeftBlock;
+			if (edgeScore > bestEdgeScore) {
+				scores[i] = scores[leftBlockPosition] + edgeScore;
 				directions[i] = leftBlockPosition;
+				bestEdgeScore = edgeScore;
 			}
 		}
 		stSet_destructIterator(adjacentEndsIt);
 		stSet_destruct(adjacentEnds);
 		stSortedSet_destruct(blockThreads);
-
 		if (scores[i] > bestScore) {
 			bestScore = scores[i];
 			bestPathStart = i;
@@ -598,7 +599,17 @@ stPinchBlock *getHighestWeightBlock(stPinchThreadSet *graph) {
 
 /*
 stList *extendDensePath(stPinchThreadSet *graph) {
-	stPinchBlock *startBlock = getHighestWeightBlock(graph);
+	stPinchBlock *startBlock = NULL;
+	int64_t maxWeight = 0;
+	stPinchBlock *block;
+	stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(graph);
+	while((block = stPinchThreadSetBlockIt_getNext(&blockIt)) != NULL) {
+		int64_t weight = stPinchBlock_getDegree(block) * stPinchBlock_getLength(block);
+		if (weight > maxWeight) {
+			startBlock = block;
+			maxWeight = weight;
+		}
+	}
 	if (!startBlock) return NULL;
 
 	stSet *seenBlocks = stSet_construct();
