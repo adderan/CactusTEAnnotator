@@ -108,38 +108,19 @@ int main(int argc, char **argv) {
 
 	int64_t pathScore;
 	int64_t consensusNum = 0;
-	stSet *seenBlocks = stSet_construct();
+
+	int64_t N = stList_length(blockOrdering);
+	int64_t *scores = calloc(N, sizeof(int64_t));
+	int64_t *directions = calloc(N, sizeof(int64_t));
+	getHeaviestPathScores(blockOrdering, 1, scores, directions);
+
 	while (true) {
 
-		//Start from the highest weight block that hasn't appeared
-		//in a consensus sequence yet
-		stPinchBlock *startBlock = NULL;
-		int64_t highestWeight = 0;
-		stPinchThreadSetBlockIt blockIt = stPinchThreadSet_getBlockIt(graph);
-		stPinchBlock *block;
-		while((block = stPinchThreadSetBlockIt_getNext(&blockIt)) != NULL) {
-			if (stSet_search(seenBlocks, block)) continue;
-			int64_t blockWeight = stPinchBlock_getDegree(block) * stPinchBlock_getLength(block);
-			if (blockWeight > highestWeight) {
-				highestWeight = blockWeight;
-				startBlock = block;
-			}
-		}
-		if (!startBlock) break;
-		assert(stPinchBlock_getDegree(startBlock) > 0);
-		assert(stPinchBlock_getLength(startBlock) > 0);
-
-		stList *path = getHeaviestPath(blockOrdering, gapPenalty, seenBlocks, &pathScore);
+		stList *path = tracebackHeaviestPath(blockOrdering, scores, directions, &pathScore);
 
 
 		char *consensusSeq = getConsensusSequence(path, sequences);
 
-		for (int64_t i = 0; i < stList_length(path); i++) {
-			stPinchEnd *end = stList_get(path, i);
-			stPinchBlock *block = stPinchEnd_getBlock(end);
-			stSet_insert(seenBlocks, block);
-			stPinchBlock_destruct(block);
-		}
 		stList_destruct(path);
 
 		double consensusDegree = (double)pathScore/(double)strlen(consensusSeq);

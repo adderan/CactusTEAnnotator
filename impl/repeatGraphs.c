@@ -483,21 +483,14 @@ int64_t getMinAdjacencyLength(stPinchEnd *end1, stPinchEnd *end2) {
 	return minAdjacencyLength;
 }
 
-stList *getHeaviestPath_buildDP(stList *blockOrdering, int64_t gapPenalty) {
-	int64_t N = stList_length(blockOrdering);
-	int64_t *scores = calloc(N, sizeof(int64_t));
-	int64_t *directions = calloc(N, sizeof(int64_t));
-
+void getHeaviestPathScores(stList *blockOrdering, int64_t gapPenalty, int64_t *scores, int64_t *directions) {
 	stHash *blockIndex = stHash_construct();
 
-	int64_t bestPathStart = -1;
-	int64_t bestScore = 0;
 	for (int64_t i = 0; i < stList_length(blockOrdering); i++) {
 		directions[i] = -1;
 		scores[i] = 0;
 		stPinchEnd *end = stList_get(blockOrdering, i);
 		stPinchBlock *block = stPinchEnd_getBlock(end);
-		if (stSet_search(ignoredBlocks, block)) continue;
 
 
 		stSortedSet *blockThreads = getThreads(stPinchBlock_getFirst(block));
@@ -545,18 +538,30 @@ stList *getHeaviestPath_buildDP(stList *blockOrdering, int64_t gapPenalty) {
 		stSet_destructIterator(adjacentEndsIt);
 		stSet_destruct(adjacentEnds);
 		stSortedSet_destruct(blockThreads);
+
+	}
+	
+	stHash_destruct(blockIndex);
+}
+
+stList *tracebackHeaviestPath(stList *blockOrdering, int64_t *scores, int64_t *directions, int64_t *pathScore) {
+	assert(directions[0] == -1);
+	int64_t N = stList_length(blockOrdering);
+
+	int64_t bestScore = -INT_MAX;
+	int64_t bestPathStart = -1;
+	for (int64_t i = 0; i < N; i++) {
 		if (scores[i] > bestScore) {
 			bestScore = scores[i];
 			bestPathStart = i;
 		}
 	}
-
-	assert(directions[0] == -1);
+	if (bestPathStart == -1) return NULL;
 
 	stPinchEnd *startEnd = stList_get(blockOrdering, bestPathStart);
 	stPinchBlock *startBlock = stPinchEnd_getBlock(startEnd);
 	stSortedSet *startingThreads = getThreads(stPinchBlock_getFirst(startBlock));
-
+	
 
 	stList *path = stList_construct();
 	int64_t pos = bestPathStart;
@@ -570,20 +575,15 @@ stList *getHeaviestPath_buildDP(stList *blockOrdering, int64_t gapPenalty) {
 		stSortedSet_destruct(threadsRemaining);
 		if (remainingThreadsFraction < 0.3) break;
 		stList_append(path, end);
+		scores[pos] = 0;
 		pos = directions[pos];
 	}
 	stList_reverse(path);
 	*pathScore = bestScore;
 
 	stSortedSet_destruct(startingThreads);
-	free(scores);
-	free(directions);
-	stHash_destruct(blockIndex);
+
 	return path;
-}
-
-stList *tracebackHeaviestPath() {
-
 }
 
 stPinchBlock *getHighestWeightBlock(stPinchThreadSet *graph) {
