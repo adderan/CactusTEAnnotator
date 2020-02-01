@@ -565,6 +565,7 @@ stList *tracebackHeaviestPath(stList *blockOrdering, int64_t *scores, int64_t *d
 
 	stList *path = stList_construct();
 	int64_t pos = bestPathStart;
+	int64_t scoreStart = scores[bestPathStart];
 	while ((pos >= 0) && (scores[pos] > 0)) {
 		stPinchEnd *end = stList_get(blockOrdering, pos);
 		stPinchBlock *block = stPinchEnd_getBlock(end);
@@ -573,13 +574,14 @@ stList *tracebackHeaviestPath(stList *blockOrdering, int64_t *scores, int64_t *d
 		double remainingThreadsFraction = (double) stSortedSet_size(threadsRemaining) / (double) stSortedSet_size(startingThreads);
 		stSortedSet_destruct(threadsInBlock);
 		stSortedSet_destruct(threadsRemaining);
-		if (remainingThreadsFraction < 0.1) break;
+		if (remainingThreadsFraction < 0.3) break;
 		stList_append(path, end);
+
+		*pathScore = scoreStart - scores[pos];
 		scores[pos] = 0;
 		pos = directions[pos];
 	}
 	stList_reverse(path);
-	*pathScore = bestScore;
 
 	stSortedSet_destruct(startingThreads);
 
