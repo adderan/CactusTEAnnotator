@@ -575,7 +575,7 @@ stList *tracebackHeaviestPath(stList *blockOrdering, int64_t *scores, int64_t *d
 		double remainingThreadsFraction = (double) stSortedSet_size(threadsRemaining) / (double) stSortedSet_size(startingThreads);
 		stSortedSet_destruct(threadsInBlock);
 		stSortedSet_destruct(threadsRemaining);
-		if (remainingThreadsFraction < 0.7) break;
+		if (remainingThreadsFraction < 0.1) break;
 		stList_append(path, end);
 
 		*pathScore = scoreStart - scores[pos];

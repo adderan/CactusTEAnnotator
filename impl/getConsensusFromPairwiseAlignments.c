@@ -12,7 +12,8 @@ int main(int argc, char **argv) {
 	int64_t minConsensusLength= 30;
 	int64_t gapPenalty = 1;
 	char *gvizDebugFilename = NULL;
-	double minConsensusDegree = 10.0;
+	double minConsensusDegree = 3.0;
+	int64_t minConsensusScore = 1000;
 	while (1) {
         static struct option long_options[] = {
             { "sequences", required_argument, 0, 'a' }, 
@@ -22,11 +23,12 @@ int main(int argc, char **argv) {
 			{ "gapPenalty", required_argument, 0, 'e'},
 			{ "gvizDebugFilename", required_argument, 0, 'f'},
 			{ "minConsensusDegree", required_argument, 0, 'g'},
+			{ "minConsensusScore", required_argument, 0, 'h'},
             { 0, 0, 0, 0 } };
 
         int option_index = 0;
 
-        int key = getopt_long(argc, argv, "a:b:c:d:e:f:g:", long_options, &option_index);
+        int key = getopt_long(argc, argv, "a:b:c:d:e:f:g:h:", long_options, &option_index);
 
         if (key == -1) {
             break;
@@ -53,6 +55,9 @@ int main(int argc, char **argv) {
 				break;
 			case 'g':
 				sscanf(optarg, "%lf", &minConsensusDegree);
+				break;
+			case 'h':
+				sscanf(optarg, "%ld\n", &minConsensusScore);
 				break;
             default:
                 return 1;
@@ -126,7 +131,9 @@ int main(int argc, char **argv) {
 
 		double consensusDegree = (double)pathScore/(double)strlen(consensusSeq);
 
-		if ((strlen(consensusSeq) < minConsensusLength) || (consensusDegree < minConsensusDegree)) {
+		if ((strlen(consensusSeq) < minConsensusLength) || 
+			(consensusDegree < minConsensusDegree) ||
+			(pathScore < minConsensusScore)) {
 			free(consensusSeq);
 			continue;
 		}
