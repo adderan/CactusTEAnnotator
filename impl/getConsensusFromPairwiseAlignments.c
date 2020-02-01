@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
 	int64_t minConsensusLength= 30;
 	int64_t gapPenalty = 1;
 	char *gvizDebugFilename = NULL;
-	double minConsensusDegree = 3.0;
+	double minConsensusDegree = 10.0;
 	while (1) {
         static struct option long_options[] = {
             { "sequences", required_argument, 0, 'a' }, 
@@ -117,6 +117,7 @@ int main(int argc, char **argv) {
 	while (true) {
 
 		stList *path = tracebackHeaviestPath(blockOrdering, scores, directions, &pathScore);
+		if (!path) break;
 
 
 		char *consensusSeq = getConsensusSequence(path, sequences);
@@ -124,9 +125,8 @@ int main(int argc, char **argv) {
 		stList_destruct(path);
 
 		double consensusDegree = (double)pathScore/(double)strlen(consensusSeq);
-		if (consensusDegree < minConsensusDegree) break;
 
-		if (strlen(consensusSeq) < minConsensusLength) {
+		if ((strlen(consensusSeq) < minConsensusLength) || (consensusDegree < minConsensusDegree)) {
 			free(consensusSeq);
 			continue;
 		}
