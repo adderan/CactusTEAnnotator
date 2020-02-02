@@ -588,8 +588,10 @@ stList *tracebackHeaviestPath(stList *blockOrdering, int64_t *scores, int64_t *d
 		if (nBadBlocks > maxBadBlocks) {
 			//delete the last blocks
 			for (int64_t i = 0; i < maxBadBlocks; i++) {
-				stList_pop(path);
+				if (stList_length(path) > 0)
+					stList_pop(path);
 			}
+			break;
 		}
 		stList_append(path, end);
 
