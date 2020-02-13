@@ -604,7 +604,6 @@ stPinchBlock *getHighestWeightBlock(stPinchThreadSet *graph) {
 	return bestBlock;
 }
 
-/*
 stList *extendDensePath(stPinchThreadSet *graph) {
 	stPinchBlock *startBlock = NULL;
 	int64_t maxWeight = 0;
@@ -618,34 +617,36 @@ stList *extendDensePath(stPinchThreadSet *graph) {
 		}
 	}
 	if (!startBlock) return NULL;
+	fprintf(stderr, "Starting from block of degree %ld\n", stPinchBlock_getDegree(startBlock));
 
 	stSet *seenBlocks = stSet_construct();
-	stSet *seenThreads = stSet_construct();
-	stHash *directions = stHash_construct();
 
 	int64_t bestScore = 0;
-	int64_t curPathScore = stPinchBlock_getDegree(startBlock) * stPinchBlock_getLength(startBlock);
 
-	int64_t maxBadIterations = 5;
-	int64_t badIterations = 0;
+	int64_t maxBadIterations = 10;
 
-	stPinchBlock *lastBlock = startBlock;
+	stSortedSet *threads = getThreads(stPinchBlock_getFirst(startBlock));
 
-	stSortedSet *threads = getThreads(startBlock);
-	stSortedSet *pathWeight = stSortedSet_size(threads);
+	int64_t score = stPinchBlock_getDegree(startBlock) * stPinchBlock_getLength(startBlock);
+	stList *path = stList_construct();
+	stList *provisionalPath = stList_construct();
 
-	//extend to the right
-	stPinchEnd *end = stPinchEnd_construct(startBlock, _5PRIME);
-	while (end && (badIterations < maxBadIterations)) {
+	stPinchEnd *startEnd = stPinchEnd_construct(startBlock, _5PRIME);
+	stList_append(path, startEnd);
+
+	//extend path to left and right
+	stPinchEnd *end = startEnd;
+	while (end) {
 		stPinchBlock *block = stPinchEnd_getBlock(end);
 		stSet_insert(seenBlocks, block);
 
 		int64_t bestNextBlockScore = 0;
-		stPinchEnd *bestNextEnd = NULL;
 
 		stPinchEnd *oppositeEnd = stPinchEnd_construct(block, !stPinchEnd_getOrientation(end));
-		stSet *connectedEnds = stPinchEnd_getConnectedEnds(oppositeEnd);
+		stSet *connectedEnds = stPinchEnd_getConnectedPinchEnds(oppositeEnd);
 		stSetIterator *connectedEndsIt = stSet_getIterator(connectedEnds);
+
+		stPinchEnd *bestAdjEnd = NULL;
 		stPinchEnd *adjEnd = NULL;
 		while((adjEnd = stSet_getNext(connectedEndsIt)) != NULL) {
 			stPinchBlock *nextBlock = stPinchEnd_getBlock(adjEnd);
@@ -653,37 +654,47 @@ stList *extendDensePath(stPinchThreadSet *graph) {
 
 			int64_t adjacencyLength = getMinAdjacencyLength(oppositeEnd, adjEnd);
 			
-			stSortedSet *nextBlockThreads = getThreads(nextBlock);
+			stSortedSet *nextBlockThreads = getThreads(stPinchBlock_getFirst(nextBlock));
 			stSortedSet *sharedThreads = stSortedSet_getIntersection(threads, nextBlockThreads);
 
 			int64_t blockWeight = stSortedSet_size(sharedThreads) * stPinchBlock_getLength(nextBlock);
 
-			int64_t nextBlockScore = blockWeight - adjacencyLength * pathWeight;
+			int64_t nextBlockScore = blockWeight - adjacencyLength;
 			if (nextBlockScore > bestNextBlockScore) {
 				bestNextBlockScore = nextBlockScore;
-				bestNextEnd = adjEnd;
+				bestAdjEnd = adjEnd;
 			}
 			
 		}
+		if (!bestAdjEnd) break;
+
+		score += bestNextBlockScore;
+		stPinchEnd *nextEnd = 
+				stPinchEnd_construct(stPinchEnd_getBlock(bestAdjEnd), stPinchEnd_getOrientation(bestAdjEnd));
+
 		stSet_destructIterator(connectedEndsIt);
 		stSet_destruct(connectedEnds);
 		stPinchEnd_destruct(oppositeEnd);
 
 		stPinchBlock *nextBlock = stPinchEnd_getBlock(nextEnd);
+		fprintf(stderr, "Extending to block %p with score %ld\n", nextBlock, score);
 
-		curPathScore += bestNextBlockScore;
-		stHash_insert(directions, block,)
-		if (curPathScore > bestScore) {
-			bestScore = curPathScore;
-			lastBlock = nextBlock;
-			badIterations = 0;
+		if (score > bestScore) {
+			bestScore = score;
+			if (stList_length(provisionalPath) > 0) {
+				stList_appendAll(path, provisionalPath);
+				stList_destruct(provisionalPath);
+				provisionalPath = stList_construct();
+			}
+			stList_append(path, nextEnd);
 		}
 		else {
-			badIterations++;
+			stList_append(provisionalPath, nextEnd);
 		}
 
-		end = bestNextEnd;
+		if (stList_length(provisionalPath) > maxBadIterations) break;
+		end = nextEnd;
 		
 	}
+	return path;
 }
-*/

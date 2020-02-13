@@ -28,4 +28,5 @@ stList *tracebackHeaviestPath(stList *blockOrdering, int64_t *scores, int64_t *d
 void getHeaviestPathScores(stList *blockOrdering, int64_t gapPenalty, int64_t *scores, int64_t *directions);
 stPinchBlock *getHighestWeightBlock(stPinchThreadSet *graph);
 stSortedSet *getThreads(stPinchSegment *segment);
+stList *extendDensePath(stPinchThreadSet *graph);
 #endif

@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
 	stList *blockOrdering = getBlockOrdering(graph);
 	assert(stList_length(blockOrdering) == stPinchThreadSet_getTotalBlockNumber(graph));
 
-	int64_t pathScore;
+	int64_t pathScore = 0;
 	int64_t consensusNum = 0;
 
 	int64_t N = stList_length(blockOrdering);
@@ -120,8 +120,8 @@ int main(int argc, char **argv) {
 	getHeaviestPathScores(blockOrdering, 1, scores, directions);
 
 	while (true) {
-
-		stList *path = tracebackHeaviestPath(blockOrdering, scores, directions, &pathScore);
+		//stList *path = tracebackHeaviestPath(blockOrdering, scores, directions, &pathScore);
+		stList *path = extendDensePath(graph);
 		if (!path) break;
 
 
@@ -143,6 +143,7 @@ int main(int argc, char **argv) {
 		free(consensusSeq);
 
 		consensusNum++;
+		break;
 	}
 	destructList(seqs);
 	destructList(headers);
