@@ -4,9 +4,6 @@
 [submodule "cactus"]
 	path = cactus
 	url = https://github.com/ComparativeGenomicsToolkit/cactus
-[submodule "smhasher"]
-	path = smhasher
-	url = https://github.com/aappleby/smhasher
 [submodule "cPecan"]
 	path = cPecan
 	url = https://github.com/adderan/cPecan

@@ -1,9 +1,9 @@
-#include "repeatGraphs.h"
 #include "sonLib.h"
 #include "bioioC.h"
 #include <getopt.h>
 
 #include "stPinchIterator.h"
+#include "Consensus.h"
 
 int main(int argc, char **argv) {
 	char *sequencesFilename = NULL;

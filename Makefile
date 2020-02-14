@@ -1,5 +1,3 @@
-murmurHashSources=smhasher/src/MurmurHash3.cpp
-
 cpp=g++
 cc=gcc
 
@@ -17,11 +15,6 @@ else
 	cppflags=${cppflags_debug}
 endif
 
-objs=Minhash.o
-sources=impl/Minhash.cpp
-
-cObjs=repeatGraph.o
-cSources=impl/repeatGraph.c
 
 libSonLib = cactus/submodules/sonLib/lib/sonLib.a
 libCu = cactus/submodules/sonLib/lib/cuTest.a
@@ -38,12 +31,11 @@ cactusLib = cactus/lib/cactusLib.a
 pinchesAndCactiInc = cactus/submodules/sonLib/lib/
 pinchesAndCactiLib = cactus/submodules/sonLib/lib/stPinchesAndCacti.a
 
-liblpo = poaV2/liblpo.a
 
-all: cactus poa bin/RepeatScout RepeatMaskerRule halBinaries bin/lastz local
+all: cactus RepeatMaskerRule halBinaries bin/lastz local
 
 
-local: bin/neighborJoining bin/getConsensusPOA bin/clusterByAlignmentDistances bin/getThreadPartitions bin/tests bin/getHeaviestBundles bin/minhash bin/poToGraphViz bin/getTECandidates bin/getSequencesFromHAL bin/build_clusters bin/filterNs bin/getConsensusFromPairwiseAlignments bin/getCoveredSeeds bin/repeatGraphTests bin/getAlignmentDistances bin/buildClusters 
+local: bin/tests bin/getTECandidates bin/build_clusters bin/filterNs bin/getConsensusFromPairwiseAlignments bin/getAlignmentDistances bin/buildClusters 
 
 halBinaries:
 	cd cactus && make
@@ -52,17 +44,6 @@ halBinaries:
 ${libSonLib}:
 	cd cactus && make
 
-${liblpo}:
-	wget https://downloads.sourceforge.net/project/poamsa/poamsa/2.0/poaV2.tar.gz
-	tar -xvf poaV2.tar.gz poaV2/
-	rm poaV2.tar.gz
-	patch poaV2/black_flag.h poa.patch
-	cd poaV2 && make poa
-	cp poaV2/poa ./bin
-
-poa: ${liblpo}
-	cp poaV2/poa bin/
-
 bin/lastz:
 	cd cPecan/externalTools/lastz-distrib-1.03.54 && make
 	cp cPecan/externalTools/lastz-distrib-1.03.54/src/lastz bin/
@@ -70,64 +51,24 @@ bin/lastz:
 ${objs}: ${sources} ${libSonLib}
 	g++ -I ${sonLibInc} -I smhasher/src -c ${sources}
 
-bin/tests: impl/tests.cpp ${libSonLib} ${objs}
-	g++ -g -o bin/tests -I ${sonLibInc} impl/tests.cpp ${murmurHashSources} ${objs} ${libSonLib} -lm
-
-bin/minhash: impl/MinhashMain.cpp ${libSonLib} ${objs}
-	${cpp} ${cppflags} -I smhasher/src -I ${sonLibInc} -o ./bin/minhash impl/MinhashMain.cpp ${murmurHashSources} ${objs} ${libSonLib}
-
-bin/poToGraphViz: impl/poToGraphViz.c ${liblpo} ${libSonLib}
-	${cc} ${cflags} -o bin/poToGraphViz -I poaV2/ -I ${sonLibInc} impl/poToGraphViz.c ${liblpo} ${libSonLib} -lm
-
 bin/getTECandidates: impl/getTECandidates.cpp ${libHal} ${libSonLib}
 	PATH=${PWD}/cactus/submodules/hdf5/bin:${PATH} h5c++ ${cppflags} -o bin/getTECandidates -I ${halInc} -I ${sonLibInc} impl/getTECandidates.cpp ${libHal} ${libSonLib} -lm
-
-bin/getSequencesFromHAL: impl/getSequencesFromHAL.cpp ${libHal} ${libSonLib}
-	PATH=${PWD}/cactus/submodules/hdf5/bin:${PATH} h5c++ ${cppflags} -o bin/getSequencesFromHAL -I ${halInc} -I ${sonLibInc} impl/getSequencesFromHAL.cpp ${libHal} ${libSonLib} -lm
-
-
-bin/neighborJoining: impl/neighborJoining.c ${libSonLib}
-	${cc} ${cflags} -o bin/neighborJoining -I ${sonLibInc} impl/neighborJoining.c ${libSonLib} -lm
-
-
-
-bin/clusterByAlignmentDistances: impl/clusterByAlignmentDistances.cpp ${libSonLib} ${liblpo} ${objs}
-	g++ -g -o bin/clusterByAlignmentDistances -I ${sonLibInc} -I poaV2/ impl/clusterByAlignmentDistances.cpp ${objs} ${libSonLib} ${murmurHashSources} ${liblpo} -lm
-
-bin/getThreadPartitions: impl/getThreadPartitions.c ${liblpo}
-	${cc} ${cflags} -o bin/getThreadPartitions -I poaV2/ impl/getThreadPartitions.c ${liblpo} -lm
-
-bin/getHeaviestBundles: impl/getHeaviestBundles.c poaV2/liblpo.a
-	${cc} ${cflags} -o bin/getHeaviestBundles -I poaV2/ impl/getHeaviestBundles.c ${liblpo} -lm
 
 bin/filterNs: impl/filterNs.c ${libSonLib}
 	${cc} ${cflags} -o bin/filterNs -I ${sonLibInc} impl/filterNs.c ${libSonLib} -lm
 
-impl/repeatGraphs.o: impl/repeatGraphs.c
-	${cc} ${cflags} -DDEBUG_ -I ${sonLibInc} -I ${pinchesAndCactiInc} -c impl/repeatGraphs.c
-	mv repeatGraphs.o impl/repeatGraphs.o
+impl/Consensus.o: impl/Consensus.c
+	${cc} ${cflags} -DDEBUG_ -I ${sonLibInc} -I ${pinchesAndCactiInc} -c impl/Consensus.c
+	mv Consensus.o impl/Consensus.o
 
-bin/repeatGraphTests: impl/repeatGraphs.o impl/repeatGraphTests.c ${libSonLib} ${pinchesAndCactiLib} ${cafLib} ${cactusLib}
-	${cc} ${cflags} -o bin/repeatGraphTests -I impl/ -I ${sonLibInc} -I ${sonLibTestInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/repeatGraphTests.c impl/repeatGraphs.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} ${libCu} -lm -lz
+bin/tests: impl/Consensus.o impl/tests.c ${libSonLib} ${pinchesAndCactiLib} ${cafLib} ${cactusLib}
+	${cc} ${cflags} -o bin/tests -I impl/ -I ${sonLibInc} -I ${sonLibTestInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/tests.c impl/Consensus.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} ${libCu} -lm -lz
 
-bin/getConsensusFromPairwiseAlignments: impl/repeatGraphs.o impl/getConsensusFromPairwiseAlignments.c ${libSonLib} ${pinchesAndCactiLib} ${cafLib} ${cactusLib}
-	${cc} ${cflags} -o bin/getConsensusFromPairwiseAlignments -I impl/ -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/getConsensusFromPairwiseAlignments.c impl/repeatGraphs.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} -lm -lz
-
-bin/getConsensusPOA: impl/getConsensusPOA.c ${libSonLib}
-	${cc} ${cflags} -o bin/getConsensusPOA -I ${sonLibInc} -I poaV2/ impl/getConsensusPOA.c ${libSonLib} ${liblpo} -lm
-
-bin/getCoveredSeeds: impl/getCoveredSeeds.c ${libSonLib}
-	${cc} ${cflags} -o bin/getCoveredSeeds -I ${sonLibInc} impl/getCoveredSeeds.c ${libSonLib} -lm
-
-bin/getAlignmentDistances: impl/getAlignmentDistances.c ${libSonLib}
-	${cc} ${cflags} -o bin/getAlignmentDistances -I ${sonLibInc} impl/getAlignmentDistances.c ${libSonLib} -lm
+bin/getConsensus: impl/Consensus.o impl/getConsensus.c ${libSonLib} ${pinchesAndCactiLib} ${cafLib} ${cactusLib}
+	${cc} ${cflags} -o bin/getConsensus -I impl/ -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/getConsensus.c impl/Consensus.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} -lm -lz
 
 bin/buildClusters: impl/buildClusters.c ${libSonLib}
 	${cc} ${cflags} -o bin/buildClusters -I ${sonLibInc} impl/buildClusters.c ${libSonLib} -lm
-
-bin/RepeatScout:
-	cd RepeatScout && make
-	mv RepeatScout/RepeatScout bin/RepeatScout
 
 ./RepeatMasker/Libraries/Dfam.hmm:
 	wget http://www.dfam.org/releases/Dfam_3.0/families/Dfam.hmm.gz

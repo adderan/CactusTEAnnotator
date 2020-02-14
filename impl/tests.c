@@ -2,8 +2,9 @@
 
 #include "sonLib.h"
 
-#include "repeatGraphs.h"
 #include "sonLibGlobalsTest.h"
+
+#include "Consensus.h"
 
 stPinchThreadSet *graph;
 stPinchThread *thread1;

@@ -5,7 +5,7 @@
 
 #include "stPinchGraphs.h"
 
-#include "repeatGraphs.h"
+#include "Consensus.h"
 
 stSortedSet *getThreads(stPinchSegment *segment) {
 	stSortedSet *threads = stSortedSet_construct();

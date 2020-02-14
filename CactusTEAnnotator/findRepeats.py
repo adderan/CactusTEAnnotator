@@ -137,7 +137,7 @@ def buildRepeatLibrary(job, alignmentsID, fastaID, args):
     sequences = job.fileStore.readGlobalFile(fastaID)
 
     repeatLibrary = job.fileStore.getLocalTempFile()
-    runCmd(parameters=["getConsensusFromPairwiseAlignments", "--alignments", os.path.basename(alignments), "--sequences", os.path.basename(sequences)], outfile=repeatLibrary, args=args)
+    runCmd(parameters=["getConsensus", "--alignments", os.path.basename(alignments), "--sequences", os.path.basename(sequences)], outfile=repeatLibrary, args=args)
     return job.fileStore.writeGlobalFile(repeatLibrary)
 
 def runRepeatMasker(job, repeatLibraryID, seqID, args):
