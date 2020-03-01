@@ -75,14 +75,17 @@ int main(int argc, char **argv) {
 	stPinchThreadSet *graph = stPinchThreadSet_construct();
 
 	stHash *sequences = stHash_construct();
+	stHash *pinchThreadsToStrings = stHash_construct();
 	
 	for (int64_t i = 0; i < seqs->length; i++) {
 		char *threadName = headers->list[i];
 		int64_t threadID;
 		sscanf(threadName, "%ld", &threadID);
 		int64_t seqLength = strlen(seqs->list[i]);
+		stPinchThread *thread = stPinchThreadSet_addThread(graph, threadID, 0, seqLength);
+
 		stHash_insert(sequences, (void*) threadID, seqs->list[i]);
-		stPinchThreadSet_addThread(graph, threadID, 0, seqLength);
+		stHash_insert(pinchThreadsToStrings, thread, seqs->list[i]);
 	}
 	stPinchIterator *pinchIterator = 
 		stPinchIterator_constructFromFile(alignmentsFilename);
@@ -121,28 +124,23 @@ int main(int argc, char **argv) {
 
 	while (true) {
 		//stList *path = tracebackHeaviestPath(blockOrdering, scores, directions, &pathScore);
-		stList *path = extendDensePath(graph);
-		if (!path) break;
+		stList *chain = extendDensePath(graph);
+		if (!chain) break;
 
+		fprintf(stderr, "Chain length = %ld\n", stList_length(chain));
 
-		char *consensusSeq = getConsensusSequence(path, sequences);
+		stList *consensusSeqs = getConsensusForChain(chain, pinchThreadsToStrings);
 
-		stList_destruct(path);
+		exit(0);
 
-		double consensusDegree = (double)pathScore/(double)strlen(consensusSeq);
-
-		if ((strlen(consensusSeq) < minConsensusLength) || 
-			(consensusDegree < minConsensusDegree) ||
-			(pathScore < minConsensusScore)) {
+		for (int64_t i = 0; i < stList_length(consensusSeqs); i++) {
+			char *consensusSeq = stList_get(consensusSeqs, i);
+			fprintf(stdout, ">%s_consensus_%ld length=%ld score=%ld\n", namePrefix, consensusNum, strlen(consensusSeq), pathScore);
+			fprintf(stdout, "%s\n", consensusSeq);
 			free(consensusSeq);
-			continue;
+			consensusNum++;
 		}
 
-		fprintf(stdout, ">%s_consensus_%ld length=%ld score=%ld\n", namePrefix, consensusNum, strlen(consensusSeq), pathScore);
-		fprintf(stdout, "%s\n", consensusSeq);
-		free(consensusSeq);
-
-		consensusNum++;
 		break;
 	}
 	destructList(seqs);

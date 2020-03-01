@@ -35,7 +35,7 @@ pinchesAndCactiLib = cactus/submodules/sonLib/lib/stPinchesAndCacti.a
 all: cactus RepeatMaskerRule halBinaries bin/lastz local
 
 
-local: bin/tests bin/getTECandidates bin/build_clusters bin/filterNs bin/getConsensusFromPairwiseAlignments bin/getAlignmentDistances bin/buildClusters 
+local: bin/tests bin/getTECandidates bin/build_clusters bin/filterNs bin/getConsensus bin/getAlignmentDistances bin/buildClusters 
 
 halBinaries:
 	cd cactus && make

@@ -27,6 +27,7 @@ stSortedSet *getConnectingThreads(stPinchEnd *end1, stPinchEnd *end2);
 stList *tracebackHeaviestPath(stList *blockOrdering, int64_t *scores, int64_t *directions, int64_t *pathScore);
 void getHeaviestPathScores(stList *blockOrdering, int64_t gapPenalty, int64_t *scores, int64_t *directions);
 stPinchBlock *getHighestWeightBlock(stPinchThreadSet *graph);
-stSortedSet *getThreads(stPinchSegment *segment);
+stSet *getThreads(stPinchSegment *segment);
 stList *extendDensePath(stPinchThreadSet *graph);
+stList *getConsensusForChain(stList *chain, stHash *pinchThreadsToStrings);
 #endif
