@@ -2,6 +2,7 @@
 #include "bioioC.h"
 #include "sonLibTypes.h"
 #include "pairwiseAlignment.h"
+#include <ctype.h>
 
 #include "stPinchGraphs.h"
 #include "stPinchPhylogeny.h"
@@ -696,7 +697,6 @@ stList *extendDensePath(stPinchThreadSet *graph) {
 		stPinchEnd_destruct(oppositeEnd);
 
 		stPinchBlock *nextBlock = stPinchEnd_getBlock(nextEnd);
-		fprintf(stderr, "Extending to block %p with score %ld\n", nextBlock, score);
 
 		if (score > bestScore) {
 			bestScore = score;
@@ -718,6 +718,41 @@ stList *extendDensePath(stPinchThreadSet *graph) {
 	return path;
 }
 
+int64_t getSegmentIdentity(stPinchSegment *seg1, stPinchSegment *seg2, stHash *pinchThreadsToStrings) {
+	assert(seg1 && seg2);
+	char *str1 = stHash_search(pinchThreadsToStrings, stPinchSegment_getThread(seg1));
+	char *str2 = stHash_search(pinchThreadsToStrings, stPinchSegment_getThread(seg2));
+	assert(stPinchSegment_getLength(seg1) == stPinchSegment_getLength(seg2));
+
+	int64_t matches = 0;
+	for (int64_t i = 0; i < stPinchSegment_getLength(seg1); i++) {
+		if (toupper(str1[stPinchSegment_getStart(seg1) + i]) ==
+			toupper(str2[stPinchSegment_getStart(seg2) + i])) {
+				matches++;
+		}
+	}
+	return matches;
+}
+
+stPinchBlock *getNextBlock(stPinchSegment *segment, bool direction) {
+	while(segment) {
+		segment = stPinchEnd_traverse5Prime(direction, segment) ? 
+			stPinchSegment_get5Prime(segment) : stPinchSegment_get3Prime(segment);
+
+		if (!segment) break;
+		if (stPinchSegment_getBlock(segment)) return stPinchSegment_getBlock(segment);
+	}
+	return NULL;
+
+}
+
+void orderIndices(int64_t *x, int64_t *y) {
+	if (*x < *y) return;
+	int64_t temp = *x;
+	*x = *y;
+	*y = temp;
+}
+
 stMatrix *getDistanceMatrixForChain(stList *chain, stHash *pinchThreadsToStrings) {
 	stSet *threads = stSet_construct();
 	for (int64_t i = 0; i < stList_length(chain); i++) {
@@ -730,87 +765,96 @@ stMatrix *getDistanceMatrixForChain(stList *chain, stHash *pinchThreadsToStrings
 	stSetIterator *threadsIt = stSet_getIterator(threads);
 	stPinchThread *thread;
 	int64_t i = 0;
-	while((thread = stSet_getNext(threads)) != NULL) {
+	while((thread = stSet_getNext(threadsIt)) != NULL) {
 		stHash_insert(threadToMatrixIndex, (void*)thread, (void*)i);
 		i++;
 	}
+	stSet_destructIterator(threadsIt);
 
-	stMatrix *nMatches = stMatrix_construct(degree, degree);
-	stMatrix *nSites = stMatrix_construct(degree, degree);
+	stMatrix *snpMatrix = stMatrix_construct(degree, degree);
+	stMatrix *breakpointMatrix = stMatrix_construct(degree, degree);
 
+	stHash *leftBlocks;
+	stHash *rightBlocks;
 	for (int64_t chainIndex = 0; chainIndex < stList_length(chain); chainIndex++) {
-		stList *segments = stList_construct();
+		stHash *segments = stHash_construct();
+		leftBlocks = stHash_construct();
+		rightBlocks = stHash_construct();
+
 		stPinchBlock *block = stList_get(chain, chainIndex);
 		stPinchBlockIt blockIt = stPinchBlock_getSegmentIterator(block);
 		stPinchSegment *segment;
 		while((segment = stPinchBlockIt_getNext(&blockIt)) != NULL) {
-			stList_append(segment, segment);
+			int64_t threadID = (int64_t) stHash_search(threadToMatrixIndex, stPinchSegment_getThread(segment));
+			stHash_insert(segments, (void*)threadID, segment);
+			stHash_insert(leftBlocks, segment, (void*)getNextBlock(segment, _5PRIME));
+			stHash_insert(rightBlocks, segment, (void*)getNextBlock(segment, _3PRIME));
 		}
 
-		for (int64_t j = 0; j < stList_length(segments); j++) {
-			stPinchSegment *seg1 = stList_get(segments, j);
-			int64_t seg1ID = stHash_search(threadToMatrixIndex, stPinchSegment_getThread(seg1));
+		for (int64_t j = 0; j < degree; j++) {
 			for (int64_t i = 0; i < j; i++) {
-				stPinchSegment *seg2 = stList_get(segments, i);
-				int64_t seg2ID = stHash_search(threadToMatrixIndex, stPinchSegment_getThread(seg2));
-				int64_t matches_ij = getIdentity(seg1, seg2, pinchThreadsToStrings);
-				*stMatrix_getCell(nMatches, seg1ID, seg2ID) += (double)matches_ij;
-				*stMatrix_getCell(nMatches, seg2ID, seg1ID) += (double)matches_ij;
-				*stMatrix_getCell(nSites, seg1ID, seg2ID) += (double)stPinchBlock_getLength(block);
-				*stMatrix_getCell(nSites, seg2ID, seg1ID) += (double)stPinchBlock_getLength(block);
+				stPinchSegment *seg1 = stHash_search(segments, (void*)i);
+				stPinchSegment *seg2 = stHash_search(segments, (void*)j);
+
+				if (seg1 && seg2) {
+					int64_t matches_ij = getSegmentIdentity(seg1, seg2, pinchThreadsToStrings);
+					*stMatrix_getCell(snpMatrix, i, j) += (double)matches_ij;
+					*stMatrix_getCell(snpMatrix, j, i) += (double)stPinchBlock_getLength(block) - (double)matches_ij;
+				}
+
+				//handle deletions
+				if ((!seg1 && seg2) || (seg1 && !seg2)) {
+					*stMatrix_getCell(breakpointMatrix, j, i) += 2.0;;
+					continue;
+				}
+
+				else if (!seg1 && !seg2) continue;
+
+				assert(seg1 && seg2);
+
+				if (stHash_search(leftBlocks, (void*)seg1) != NULL) {
+					if (stHash_search(leftBlocks, seg1) == stHash_search(leftBlocks, seg2)) {
+						*stMatrix_getCell(breakpointMatrix, i, j) += 1.0;
+
+					}
+					else {
+						*stMatrix_getCell(breakpointMatrix, j, i) += 1.0;
+					}
+					if (stHash_search(rightBlocks, seg1) != NULL) {
+						if (stHash_search(rightBlocks, seg1) == stHash_search(rightBlocks, seg2)) {
+							*stMatrix_getCell(breakpointMatrix, i, j) += 1.0;
+						}
+					}
+					else {
+						*stMatrix_getCell(breakpointMatrix, j, i) += 1.0;
+					}
+				}
 			}
+			
 		}
-		stList_destruct(segments);
+		stHash_destruct(leftBlocks);
+		stHash_destruct(rightBlocks);
+		stHash_destruct(segments);
 	}
 
-	stMatrix *snpDistance = stMatrix_construct(degree, degree);
-	for (int64_t j = 0; j < degree; j++) {
-		for (int64_t i = 0; i < degree; i++) {
-			double matches_ij = *stMatrix_getCell(nMatches, i, j);
-			double sites_ij = *stMatrix_getCell(nSites, i, j);
-			*(stMatrix_getCell(snpDistance, i, j)) = matches_ij/sites_ij;
-		}
-	}
+	stMatrix *snpDistance = stPinchPhylogeny_getSymmetricDistanceMatrix(snpMatrix);
+	stMatrix *breakpointDistance = stPinchPhylogeny_getSymmetricDistanceMatrix(breakpointMatrix);
 	stPhylogeny_applyJukesCantorCorrection(snpDistance);
-	return snpDistance;
+
+	stMatrix *distanceMatrix = stMatrix_add(snpDistance, breakpointDistance);
+	return distanceMatrix;
 }
 
 stList *getConsensusForChain(stList *chain, stHash *pinchThreadsToStrings) {
 	stList *consensusSeqs = stList_construct();
-	stSet *threads = stSet_construct();
-	for (int64_t i = 0; i < stList_length(chain); i++) {
-		stPinchBlock *block = stList_get(chain, i);
-		stSet *blockThreads = getThreads(stPinchBlock_getFirst(block));
-		stSet_insertAll(threads, blockThreads);
-		stSet_destruct(blockThreads);
 
-	}
-	int64_t degree = stSet_size(threads);
-	stSet_destruct(threads);
-
-	//Build gene tree for the family based on SNPs and
-	//breakpoints
-	stList *featureBlocks = stFeatureBlock_getContextualFeatureBlocksForChainedBlocks(chain,
-		10, 10, 0, 0, pinchThreadsToStrings);
-	stList *featureColumns = stFeatureColumn_getFeatureColumns(featureBlocks);
-	
-	stMatrix *snpMatrix = stPinchPhylogeny_getMatrixFromSubstitutions(featureColumns, degree, NULL, false);
-
-	stPhylogeny_applyJukesCantorCorrection(snpMatrix);
-	stMatrix *breakpointMatrix = stPinchPhylogeny_getMatrixFromBreakpoints(featureColumns, degree, NULL, false);
-	stMatrix *distanceMatrix = stMatrix_add(snpMatrix, breakpointMatrix);
+	stMatrix *distanceMatrix = getDistanceMatrixForChain(chain, pinchThreadsToStrings);
 
 	stTree *geneTree = stPhylogeny_neighborJoin(distanceMatrix, NULL);
 
-
 	fprintf(stderr, "Tree: %s\n", stTree_getNewickTreeString(geneTree));
-	fprintf(stderr, "Tree likelihood: %lf\n", stPinchPhylogeny_likelihood(geneTree, featureColumns));
+	//fprintf(stderr, "Tree likelihood: %lf\n", stPinchPhylogeny_likelihood(geneTree, featureColumns));
 
-	assert(true);
-	stMatrix_destruct(snpMatrix);
-	stMatrix_destruct(breakpointMatrix);
-	stList_destruct(featureColumns);
-	stList_destruct(featureBlocks);
 	stTree_destruct(geneTree);
 
 	return consensusSeqs;
