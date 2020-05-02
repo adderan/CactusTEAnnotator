@@ -22,9 +22,9 @@ sonLibInc = cactus/submodules/sonLib/lib/
 sonLibTestInc = cactus/submodules/sonLib/C/tests/
 
 libHal = cactus/submodules/hal/lib/halLib.a
-halInc = cactus/submodules/hal/lib/
+halInc = cactus/submodules/hal/api/inc/
 
-cactusInc = cactus/lib
+cactusInc = cactus/caf/inc/
 cafLib = cactus/lib/stCaf.a
 cactusLib = cactus/lib/cactusLib.a
 
@@ -35,7 +35,7 @@ pinchesAndCactiLib = cactus/submodules/sonLib/lib/stPinchesAndCacti.a
 all: cactus RepeatMaskerRule halBinaries bin/lastz local
 
 
-local: bin/tests bin/getTECandidates bin/build_clusters bin/filterNs bin/getConsensus bin/getAlignmentDistances bin/buildClusters 
+local: bin/tests bin/getTECandidates bin/filterNs bin/getConsensus bin/buildClusters 
 
 halBinaries:
 	cd cactus && make
@@ -52,7 +52,7 @@ ${objs}: ${sources} ${libSonLib}
 	g++ -I ${sonLibInc} -I smhasher/src -c ${sources}
 
 bin/getTECandidates: impl/getTECandidates.cpp ${libHal} ${libSonLib}
-	PATH=${PWD}/cactus/submodules/hdf5/bin:${PATH} h5c++ ${cppflags} -o bin/getTECandidates -I ${halInc} -I ${sonLibInc} impl/getTECandidates.cpp ${libHal} ${libSonLib} -lm
+	h5c++ ${cppflags} -o bin/getTECandidates -I ${halInc} -I ${sonLibInc} impl/getTECandidates.cpp ${libHal} ${libSonLib} -lm
 
 bin/filterNs: impl/filterNs.c ${libSonLib}
 	${cc} ${cflags} -o bin/filterNs -I ${sonLibInc} impl/filterNs.c ${libSonLib} -lm

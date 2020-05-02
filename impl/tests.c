@@ -104,6 +104,7 @@ static void testBlockOrdering(CuTest *testCase) {
 
 	stList *ordering = getBlockOrdering(graph);
 	assert(stList_length(ordering) == 4);
+	stList_destruct(ordering);
 
 	teardown();
 }

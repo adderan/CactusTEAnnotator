@@ -7,9 +7,9 @@ extern "C" {
 #include "sonLib.h"
 }
 
-
-using namespace hal;
 using namespace std;
+using namespace hal;
+
 
 int main(int argc, char **argv) {
 	string halPath;
@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
 	int maxSequences = 0;
 	bool ignoreReverse;
 
-	CLParserPtr parser = hdf5CLParserInstance(false);
+	CLParser *parser = new CLParser();
 	parser->addArgument("halPath", "Input hal file");
 	parser->addArgument("genome", "Name of genome to scan");
 	parser->addOption("outGFF", "Output GFF representing the candidate TEs", "");
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
 		cerr << e.what() << endl;
 	}
 
-	AlignmentConstPtr alignment = openHalAlignmentReadOnly(halPath, parser);
+	Alignment *alignment = openHalAlignment(halPath, parser);
 
 	const Genome *genome = alignment->openGenome(genomeName);
 	if (genome == NULL) {
@@ -67,13 +67,15 @@ int main(int argc, char **argv) {
 		gffFile = fopen(gffFilename.c_str(), "w");
 	}
 
-	TopSegmentIteratorConstPtr topSeg = genome->getTopSegmentIterator();
-	TopSegmentIteratorConstPtr endSeg = genome->getTopSegmentEndIterator();
 
-	DNAIteratorConstPtr dnaIt = genome->getDNAIterator();
+	TopSegmentIteratorPtr topSeg = genome->getTopSegmentIterator();
+	TopSegmentIteratorPtr endSeg = genome->getTopSegmentIterator();
+	topSeg->toSite(0);
+	endSeg->toSite(genome->getSequenceLength() - 1);
+
 	int i = 0;
 	for (; topSeg->equals(endSeg) == false; topSeg->toRight()) {
-		if (topSeg->hasParent()) continue;
+		if (topSeg->tseg()->hasParent()) continue;
 		if (topSeg->getLength() > maxLength) continue;
 		if (topSeg->getLength() < minLength) continue;
 

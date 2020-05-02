@@ -1,9 +1,9 @@
 [submodule "RepeatScout"]
 	path = RepeatScout
 	url = https://github.com/mmcco/RepeatScout
-[submodule "cactus"]
-	path = cactus
-	url = https://github.com/ComparativeGenomicsToolkit/cactus
 [submodule "cPecan"]
 	path = cPecan
 	url = https://github.com/adderan/cPecan
+[submodule "cactus"]
+	path = cactus
+	url = https://github.com/ComparativeGenomicsToolkit/cactus
