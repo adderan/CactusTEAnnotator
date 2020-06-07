@@ -124,6 +124,7 @@ int main(int argc, char **argv) {
 
 	while (true) {
 		//stList *path = tracebackHeaviestPath(blockOrdering, scores, directions, &pathScore);
+		fprintf(stderr, "Chaining blocks\n");
 		stList *chain = extendDensePath(graph);
 		if (!chain) break;
 
