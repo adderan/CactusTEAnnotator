@@ -847,9 +847,7 @@ stMatrix *getDistanceMatrixForChain(stList *chain, stHash *pinchThreadsToStrings
 
 stList *getConsensusForChain(stList *chain, stHash *pinchThreadsToStrings) {
 	stList *consensusSeqs = stList_construct();
-
 	stMatrix *distanceMatrix = getDistanceMatrixForChain(chain, pinchThreadsToStrings);
-
 	stTree *geneTree = stPhylogeny_neighborJoin(distanceMatrix, NULL);
 
 	fprintf(stderr, "Tree: %s\n", stTree_getNewickTreeString(geneTree));

@@ -166,7 +166,6 @@ def workflow(job, halID, genome, args):
     returnValues = {}
 
     parameters = job.fileStore.getLocalTempFile()
-
     #with open(parameters, "w") as parametersFile:
     #    parametersFile.write("parameters for this run\n" \
     returnValues["parameters.txt"] = job.fileStore.writeGlobalFile(parameters)

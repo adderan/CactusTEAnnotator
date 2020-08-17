@@ -1,6 +1,7 @@
 #include "sonLib.h"
 #include "bioioC.h"
 #include <getopt.h>
+#include <string.h>
 
 #include "stPinchIterator.h"
 #include "Consensus.h"
@@ -123,9 +124,9 @@ int main(int argc, char **argv) {
 	getHeaviestPathScores(blockOrdering, 1, scores, directions);
 
 	while (true) {
-		//stList *path = tracebackHeaviestPath(blockOrdering, scores, directions, &pathScore);
 		fprintf(stderr, "Chaining blocks\n");
-		stList *chain = extendDensePath(graph);
+		stList *chain = tracebackHeaviestPath(blockOrdering, scores, directions, &pathScore);
+		//stList *chain = extendDensePath(graph);
 		if (!chain) break;
 
 		fprintf(stderr, "Chain length = %ld\n", stList_length(chain));

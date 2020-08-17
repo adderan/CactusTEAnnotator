@@ -4,7 +4,7 @@
 
 double nContentThreshold;
 
-static void checkNContent(const char *name, const char *seq, int64_t seqLength) {
+static void checkNContent(void *destination, const char *name, const char *seq, int64_t seqLength) {
 	int numN = 0;
 	for (int64_t i = 0; i < seqLength; i++) {
 		if (seq[i] == 'N') numN++;
@@ -23,6 +23,6 @@ int main(int argc, char **argv) {
 
 	sscanf(argv[2], "%lf", &nContentThreshold);
 
-	fastaReadToFunction(fasta, checkNContent);
+	fastaReadToFunction(fasta, stdout, checkNContent);
 	fclose(fasta);
 }
