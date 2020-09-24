@@ -30,6 +30,8 @@ cactusLib = cactus/lib/cactusLib.a
 
 pinchesAndCactiInc = cactus/submodules/pinchesAndCacti/inc
 pinchesAndCactiLib = cactus/submodules/sonLib/lib/stPinchesAndCacti.a
+kyotoTycoonLib = cactus/submodules/kyoto/kyototycoon/libkyototycoon.a
+kyotoCabinetLib = cactus/submodules/kyoto/kyotocabinet/libkyotocabinet.a
 
 
 all: cactus RepeatMaskerRule halBinaries bin/lastz local
@@ -65,7 +67,7 @@ bin/tests: impl/Consensus.o impl/tests.c ${libSonLib} ${pinchesAndCactiLib} ${ca
 	${cc} ${cflags} -o bin/tests -I impl/ -I ${sonLibInc} -I ${sonLibTestInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/tests.c impl/Consensus.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} ${libCu} -lm -lz
 
 bin/getConsensus: impl/Consensus.o impl/getConsensus.c ${libSonLib} ${pinchesAndCactiLib} ${cafLib} ${cactusLib}
-	${cc} ${cflags} -o bin/getConsensus -I impl/ -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/getConsensus.c impl/Consensus.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} -ltokyocabinet -lm -lz
+	${cc} ${cflags} -o bin/getConsensus -I impl/ -I ${sonLibInc} -I ${pinchesAndCactiInc} -I ${cactusInc} impl/getConsensus.c impl/Consensus.o ${pinchesAndCactiLib} ${cafLib} ${cactusLib} ${libSonLib} ${kyotoTycoonLib} ${kyotoCabinetLib} -ltokyocabinet -lm -lz -lpthread -lstdc++
 
 bin/buildClusters: impl/buildClusters.c ${libSonLib}
 	${cc} ${cflags} -o bin/buildClusters -I ${sonLibInc} impl/buildClusters.c ${libSonLib} -lm
