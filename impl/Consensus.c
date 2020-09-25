@@ -746,6 +746,15 @@ stPinchBlock *getNextBlock(stPinchSegment *segment, bool direction) {
 
 }
 
+int64_t getChainLength(stList *chain) {
+	int64_t length = 0;
+	for (int64_t i = 0; i < stList_length(chain); i++) {
+		stPinchBlock *block = stPinchEnd_getBlock(stList_get(chain, i));
+		length += stPinchBlock_getLength(block);
+	}
+	return length;
+}
+
 void orderIndices(int64_t *x, int64_t *y) {
 	if (*x < *y) return;
 	int64_t temp = *x;
@@ -756,7 +765,7 @@ void orderIndices(int64_t *x, int64_t *y) {
 stMatrix *getDistanceMatrixForChain(stList *chain, stHash *pinchThreadsToStrings) {
 	stSet *threads = stSet_construct();
 	for (int64_t i = 0; i < stList_length(chain); i++) {
-		stPinchBlock *block = stList_get(chain, i);
+		stPinchBlock *block = stPinchEnd_getBlock(stList_get(chain, i));
 		stSet *blockThreads = getThreads(stPinchBlock_getFirst(block));
 		stSet_insertAll(threads, blockThreads);
 	}
@@ -781,7 +790,7 @@ stMatrix *getDistanceMatrixForChain(stList *chain, stHash *pinchThreadsToStrings
 		leftBlocks = stHash_construct();
 		rightBlocks = stHash_construct();
 
-		stPinchBlock *block = stList_get(chain, chainIndex);
+		stPinchBlock *block = stPinchEnd_getBlock(stList_get(chain, chainIndex));
 		stPinchBlockIt blockIt = stPinchBlock_getSegmentIterator(block);
 		stPinchSegment *segment;
 		while((segment = stPinchBlockIt_getNext(&blockIt)) != NULL) {

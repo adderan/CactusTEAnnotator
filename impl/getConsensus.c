@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
 		//stList *chain = extendDensePath(graph);
 		if (!chain) break;
 
-		fprintf(stderr, "Chain length = %ld\n", stList_length(chain));
+		fprintf(stderr, "Chain length = %ld\n", getChainLength(chain));
 
 		stList *consensusSeqs = getConsensusForChain(chain, pinchThreadsToStrings);
 

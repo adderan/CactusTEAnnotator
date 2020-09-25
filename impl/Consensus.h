@@ -30,4 +30,5 @@ stPinchBlock *getHighestWeightBlock(stPinchThreadSet *graph);
 stSet *getThreads(stPinchSegment *segment);
 stList *extendDensePath(stPinchThreadSet *graph);
 stList *getConsensusForChain(stList *chain, stHash *pinchThreadsToStrings);
+int64_t getChainLength(stList *chain);
 #endif
