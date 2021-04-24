@@ -1,10 +1,12 @@
 #include <stdlib.h>
-
 #include "sonLib.h"
-
 #include "sonLibGlobalsTest.h"
+#include "stPinchGraphs.h"
+#include "stPinchPhylogeny.h"
+#include "stPhylogeny.h"
 
 #include "Consensus.h"
+
 
 stPinchThreadSet *graph;
 stPinchThread *thread1;
@@ -153,6 +155,34 @@ static void testGetConsensus(CuTest *testCase) {
 	teardown();
 }
 
+static void testTreeBuilding(CuTest *testCase) {
+	setup();
+	stPinchThread *thread3 = stPinchThreadSet_addThread(graph, 3, 0, 100);
+	char *seq1 = generateSeq(100);
+	char *seq2 = generateSeq(100);
+	char *seq3 = generateSeq(100);
+
+	stPinchThread_pinch(thread1, thread2, 20, 20, 10, 1);
+	stPinchThread_pinch(thread1, thread2, 50, 50, 10, 1);
+	stPinchThread_pinch(thread2, thread3, 50, 50, 10, 1);
+	//stPinchBlock *block1 = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 25));
+	//stPinchBlock *block2 = stPinchSegment_getBlock(stPinchThread_getSegment(thread1, 55));
+
+	
+	stList *chain = stList_construct();
+
+	stHash *pinchThreadsToStrings = stHash_construct();
+	stHash_insert(pinchThreadsToStrings, thread1, seq1);
+	stHash_insert(pinchThreadsToStrings, thread2, seq2);
+	stHash_insert(pinchThreadsToStrings, thread3, seq3);
+	stList *featureBlocks = stFeatureBlock_getContextualFeatureBlocksForChainedBlocks(chain, 10, 10, true, true, pinchThreadsToStrings);
+
+	printf("Blocks: %ld\n", stList_length(featureBlocks));
+	stList_destruct(featureBlocks);
+
+	teardown();
+}
+
 int main(int argc, char **argv) {
 	CuSuite *suite = CuSuiteNew();
 	SUITE_ADD_TEST(suite, testConnectingThreads);
@@ -160,5 +190,6 @@ int main(int argc, char **argv) {
 	SUITE_ADD_TEST(suite, testAcyclic);
 	SUITE_ADD_TEST(suite, testBlockOrdering);
 	SUITE_ADD_TEST(suite, testGetConsensus);
+	SUITE_ADD_TEST(suite, testTreeBuilding);
 	CuSuiteRun(suite);
 }

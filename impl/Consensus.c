@@ -855,6 +855,16 @@ stMatrix *getDistanceMatrixForChain(stList *chain, stHash *pinchThreadsToStrings
 }
 
 stList *getConsensusForChain(stList *chain, stHash *pinchThreadsToStrings) {
+	stPinchBlock *firstBlock = stPinchEnd_getBlock(stList_get(chain, 0));
+	printf("Block degree: %ld\n", stPinchBlock_getDegree(firstBlock));
+	stList *firstBlockList = stList_construct();
+	stList_append(firstBlockList, firstBlock);
+
+	stList *featureBlocks = stFeatureBlock_getContextualFeatureBlocksForChainedBlocks(firstBlockList, 10, 10, true, true, pinchThreadsToStrings);
+
+
+
+	stList_destruct(featureBlocks);
 	stList *consensusSeqs = stList_construct();
 	stMatrix *distanceMatrix = getDistanceMatrixForChain(chain, pinchThreadsToStrings);
 	stTree *geneTree = stPhylogeny_neighborJoin(distanceMatrix, NULL);

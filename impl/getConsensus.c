@@ -114,6 +114,7 @@ int main(int argc, char **argv) {
 	
 	stList *blockOrdering = getBlockOrdering(graph);
 	assert(stList_length(blockOrdering) == stPinchThreadSet_getTotalBlockNumber(graph));
+	fprintf(stderr, "Ordering has %ld blocks\n", stList_length(blockOrdering));
 
 	int64_t pathScore = 0;
 	int64_t consensusNum = 0;
@@ -129,7 +130,7 @@ int main(int argc, char **argv) {
 		//stList *chain = extendDensePath(graph);
 		if (!chain) break;
 
-		fprintf(stderr, "Chain length = %ld\n", getChainLength(chain));
+		fprintf(stderr, "Chain length = %ld bp, %ld blocks.\n", getChainLength(chain), stList_length(chain));
 
 		stList *consensusSeqs = getConsensusForChain(chain, pinchThreadsToStrings);
 
