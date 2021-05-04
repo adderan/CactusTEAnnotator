@@ -854,13 +854,31 @@ stMatrix *getDistanceMatrixForChain(stList *chain, stHash *pinchThreadsToStrings
 	return distanceMatrix;
 }
 
+stList *getFeatureColumnsForChain(stList *chain, stHash *pinchThreadsToStrings) {
+	stList *featureColumns = stList_construct();
+	for (int64_t i = 0; i < stList_length(chain); i++) {
+		stPinchBlock *block = stPinchEnd_getBlock(stList_get(chain, i));
+		stList *blockList = stList_construct();
+		stList *columnList = stFeatureBlock_getContextualFeatureBlocksForChainedBlocks(blockList, 10, 10, true, true, pinchThreadsToStrings);
+		assert(stList_length(columnList) == 1);
+		stList_append(featureColumns, stList_get(columnList, 0));
+		stList_destruct(blockList);
+	}
+	return featureColumns;
+}
+
 stList *getConsensusForChain(stList *chain, stHash *pinchThreadsToStrings) {
 	stPinchBlock *firstBlock = stPinchEnd_getBlock(stList_get(chain, 0));
 	printf("Block degree: %ld\n", stPinchBlock_getDegree(firstBlock));
 	stList *firstBlockList = stList_construct();
 	stList_append(firstBlockList, firstBlock);
 
-	stList *featureBlocks = stFeatureBlock_getContextualFeatureBlocksForChainedBlocks(firstBlockList, 10, 10, true, true, pinchThreadsToStrings);
+	stList *blockChain = stList_construct();
+	for (int64_t i = 0; i < stList_length(chain); i++) {
+		stList_append(blockChain, stPinchEnd_getBlock(stList_get(chain, i)));
+	}
+
+	stList *featureBlocks = stFeatureBlock_getContextualFeatureBlocksForChainedBlocks(blockChain, 10, 10, true, true, pinchThreadsToStrings);
 
 
 
